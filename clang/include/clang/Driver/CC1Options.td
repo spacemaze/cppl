@@ -606,6 +606,9 @@ def opt_record_file : Separate<["-"], "opt-record-file">,
 def opt_record_passes : Separate<["-"], "opt-record-passes">,
   HelpText<"Only record remark information for passes whose names match the given regular expression">;
 
+def skip_function_bodies : Flag<["-"], "skip-function-bodies">,
+  HelpText<"Ignore function and method bodies.">;
+
 def print_stats : Flag<["-"], "print-stats">,
   HelpText<"Print performance metrics and statistics">;
 def stats_file : Joined<["-"], "stats-file=">,

@@ -1715,6 +1715,7 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   Opts.Plugins = Args.getAllArgValues(OPT_load);
   Opts.RelocatablePCH = Args.hasArg(OPT_relocatable_pch);
   Opts.ShowHelp = Args.hasArg(OPT_help);
+  Opts.SkipFunctionBodies = Args.hasArg(OPT_skip_function_bodies);
   Opts.ShowStats = Args.hasArg(OPT_print_stats);
   Opts.ShowTimers = Args.hasArg(OPT_ftime_report);
   Opts.ShowVersion = Args.hasArg(OPT_version);
