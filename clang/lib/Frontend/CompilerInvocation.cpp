@@ -2608,6 +2608,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     Args.hasArg(OPT_fmodules_search_all);
   Opts.ModulesErrorRecovery = !Args.hasArg(OPT_fno_modules_error_recovery);
   Opts.ImplicitModules = !Args.hasArg(OPT_fno_implicit_modules);
+  Opts.LevitationMode = Args.hasArg(OPT_flevitation_mode);
   Opts.CharIsSigned = Opts.OpenCL || !Args.hasArg(OPT_fno_signed_char);
   Opts.WChar = Opts.CPlusPlus && !Args.hasArg(OPT_fno_wchar);
   Opts.Char8 = Args.hasFlag(OPT_fchar8__t, OPT_fno_char8__t, Opts.CPlusPlus2a);
