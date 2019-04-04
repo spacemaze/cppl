@@ -100,6 +100,7 @@ namespace {
     KEYCXX2A      = 0x200000,
     KEYOPENCLCXX  = 0x400000,
     KEYMSCOMPAT   = 0x800000,
+    KEYLEVITATION = 0x1000000,
     KEYALLCXX = KEYCXX | KEYCXX11 | KEYCXX2A,
     KEYALL = (0xffffff & ~KEYNOMS18 &
               ~KEYNOOPENCL) // KEYNOMS18 and KEYNOOPENCL are used to exclude.
@@ -128,6 +129,7 @@ static KeywordStatus getKeywordStatus(const LangOptions &LangOpts,
   if (LangOpts.MicrosoftExt && (Flags & KEYMS)) return KS_Extension;
   if (LangOpts.MSVCCompat && (Flags & KEYMSCOMPAT)) return KS_Enabled;
   if (LangOpts.Borland && (Flags & KEYBORLAND)) return KS_Extension;
+  if (LangOpts.LevitationMode && (Flags & KEYLEVITATION)) return KS_Enabled;
   if (LangOpts.Bool && (Flags & BOOLSUPPORT)) return KS_Enabled;
   if (LangOpts.Half && (Flags & HALFSUPPORT)) return KS_Enabled;
   if (LangOpts.WChar && (Flags & WCHARSUPPORT)) return KS_Enabled;

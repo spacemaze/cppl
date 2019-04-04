@@ -219,6 +219,11 @@ def err_unexpected_nested_namespace_attribute : Error<
 def err_inline_namespace_alias : Error<"namespace alias cannot be inline">;
 def err_namespace_nonnamespace_scope : Error<
   "namespaces can only be defined in global or namespace scope">;
+def err_package_namespace_cannot_be_inline : Error<
+  "package namespace cannot be inline">;
+def err_package_specifier_must_be_prior_to_namespace_keyword : Error<
+  "'package' specifier must be prior to 'namespace' keyword">;
+
 def ext_nested_namespace_definition : ExtWarn<
   "nested namespace definition is a C++17 extension; "
   "define each namespace separately">, InGroup<CXX17>;

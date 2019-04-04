@@ -232,6 +232,185 @@ Parser::DeclGroupPtrTy Parser::ParseNamespace(DeclaratorContext Context,
                                         ImplicitUsingDirectiveDecl);
 }
 
+/// ParseLeviationPackageNamespace - We detected 'package' keyword. That means
+/// it should be always followed by 'namespace'.
+/// Package namespace cannot be inline. We add diagnostics for
+/// case when it is followed or preceeded by 'inline' specifier, in this case
+/// we emit error and continue parsing, in order to check the rest of code.
+/// 'package' keyword can't used in alias expression.
+///
+///       package-namespace-definition:
+///         named-package-namespace-definition
+///       named-package-namespace-definition:
+///         'package' 'namespace' attributes[opt] identifier '{'
+///         namespace-body '}'
+///       nested-package-namespace-nested-definition:
+///         'namespace' enclosing-package-namespace-specifier '::'
+///         identifier '{' namespace-body '}'
+///       enclosing-package-namespace-specifier:
+///         identifier
+///         enclosing-namespace-specifier '::' identifier
+///
+Parser::DeclGroupPtrTy Parser::ParseLevitationPackageNamespace(
+        DeclaratorContext Context,
+        SourceLocation &DeclEnd) {
+
+  if (Tok.isNot(tok::kw_package))
+    llvm_unreachable("kw_package token is expected, but now found!");
+
+  ConsumeToken(); // Eat 'package' token.
+
+  // Do some sanity checks
+
+  switch (Tok.getKind()) {
+    case tok::kw_namespace:
+      break;
+    case tok::kw_inline:
+      // If inline is specified, inform that it is not allowed for
+      // package namespaces
+      Diag(ConsumeToken(), diag::err_package_namespace_cannot_be_inline);
+      break;
+    default:
+      Diag(Tok, diag::err_expected_after) << tok::kw_package << tok::kw_namespace;
+      return nullptr;
+  }
+
+  // We are at 'namespace' token.
+  // Below is mostly code duplication of ParseNamespace,
+  // with some alterations though:
+  // * it prohibits 'inline' keyword.
+  // * it prohibits package namespaces aliasing.
+  // * objective C cases are stipped off.
+  // Also it creates NamespaceDecl with IsLevitationPackage = true.
+
+  SourceLocation NamespaceLoc = ConsumeToken();  // eat the 'namespace'.
+
+  if (Tok.is(tok::code_completion)) {
+    Actions.CodeCompleteNamespaceDecl(getCurScope());
+    cutOffParsing();
+    return nullptr;
+  }
+
+  SourceLocation IdentLoc;
+  IdentifierInfo *Ident = nullptr;
+  InnerNamespaceInfoList ExtraNSs;
+
+  ParsedAttributesWithRange attrs(AttrFactory);
+
+  // Namespace attributes are possible only C++17 and higher.
+  // Levitation mode is based on C++17, so we're fine with it,
+  // no compat diagnositcs required.
+  SourceLocation attrLoc;
+  if (isCXX11AttributeSpecifier()) {
+    attrLoc = Tok.getLocation();
+    ParseCXX11Attributes(attrs);
+  }
+
+  if (Tok.is(tok::identifier)) {
+    Ident = Tok.getIdentifierInfo();
+    IdentLoc = ConsumeToken();  // eat the identifier.
+
+    // Parse nested namespace declaration like:
+    //    namespace A::B::C {}
+    while (Tok.is(tok::coloncolon) &&
+           NextToken().isOneOf(
+                   tok::identifier,
+                   tok::kw_inline,
+                   tok::kw_package
+    )) {
+      InnerNamespaceInfo Info;
+      Info.NamespaceLoc = ConsumeToken();
+
+      if (Tok.is(tok::kw_package)) {
+          Diag(Tok.getLocation(), diag::err_package_specifier_must_be_prior_to_namespace_keyword);
+          // Eat token we don't like, and continue check the rest of code
+          ConsumeToken();
+      }
+
+      if (Tok.is(tok::kw_inline)) {
+          Diag(Tok.getLocation(), diag::err_package_namespace_cannot_be_inline);
+          // Eat token we don't like, and continue check the rest of code
+          ConsumeToken();
+      }
+
+      Info.Ident = Tok.getIdentifierInfo();
+      Info.IdentLoc = ConsumeToken();
+
+      ExtraNSs.push_back(Info);
+    }
+  }
+
+  // A nested namespace definition cannot have attributes.
+  if (!ExtraNSs.empty() && attrLoc.isValid())
+    Diag(attrLoc, diag::err_unexpected_nested_namespace_attribute);
+
+  // Read label attributes, if present.
+  if (Tok.is(tok::kw___attribute)) {
+    attrLoc = Tok.getLocation();
+    ParseGNUAttributes(attrs);
+  }
+
+  // If it is an alias expression, report error,
+  // 'package' is allowed only for namespace definition.
+  if (Tok.is(tok::equal)) {
+    Diag(Tok, diag::err_expected) << tok::l_brace;
+    SkipUntil(tok::semi);
+    return nullptr;
+  }
+
+  BalancedDelimiterTracker T(*this, tok::l_brace);
+  if (T.consumeOpen()) {
+    if (Ident)
+      Diag(Tok, diag::err_expected) << tok::l_brace;
+    else
+      Diag(Tok, diag::err_expected_either) << tok::identifier << tok::l_brace;
+    return nullptr;
+  }
+
+  // We can't define namespaces inside classes, templates and so on..
+  if (getCurScope()->isClassScope() ||
+      getCurScope()->isTemplateParamScope() ||
+      getCurScope()->getBlockParent() ||
+      getCurScope()->getFnParent()) {
+    Diag(T.getOpenLocation(), diag::err_namespace_nonnamespace_scope);
+    SkipUntil(tok::r_brace);
+    return nullptr;
+  }
+
+  // Enter a scope for the namespace.
+  ParseScope NamespaceScope(this, Scope::DeclScope);
+
+  UsingDirectiveDecl *ImplicitUsingDirectiveDecl = nullptr;
+
+  Decl *NamespcDecl = Actions.ActOnStartNamespaceDef(
+      getCurScope(),
+      SourceLocation() /*invalid inline location*/,
+      NamespaceLoc,
+      IdentLoc,
+      Ident,
+      T.getOpenLocation(),
+      attrs,
+      ImplicitUsingDirectiveDecl
+  );
+
+  PrettyDeclStackTraceEntry CrashInfo(Actions.Context, NamespcDecl,
+                                      NamespaceLoc, "parsing namespace");
+
+  // Parse the contents of the namespace.  This includes parsing recovery on
+  // any improperly nested namespaces.
+  SourceLocation stubInlineLoc;
+  ParseInnerNamespace(ExtraNSs, 0, stubInlineLoc, attrs, T);
+
+  // Leave the namespace scope.
+  NamespaceScope.Exit();
+
+  DeclEnd = T.getCloseLocation();
+  Actions.ActOnFinishNamespaceDef(NamespcDecl, DeclEnd);
+
+  return Actions.ConvertDeclToDeclGroup(NamespcDecl,
+                                        ImplicitUsingDirectiveDecl);
+}
+
 /// ParseInnerNamespace - Parse the contents of a namespace.
 void Parser::ParseInnerNamespace(const InnerNamespaceInfoList &InnerNSs,
                                  unsigned int index, SourceLocation &InlineLoc,

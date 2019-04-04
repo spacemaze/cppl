@@ -798,6 +798,15 @@ Parser::ParseExternalDeclaration(ParsedAttributesWithRange &attrs,
     }
     goto dont_know;
 
+  // Package namespaces (enabled for levitation syntax extension)
+  case tok::kw_package:
+    if (getLangOpts().CPlusPlus && getLangOpts().LevitationMode) {
+      tok::TokenKind NextKind = NextToken().getKind();
+      SourceLocation DeclEnd;
+      return ParseDeclaration(DeclaratorContext::FileContext, DeclEnd, attrs);
+    }
+    goto dont_know;
+
   case tok::kw_inline:
     if (getLangOpts().CPlusPlus) {
       tok::TokenKind NextKind = NextToken().getKind();
@@ -806,6 +815,14 @@ Parser::ParseExternalDeclaration(ParsedAttributesWithRange &attrs,
       if (NextKind == tok::kw_namespace) {
         SourceLocation DeclEnd;
         return ParseDeclaration(DeclaratorContext::FileContext, DeclEnd, attrs);
+      }
+
+      // Inline package namespaces are not allowed, but we can continue
+      // parsing process in order to check the rest of code.
+      if (NextKind == tok::kw_package) {
+          Diag(ConsumeToken(), diag::err_package_namespace_cannot_be_inline);
+          SourceLocation DeclEnd;
+          return ParseDeclaration(DeclaratorContext::FileContext, DeclEnd, attrs);
       }
 
       // Parse (then ignore) 'inline' prior to a template instantiation. This is

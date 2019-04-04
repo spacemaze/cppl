@@ -2686,6 +2686,9 @@ private:
                                 SourceLocation &DeclEnd,
                                 SourceLocation InlineLoc = SourceLocation());
 
+  DeclGroupPtrTy ParseLevitationPackageNamespace(DeclaratorContext Context,
+                                SourceLocation &DeclEnd);
+
   struct InnerNamespaceInfo {
     SourceLocation NamespaceLoc;
     SourceLocation InlineLoc;

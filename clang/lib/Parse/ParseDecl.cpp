@@ -1700,6 +1700,9 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
     ProhibitAttributes(attrs);
     SingleDecl = ParseDeclarationStartingWithTemplate(Context, DeclEnd, attrs);
     break;
+  case tok::kw_package:
+      ProhibitAttributes(attrs);
+      return ParseLevitationPackageNamespace(Context, DeclEnd);
   case tok::kw_inline:
     // Could be the start of an inline namespace. Allowed as an ext in C++03.
     if (getLangOpts().CPlusPlus && NextToken().is(tok::kw_namespace)) {
