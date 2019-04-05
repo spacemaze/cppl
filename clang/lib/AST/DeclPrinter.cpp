@@ -893,6 +893,8 @@ void DeclPrinter::VisitStaticAssertDecl(StaticAssertDecl *D) {
 void DeclPrinter::VisitNamespaceDecl(NamespaceDecl *D) {
   if (D->isInline())
     Out << "inline ";
+  if (D->isLevitationPackage())
+    Out << "package ";
   Out << "namespace " << *D << " {\n";
   VisitDeclContext(D);
   Indent() << "}";

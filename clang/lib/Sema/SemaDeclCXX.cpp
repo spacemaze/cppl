@@ -9020,6 +9020,114 @@ Decl *Sema::ActOnStartNamespaceDef(
   return Namespc;
 }
 
+/// ActOnStartPackageNamespaceDef - This is called at the start of a package namespace
+/// definition.
+/// Clone of ActOnStartNamespaceDef, with next alterations:
+/// * it doesn't pass inline properties
+/// * IdentifierInfo *II shall not be null
+Decl *Sema::ActOnStartPackageNamespaceDef(
+    Scope *NamespcScope,
+    SourceLocation NamespaceLoc,
+    SourceLocation IdentLoc,
+    IdentifierInfo *II,
+    SourceLocation LBrace,
+    const ParsedAttributesView &AttrList,
+    UsingDirectiveDecl *&UD) {
+
+  if (!II)
+    llvm_unreachable("Identifier Info shall not be null");
+
+  SourceLocation StartLoc = NamespaceLoc;
+  // For anonymous namespace, take the location of the left brace.
+  SourceLocation Loc = IdentLoc;
+  bool IsInvalid = false;
+  bool IsStd = false;
+  bool AddToKnown = false;
+  Scope *DeclRegionScope = NamespcScope->getParent();
+
+  NamespaceDecl *PrevNS = nullptr;
+
+  // if (II) {...
+    // C++ [namespace.def]p2:
+    //   The identifier in an original-namespace-definition shall not
+    //   have been previously defined in the declarative region in
+    //   which the original-namespace-definition appears. The
+    //   identifier in an original-namespace-definition is the name of
+    //   the namespace. Subsequently in that declarative region, it is
+    //   treated as an original-namespace-name.
+    //
+    // Since namespace names are unique in their scope, and we don't
+    // look through using directives, just look for any ordinary names
+    // as if by qualified name lookup.
+    LookupResult R(*this, II, IdentLoc, LookupOrdinaryName,
+                   ForExternalRedeclaration);
+    LookupQualifiedName(R, CurContext->getRedeclContext());
+    NamedDecl *PrevDecl =
+        R.isSingleResult() ? R.getRepresentativeDecl() : nullptr;
+    PrevNS = dyn_cast_or_null<NamespaceDecl>(PrevDecl);
+
+    if (!PrevNS) {
+      if (PrevDecl) {
+        // This is an invalid name redefinition.
+        Diag(Loc, diag::err_redefinition_different_kind)
+                << II;
+        Diag(PrevDecl->getLocation(), diag::note_previous_definition);
+        IsInvalid = true;
+        // Continue on to push Namespc as current DeclContext and return it.
+      } else if (II->isStr("std") &&
+                 CurContext->getRedeclContext()->isTranslationUnit()) {
+        // This is the first "real" definition of the namespace "std", so update
+        // our cache of the "std" namespace to point at this definition.
+        PrevNS = getStdNamespace();
+        IsStd = true;
+        AddToKnown = true;
+      } else {
+        // We've seen this namespace for the first time.
+        AddToKnown = true;
+      }
+    }
+  // } // end of "if (II)"
+
+  NamespaceDecl *Namespc = NamespaceDecl::Create(
+          Context,
+          CurContext,
+          false,
+          StartLoc,
+          Loc,
+          II,
+          PrevNS);
+
+  Namespc->setLevitationPackage(true);
+
+  if (IsInvalid)
+    Namespc->setInvalidDecl();
+
+  ProcessDeclAttributeList(DeclRegionScope, Namespc, AttrList);
+  AddPragmaAttributes(DeclRegionScope, Namespc);
+
+  // FIXME: Should we be merging attributes?
+  if (const VisibilityAttr *Attr = Namespc->getAttr<VisibilityAttr>())
+    PushNamespaceVisibilityAttr(Attr, Loc);
+
+  if (IsStd)
+    StdNamespace = Namespc;
+  if (AddToKnown)
+    KnownNamespaces[Namespc] = false;
+
+  // if (II)
+    PushOnScopeChains(Namespc, DeclRegionScope);
+
+  ActOnDocumentableDecl(Namespc);
+
+  // Although we could have an invalid decl (i.e. the namespace name is a
+  // redefinition), push it as current DeclContext and try to continue parsing.
+  // FIXME: We should be able to push Namespc here, so that the each DeclContext
+  // for the namespace has the declarations that showed up in that particular
+  // namespace definition.
+  PushDeclContext(NamespcScope, Namespc);
+  return Namespc;
+}
+
 /// getNamespaceDecl - Returns the namespace a decl represents. If the decl
 /// is a namespace alias, returns the namespace it points to.
 static inline NamespaceDecl *getNamespaceDecl(NamedDecl *D) {

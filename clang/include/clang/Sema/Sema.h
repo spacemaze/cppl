@@ -4660,6 +4660,14 @@ public:
                                SourceLocation LBrace,
                                const ParsedAttributesView &AttrList,
                                UsingDirectiveDecl *&UsingDecl);
+
+  Decl *ActOnStartPackageNamespaceDef(Scope *S,
+                               SourceLocation NamespaceLoc,
+                               SourceLocation IdentLoc, IdentifierInfo *Ident,
+                               SourceLocation LBrace,
+                               const ParsedAttributesView &AttrList,
+                               UsingDirectiveDecl *&UsingDecl);
+
   void ActOnFinishNamespaceDef(Decl *Dcl, SourceLocation RBrace);
 
   NamespaceDecl *getStdNamespace() const;

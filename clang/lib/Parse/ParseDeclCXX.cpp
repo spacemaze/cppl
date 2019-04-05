@@ -377,14 +377,23 @@ Parser::DeclGroupPtrTy Parser::ParseLevitationPackageNamespace(
     return nullptr;
   }
 
+  if (!Ident) {
+    // Obviously we don't allow package namespaces to be anonymous,
+    // if we meet such case, emit error.
+    // Stop parsing process, we could continue it though, but in this case
+    // we should treat namespace as anonymous or think out some fake Identifier
+    Diag(Tok, diag::err_expected_after) << tok::kw_namespace << tok::identifier;
+    SkipUntil(tok::r_brace);
+    return nullptr;
+  }
+
   // Enter a scope for the namespace.
   ParseScope NamespaceScope(this, Scope::DeclScope);
 
   UsingDirectiveDecl *ImplicitUsingDirectiveDecl = nullptr;
 
-  Decl *NamespcDecl = Actions.ActOnStartNamespaceDef(
+  Decl *NamespcDecl = Actions.ActOnStartPackageNamespaceDef(
       getCurScope(),
-      SourceLocation() /*invalid inline location*/,
       NamespaceLoc,
       IdentLoc,
       Ident,
@@ -398,8 +407,7 @@ Parser::DeclGroupPtrTy Parser::ParseLevitationPackageNamespace(
 
   // Parse the contents of the namespace.  This includes parsing recovery on
   // any improperly nested namespaces.
-  SourceLocation stubInlineLoc;
-  ParseInnerNamespace(ExtraNSs, 0, stubInlineLoc, attrs, T);
+  ParseInnerPackageNamespace(ExtraNSs, 0, attrs, T);
 
   // Leave the namespace scope.
   NamespaceScope.Exit();
@@ -444,6 +452,54 @@ void Parser::ParseInnerNamespace(const InnerNamespaceInfoList &InnerNSs,
          "nested namespace definition cannot define anonymous namespace");
 
   ParseInnerNamespace(InnerNSs, ++index, InlineLoc, attrs, Tracker);
+
+  NamespaceScope.Exit();
+  Actions.ActOnFinishNamespaceDef(NamespcDecl, Tracker.getCloseLocation());
+}
+
+/// ParseInnerPackageNamespace - Parse the contents of a namespace.
+/// mostly clone of ParseInnerNamespace, with that alteration that it
+/// * doesn't pass inline location
+/// * calls ActOnStartPackageNamespaceDef instead of ActOnStartNamespaceDef
+void Parser::ParseInnerPackageNamespace(const InnerNamespaceInfoList &InnerNSs,
+                                        unsigned int index,
+                                        ParsedAttributes &attrs,
+                                        BalancedDelimiterTracker &Tracker) {
+  if (index == InnerNSs.size()) {
+    while (!tryParseMisplacedModuleImport() && Tok.isNot(tok::r_brace) &&
+           Tok.isNot(tok::eof)) {
+      ParsedAttributesWithRange attrs(AttrFactory);
+      MaybeParseCXX11Attributes(attrs);
+      ParseExternalDeclaration(attrs);
+    }
+
+    // The caller is what called check -- we are simply calling
+    // the close for it.
+    Tracker.consumeClose();
+
+    return;
+  }
+
+  // Handle a nested namespace definition.
+  // FIXME: Preserve the source information through to the AST rather than
+  // desugaring it here.
+  ParseScope NamespaceScope(this, Scope::DeclScope);
+  UsingDirectiveDecl *ImplicitUsingDirectiveDecl = nullptr;
+
+  Decl *NamespcDecl = Actions.ActOnStartPackageNamespaceDef(
+      getCurScope(),
+      InnerNSs[index].NamespaceLoc,
+      InnerNSs[index].IdentLoc,
+      InnerNSs[index].Ident,
+      Tracker.getOpenLocation(),
+      attrs,
+      ImplicitUsingDirectiveDecl
+  );
+
+  assert(!ImplicitUsingDirectiveDecl &&
+         "nested namespace definition cannot define anonymous namespace");
+
+  ParseInnerPackageNamespace(InnerNSs, ++index, attrs, Tracker);
 
   NamespaceScope.Exit();
   Actions.ActOnFinishNamespaceDef(NamespcDecl, Tracker.getCloseLocation());
