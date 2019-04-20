@@ -11034,6 +11034,17 @@ public:
     ConstructorDestructor,
     BuiltinFunction
   };
+
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+private:
+  bool IsInPackageClassInstantiation;
+  void SetInPackageClassInstantiationMode(bool v) { IsInPackageClassInstantiation = v; }
+public:
+  void InstantiatePackageClasses();
+  bool IsInPackageClassInstantiationMode() const { return IsInPackageClassInstantiation; }
+  DeclResult ActOnPackageClassInstantiation(CXXRecordDecl* PatternPackageClass);
 };
 
 /// RAII object that enters a new expression evaluation context.

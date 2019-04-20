@@ -1091,6 +1091,9 @@ bool DeclContext::isDependentContext() const {
 
     if (Record->isDependentLambda())
       return true;
+
+    if (Record->isPackageDependent())
+      return true;
   }
 
   if (const auto *Function = dyn_cast<FunctionDecl>(this)) {

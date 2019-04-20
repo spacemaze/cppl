@@ -3597,6 +3597,20 @@ TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
 
     switch (QNNS->getKind()) {
     case NestedNameSpecifier::Identifier: {
+
+      // FIXME levitation: add "global" keyword.
+      if (SemaRef.getLangOpts().LevitationMode &&
+          SemaRef.IsInPackageClassInstantiationMode() &&
+          QNNS->getAsIdentifier()->getName() == "global") {
+        // If we are in package class instantiation mode,
+        // and if're looking at "global" keyword, then
+        // treat it as attempt to refer to a global namespace.
+        // Assuming we loaded requried dependency, it should
+        // lead us into the proper resolution.
+        SS.MakeGlobal(SemaRef.Context, Q.getBeginLoc());
+        break;
+      }
+
       Sema::NestedNameSpecInfo IdInfo(QNNS->getAsIdentifier(),
                           Q.getLocalBeginLoc(), Q.getLocalEndLoc(), ObjectType);
       if (SemaRef.BuildCXXNestedNameSpecifier(/*Scope=*/nullptr, IdInfo, false,

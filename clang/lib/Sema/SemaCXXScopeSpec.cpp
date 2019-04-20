@@ -823,6 +823,24 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S, NestedNameSpecInfo &IdInfo,
   } else if (SS.isSet())
     Diag(IdInfo.IdentifierLoc, diag::err_no_member) << IdInfo.Identifier
         << LookupCtx << SS.getRange();
+  else if (getLangOpts().LevitationMode &&
+      // FIXME levitation: introduce 'global' keyword
+      IdInfo.Identifier->getName() == "global") {
+
+    if (!IsInPackageClassInstantiationMode()) {
+      // Levitation mode. If we're looking at "global" scope specifier,
+      // then it is an attempt to refer another levitation class.
+      // Make it dependent. It should be resolved during  during
+      // package class instantiation stage.
+      SS.Extend(Context, IdInfo.Identifier, IdInfo.IdentifierLoc,
+                IdInfo.CCLoc);
+      return false;
+    } else {
+      llvm_unreachable("All 'global' references should be replaced "
+                       "with Global namespace references during TreeTransform,"
+                       "see TransformNestedNameSpecifierLoc method.");
+    }
+  }
   else
     Diag(IdInfo.IdentifierLoc, diag::err_undeclared_var_use)
         << IdInfo.Identifier;

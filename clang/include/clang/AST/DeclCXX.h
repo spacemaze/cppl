@@ -521,6 +521,18 @@ class CXXRecordDecl : public RecordDecl {
     /// const-qualified reference parameter or a non-reference parameter.
     unsigned HasDeclaredCopyAssignmentWithConstParam : 1;
 
+    /// Whether levitation class contains package dependent references
+    /// e.g.
+    /// package namespace A {
+    ///   class C {
+    ///     void Foo() {
+    ///       global::B::Noo(); // this reference is package dependent
+    ///     }
+    ///   };
+    /// }
+    /// Though may be
+    unsigned IsPackageDependent : 1;
+
     /// Whether this class describes a C++ lambda.
     unsigned IsLambda : 1;
 
@@ -805,6 +817,25 @@ public:
 
   bool isParsingBaseSpecifiers() const {
     return data().IsParsingBaseSpecifiers;
+  }
+
+  bool isLevitationClass() const {
+    if (!hasDefinition())
+      return false;
+
+    if (auto *NS = dyn_cast<NamespaceDecl>(getDeclContext())) {
+      return NS->isLevitationPackage();
+    }
+
+    return false;
+  }
+
+  void setIsPackageDependent() {
+    data().IsPackageDependent = true;
+  }
+
+  bool isPackageDependent() const {
+    return hasDefinition() && data().IsPackageDependent;
   }
 
   unsigned getODRHash() const;

@@ -1689,6 +1689,7 @@ void ASTDeclReader::ReadCXXDefinitionData(
   Data.ImplicitCopyAssignmentHasConstParam = Record.readInt();
   Data.HasDeclaredCopyConstructorWithConstParam = Record.readInt();
   Data.HasDeclaredCopyAssignmentWithConstParam = Record.readInt();
+  Data.IsPackageDependent = Record.readInt();
   Data.ODRHash = Record.readInt();
   Data.HasODRHash = true;
 

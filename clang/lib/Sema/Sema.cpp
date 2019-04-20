@@ -335,6 +335,8 @@ void Sema::Initialize() {
   DeclarationName BuiltinVaList = &Context.Idents.get("__builtin_va_list");
   if (IdResolver.begin(BuiltinVaList) == IdResolver.end())
     PushOnScopeChains(Context.getBuiltinVaListDecl(), TUScope);
+
+  InstantiatePackageClasses();
 }
 
 Sema::~Sema() {
