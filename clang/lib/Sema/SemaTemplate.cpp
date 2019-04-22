@@ -7831,9 +7831,6 @@ DeclResult Sema::ActOnClassTemplateSpecialization(
   if (SkipBody && SkipBody->ShouldSkip)
     return SkipBody->Previous;
 
-  if (Specialization->isLevitationClass())
-    Specialization->setIsPackageDependent();
-
   return Specialization;
 }
 
@@ -8940,9 +8937,6 @@ DeclResult Sema::ActOnExplicitInstantiation(
     Specialization->setTemplateSpecializationKind(TSK);
     InstantiateClassTemplateSpecializationMembers(TemplateNameLoc, Def, TSK);
 
-    if (Specialization->isLevitationClass())
-      Specialization->setIsPackageDependent();
-
   } else {
 
     // Set the template specialization kind.
@@ -9466,7 +9460,7 @@ class PackageDependentClassesCollector
   : public RecursiveASTVisitor<PackageDependentClassesCollector> {
 public:
 
-    bool VisitNamespaceDecl(NamespaceDecl *NS) {
+  bool VisitNamespaceDecl(NamespaceDecl *NS) {
     if (NS->isLevitationPackage()) {
       // decls call also forces Sema to load all lazy decls from
       // external sources.
@@ -9477,11 +9471,15 @@ public:
     return true;
   }
 
-  bool VisitCXXRecordDecl(CXXRecordDecl *Declaration) {
-    if (Declaration->isPackageDependent()) {
-      PackageDependentDecls.push_back(Declaration);
+  bool VisitTagDecl(TagDecl *TD) {
+    if (TD->isPackageDependent()) {
+      PackageDependentDecls.push_back(TD);
     }
     return true;
+  }
+
+  bool VisitNestedNameSpecifier(NestedNameSpecifier *NNS) {
+    NNS->dump();
   }
 
   SmallVectorImpl<Decl *> &GetPackageDependentDelcs() {

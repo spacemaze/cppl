@@ -3961,6 +3961,27 @@ void TagDecl::setTemplateParameterListsInfo(
 }
 
 //===----------------------------------------------------------------------===//
+// TagDecl,
+// C++ Levitation Mode
+
+bool TagDecl::isPackageDependent() const {
+  const auto *DC = getDeclContext();
+  if (auto *NS = dyn_cast<NamespaceDecl>(DC)) {
+    if (NS->isLevitationPackage()) {
+      if (auto *ED = dyn_cast<EnumDecl>(this))
+        return ED->isCompleteDefinition();
+
+      if (auto *RD = dyn_cast<CXXRecordDecl>(this))
+        // For records we mark it as packaged dependent
+        // once we realize that it is an attempt to fully define
+        // record.
+        return RD->hasDefinition();
+    }
+  }
+  return false;
+}
+
+//===----------------------------------------------------------------------===//
 // EnumDecl Implementation
 //===----------------------------------------------------------------------===//
 

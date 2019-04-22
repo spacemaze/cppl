@@ -7967,10 +7967,6 @@ void Sema::ActOnFinishCXXMemberSpecification(
   auto *R = cast<CXXRecordDecl>(TagDecl);
 
   CheckCompletedCXXClass(R);
-
-  // So far, mark all levitation classes as package dependent
-  if (R->isLevitationClass())
-    R->setIsPackageDependent();
 }
 
 /// AddImplicitlyDeclaredMembersToClass - Adds any implicitly-declared

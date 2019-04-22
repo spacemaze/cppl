@@ -1085,14 +1085,15 @@ bool DeclContext::isDependentContext() const {
   if (isa<ClassTemplatePartialSpecializationDecl>(this))
     return true;
 
+  if (const auto *TD = dyn_cast<TagDecl>(this))
+    if (TD->isPackageDependent())
+      return true;
+
   if (const auto *Record = dyn_cast<CXXRecordDecl>(this)) {
     if (Record->getDescribedClassTemplate())
       return true;
 
     if (Record->isDependentLambda())
-      return true;
-
-    if (Record->isPackageDependent())
       return true;
   }
 
