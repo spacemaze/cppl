@@ -508,6 +508,9 @@ Sema::ActOnDependentMemberExpr(Expr *BaseExpr, QualType BaseType,
          NameInfo.getName().isDependentName() ||
          isDependentScopeSpecifier(SS));
 
+  if (getLangOpts().LevitationMode)
+    HandleLevitationPackageDependency(SS.getWithLocInContext(Context), NameInfo);
+
   // Get the type being accessed in BaseType.  If this is an arrow, the BaseExpr
   // must have pointer type, and the accessed type is the pointee.
   return CXXDependentScopeMemberExpr::Create(

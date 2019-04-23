@@ -11039,11 +11039,108 @@ public:
   // C++ Levitation Mode
   //
 private:
+  /// Package instantiation mode flag.
   bool IsInPackageClassInstantiation;
+
+  /// TODO: return scope_exit object?
+  /// Sets package instantiation mode for C++Levitation
+  /// \param v true to set mode, false to relax mode.
   void SetInPackageClassInstantiationMode(bool v) { IsInPackageClassInstantiation = v; }
+
+  /// Determines whether we can build levitation 'global' nested name specifier.
+  /// There are two possible ways how we fall into BuildCXXNestedNameSpecifier.
+  /// 1. Is when we parse something. Parser case.
+  /// 2. Is when we instantiate something. Synthesis case.
+  ///
+  /// For 'parser' case we can get it by checking Sema::CurScope and going
+  /// up till top level NamedDecl (the first level after namespace level)
+  ///
+  /// For 'synthesis' case we should checkout for CodeSynthesisContexts
+  /// stack.
+  ///
+  /// 'Synthesis' case has higher priority, since it may happen even during
+  /// parsing process.
+  ///
+  /// \return true if we can build 'global' NNS
+  ///         and false otherwise.
+  bool IsItAllowedToBuildLevitationGlobalNNS();
+
+  /// Adds dependency for declaration DependentDecl.
+  /// E.g. for 'class C { global::A::D d; };' it will add
+  /// dependency A::D, (Loc will be 'global::A', Name will be 'D'.
+  ///
+  /// \param DependentDecl declaration dependency is added for
+  /// \param Loc nested name specifier of dependency
+  /// \param Name dependency identifier.
+  void AddLevitationPackageDeclarationDependency(
+      const Decl* DependentDecl,
+      const NestedNameSpecifier& Loc,
+      const IdentifierInfo *Name
+  );
+
+  /// Adds body-dependency for declaration DependentDecl.
+  /// E.g. for 'class C { void Foo() { global::A::D d; } };' it will add
+  /// dependency A::D, (Loc will be 'global::A', Name will be 'D'.
+  /// Note: "body-dependency" means that only method bodies of DependentDecl
+  /// uses it.
+  ///
+  /// \param DependentDecl declaration dependency is added for
+  /// \param Loc nested name specifier of dependency
+  /// \param Name dependency identifier.
+  void AddLevitationPackageBodyDependency(
+      const Decl* DependentDecl,
+      const NestedNameSpecifier& Loc,
+      const IdentifierInfo *Name
+  );
+
 public:
+
+  /// Called during parsing or template instantiation for new dependent type
+  /// or expression
+  /// Checks whether we can consider it as a reference to another
+  /// levitation class or its member.
+  /// \param Loc nested name specifier of dependent type or expression to be
+  /// checked.
+  /// \param Name identifier of dependent type or expression to be checked.
+  /// \return true if expression handled successfully, and false otherwise.
+  bool HandleLevitationPackageDependency(
+      const NestedNameSpecifierLoc &Loc,
+      const IdentifierInfo *Name
+  );
+
+  /// Called during parsing or template instantiation for new dependent type
+  /// or expression
+  /// Checks whether we can consider it as a reference to another
+  /// levitation class or its member.
+  /// \param Loc nested name specifier of dependent type or expression to be
+  /// checked.
+  /// \param Name DeclarationName of dependent type or expression to be checked
+  /// (expected to be Identitifer).
+  /// \return true if expression handled successfully, and false otherwise.
+  bool HandleLevitationPackageDependency(
+      const NestedNameSpecifierLoc &Loc,
+      const DeclarationNameInfo &Name
+  );
+
+  /// Entry point for levitation package classes instantiation mode.
+  /// Should be called straight after Sema has been initialized, and in fact
+  /// is part of initialization process.
+  /// It scans for delcs in package namespaces in external sources,
+  /// checks whether those should be instantiated.
+  /// If any it runs levitation classes instantiation on it.
+  ///
+  /// Note: Package classes instantiation is a process very similar to
+  /// template instantiation. It scans for any references to 'global' nested
+  /// name specifiers, and tries to replace them with real symbols.
   void InstantiatePackageClasses();
+
+  /// Check whether Sema is in levitatino package class instantiation mode.
+  /// \return true if Sema is in package class instantiation mode.
   bool IsInPackageClassInstantiationMode() const { return IsInPackageClassInstantiation; }
+
+  /// Runs package instantiation for target class.
+  /// \param PatternPackageClass class to be instantiated.
+  /// \return Instantiation of package class.
   DeclResult ActOnPackageClassInstantiation(CXXRecordDecl* PatternPackageClass);
 };
 

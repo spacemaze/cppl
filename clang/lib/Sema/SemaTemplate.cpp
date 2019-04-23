@@ -650,6 +650,9 @@ Sema::ActOnDependentIdExpression(const CXXScopeSpec &SS,
   if (NestedNameSpecifier *NNS = SS.getScopeRep())
     IsEnum = dyn_cast_or_null<EnumType>(NNS->getAsType());
 
+  if (getLangOpts().LevitationMode)
+    HandleLevitationPackageDependency(SS.getWithLocInContext(Context), NameInfo);
+
   if (!MightBeCxx11UnevalField && !isAddressOfOperand && !IsEnum &&
       isa<CXXMethodDecl>(DC) && cast<CXXMethodDecl>(DC)->isInstance()) {
     QualType ThisType = cast<CXXMethodDecl>(DC)->getThisType();
@@ -3478,6 +3481,13 @@ TypeResult Sema::ActOnTagTemplateIdType(TagUseKind TUK,
                                                           DTN->getQualifier(),
                                                           DTN->getIdentifier(),
                                                                 TemplateArgs);
+
+    if (getLangOpts().LevitationMode) {
+      HandleLevitationPackageDependency(
+          SS.getWithLocInContext(Context),
+          DTN->getIdentifier()
+      );
+    }
 
     // Build type-source information.
     TypeLocBuilder TLB;
@@ -9478,10 +9488,6 @@ public:
     return true;
   }
 
-  bool VisitNestedNameSpecifier(NestedNameSpecifier *NNS) {
-    NNS->dump();
-  }
-
   SmallVectorImpl<Decl *> &GetPackageDependentDelcs() {
     return PackageDependentDecls;
   }
@@ -9489,6 +9495,140 @@ public:
 protected:
   SmallVector<Decl*, 16> PackageDependentDecls;
 };
+
+
+bool Sema::IsItAllowedToBuildLevitationGlobalNNS() {
+  return true;
+}
+
+void Sema::AddLevitationPackageDeclarationDependency(
+      const Decl* DependentDecl,
+      const NestedNameSpecifier& Loc,
+      const IdentifierInfo *Name
+  ) {
+}
+
+void Sema::AddLevitationPackageBodyDependency(
+      const Decl* DependentDecl,
+      const NestedNameSpecifier& Loc,
+      const IdentifierInfo *Name
+  ) {
+
+}
+
+static Decl *getOutermostNonNamespaceDecl(Decl *D) {
+  // Loop until we find a non-record context.
+  Decl *Outermost = nullptr;
+  DeclContext *DC = dyn_cast<DeclContext>(D);
+
+  if (!DC)
+    DC = D->getDeclContext();
+
+  while (DC && !DC->isNamespace()) {
+    if (auto *D = dyn_cast<Decl>(DC))
+      Outermost = D;
+    DC = DC->getLexicalParent();
+  }
+
+  return Outermost;
+}
+
+bool Sema::HandleLevitationPackageDependency(
+      const NestedNameSpecifierLoc &Loc,
+      const IdentifierInfo *Name
+  ) {
+
+  // We are here because something creates new declaration with dependent
+  // nested name specifier.
+  // 1. Find out whether we are in package namespace. If not - don't handle anything.
+  // 2. Only levitation 'global' specifiers considered as dependencies so far.
+  //    Otherwise - return false.
+  // 3. New declaraion may be created directly at package level, or it
+  // may be nested declaration. If latter go up till package-level decl.
+
+  // First sort out where we are. Synthesis case or parser case.
+  // So far we support only EnumDecl and CXXRecordDecl to be package dependent.
+  // Least common type for them is TagDecl.
+  TagDecl *D = nullptr;
+  NamedDecl *Specification = nullptr;
+
+  // TODO: Put some mark on CXXScopeSpec, and then on
+  //       resulting NestedNameSpec, that this is what we need.
+  NestedNameSpecifier *First = Loc.getNestedNameSpecifier();
+  for (NestedNameSpecifier *New = First->getPrefix(); New; New = First->getPrefix()) {
+    First = New;
+  }
+
+  if (auto *Id = First->getAsIdentifier()) {
+    // TODO: "global" keyword.
+    if (Id->getName() != "global")
+      return false;
+  } else {
+    llvm_unreachable("Dependent NNS should be an identifier");
+  }
+
+  if (!CodeSynthesisContexts.empty()) {
+
+    // Obviously we're in synthesis case.
+    // We're interested in top level synthesizing context
+    if (!(D = dyn_cast<TagDecl>(CodeSynthesisContexts.front().Entity)))
+      return false;
+
+    Specification = dyn_cast<NamedDecl>(D);
+  } else {
+
+    // Parser case.
+    // Check whether we parse some named decl (which is record though).
+
+    // Get decl context we're parsing.
+    auto *S = getCurScope();
+    for (S = getCurScope(); S && !S->getEntity(); S = S->getParent()) {
+      // do nothing
+    }
+
+    if (!S)
+      return false;
+
+    if (!(D = dyn_cast<TagDecl>(S->getEntity())))
+      return false;
+  }
+
+  // Get package-leveled decl.
+  D = dyn_cast<TagDecl>(getOutermostNonNamespaceDecl(D));
+
+  if (!D)
+    return false;
+
+  if (auto *NS = dyn_cast<NamespaceDecl>(D->getEnclosingNamespaceContext())) {
+    if (!NS->isLevitationPackage())
+      return false;
+  } else
+    return false;
+
+  llvm::errs()
+  << "Dependency begin\n"
+  << (CodeSynthesisContexts.empty() ? "Parser case\n" : "Template instantiation case\n");
+
+  if (Specification)
+    llvm::errs()
+    << "Specification: " << Specification->getName() << "\n";
+
+  llvm::errs()
+  << "Dependent: " << D->getName() << "\n";
+  Loc.getNestedNameSpecifier()->dump();
+  llvm::errs()
+  << ":" << Name->getName() << "\n"
+  << "Dependency end\n\n";
+  return true;
+}
+
+bool Sema::HandleLevitationPackageDependency(
+      const NestedNameSpecifierLoc &Loc,
+      const DeclarationNameInfo &Name
+  ) {
+  HandleLevitationPackageDependency(Loc, Name.getName().getAsIdentifierInfo());
+  return true;
+}
 
 void Sema::InstantiatePackageClasses() {
   PackageDependentClassesCollector Collector;
@@ -9743,6 +9883,9 @@ Sema::ActOnDependentTag(Scope *S, unsigned TagSpec, TagUseKind TUK,
   ElaboratedTypeKeyword Kwd = TypeWithKeyword::getKeywordForTagTypeKind(Kind);
   QualType Result = Context.getDependentNameType(Kwd, NNS, Name);
 
+  if (getLangOpts().LevitationMode)
+    HandleLevitationPackageDependency(SS.getWithLocInContext(Context), Name);
+
   // Create type-source location information for this type.
   TypeLocBuilder TLB;
   DependentNameTypeLoc TL = TLB.push<DependentNameTypeLoc>(Result);
@@ -9784,6 +9927,8 @@ Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
     TL.setQualifierLoc(QualifierLoc);
     TL.getNamedTypeLoc().castAs<TypeSpecTypeLoc>().setNameLoc(IdLoc);
   }
+
+  HandleLevitationPackageDependency(SS.getWithLocInContext(Context), &II);
 
   return CreateParsedType(T, TSI);
 }
@@ -9828,6 +9973,10 @@ Sema::ActOnTypenameType(Scope *S,
     // Construct a dependent template specialization type.
     assert(DTN && "dependent template has non-dependent name?");
     assert(DTN->getQualifier() == SS.getScopeRep());
+
+    if (getLangOpts().LevitationMode)
+      HandleLevitationPackageDependency(SS.getWithLocInContext(Context), DTN->getIdentifier());
+
     QualType T = Context.getDependentTemplateSpecializationType(ETK_Typename,
                                                           DTN->getQualifier(),
                                                           DTN->getIdentifier(),

@@ -989,6 +989,9 @@ public:
     if (InstName.isNull())
       return QualType();
 
+    if (SemaRef.getLangOpts().LevitationMode)
+      SemaRef.HandleLevitationPackageDependency(QualifierLoc, Name);
+
     // If it's still dependent, make a dependent specialization.
     if (InstName.getAsDependentTemplateName())
       return SemaRef.Context.getDependentTemplateSpecializationType(Keyword,
@@ -1023,6 +1026,9 @@ public:
                                     bool DeducedTSTContext) {
     CXXScopeSpec SS;
     SS.Adopt(QualifierLoc);
+
+    if (SemaRef.getLangOpts().LevitationMode)
+      SemaRef.HandleLevitationPackageDependency(QualifierLoc, Id);
 
     if (QualifierLoc.getNestedNameSpecifier()->isDependent()) {
       // If the name is still dependent, just build a new dependent name type.
