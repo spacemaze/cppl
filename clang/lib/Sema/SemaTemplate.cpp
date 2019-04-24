@@ -9516,21 +9516,81 @@ void Sema::AddLevitationPackageBodyDependency(
 
 }
 
-static Decl *getOutermostNonNamespaceDecl(Decl *D) {
-  // Loop until we find a non-record context.
-  Decl *Outermost = nullptr;
-  DeclContext *DC = dyn_cast<DeclContext>(D);
+static bool isLevitationGlobal(const NestedNameSpecifier *NNS) {
+  // TODO: Put some mark on NNS, and then on resulting NestedNameSpec,
+  // that this is what we need.
+  auto *First = NNS;
 
+  if (!First)
+    return false;
+
+  for (auto *Next = First->getPrefix(); Next; Next = Next->getPrefix()) {
+    First = Next;
+  }
+
+  if (auto *Id = First->getAsIdentifier()) {
+    // TODO: "global" keyword.
+    return Id->getName() == "global";
+  } else {
+    llvm_unreachable("Dependent NNS should be an identifier");
+  }
+}
+
+static Decl *getEnclosingDecl(Scope *S) {
+  for (;S; S = S->getParent()) {
+    if (auto *DC = S->getEntity())
+      if (auto *D = dyn_cast<Decl>(DC))
+        return D;
+  }
+  return nullptr;
+}
+
+static Decl* getBuildingDeclaration(bool &IsSpecification, Sema* SemaObj) {
+  if (!SemaObj->CodeSynthesisContexts.empty()) {
+    IsSpecification = true;
+    return SemaObj->CodeSynthesisContexts.front().Entity;
+  } else {
+    // Parser case.
+    // Check whether we parse some named decl (which is record though).
+    IsSpecification = false;
+    return getEnclosingDecl(SemaObj->getCurScope());
+  }
+}
+
+struct LevitationPackageOutermostDecls {
+  NamespaceDecl *NS;
+  NamedDecl *OutermostNamedDecl;
+  FunctionDecl *OutermostFunction;
+};
+
+static LevitationPackageOutermostDecls getOutermostNamespaceAndTopLevelNamedDecl(Decl *D) {
+  // Walk up through DC parents chain,
+  // pick the first namespace we met (NS),
+  // and remember the last declaration we met (ND).
+  // pair of NS and ND is the result we need.
+  NamedDecl *ND = dyn_cast<NamedDecl>(D);
+  FunctionDecl *FD = ND ? dyn_cast<FunctionDecl>(ND) : nullptr;
+  NamespaceDecl* NS = nullptr;
+
+  DeclContext *DC = dyn_cast<DeclContext>(D);
   if (!DC)
     DC = D->getDeclContext();
 
-  while (DC && !DC->isNamespace()) {
-    if (auto *D = dyn_cast<Decl>(DC))
-      Outermost = D;
+  while (DC && !NS) {
+    // First try to cast to NS, and if we fail, try cast to Decl.
+    if (DC->isNamespace())
+      NS = cast<NamespaceDecl>(DC);
+    else {
+      if (auto *D = dyn_cast<NamedDecl>(DC)) {
+        ND = D;
+        if (auto *F = dyn_cast<FunctionDecl>(DC))
+          FD = F;
+      }
+    }
     DC = DC->getLexicalParent();
   }
 
-  return Outermost;
+  return {NS, ND, FD};
 }
 
 bool Sema::HandleLevitationPackageDependency(
@@ -9538,87 +9598,65 @@ bool Sema::HandleLevitationPackageDependency(
       const IdentifierInfo *Name
   ) {
 
-  // We are here because something creates new declaration with dependent
-  // nested name specifier.
-  // 1. Find out whether we are in package namespace. If not - don't handle anything.
-  // 2. Only levitation 'global' specifiers considered as dependencies so far.
-  //    Otherwise - return false.
-  // 3. New declaraion may be created directly at package level, or it
-  // may be nested declaration. If latter go up till package-level decl.
+  // 0. Check whether this is a levitation 'global' reference. If not - boil out.
+  // 1. Get enclosing namespace, and top-level declaration which belongs
+  //    to this namespace.
+  // 2. If namespace is not a levitation package, boil out.
+  // 3. So far, we support only enums and classes instantiation, if it is something
+  //    different, boil out.
+  // 4. Register dependency. Two types of dependencies are possible:
+  //    * Declaration dependency. Everything which uses dependent class should pull
+  //      out this dependency as well.
+  //    * Definition-only dependency. Used in one of dependent class methods, which could
+  //      be compiled separately. Then it's not necessary to pull it by dependent class users.
 
-  // First sort out where we are. Synthesis case or parser case.
-  // So far we support only EnumDecl and CXXRecordDecl to be package dependent.
-  // Least common type for them is TagDecl.
-  TagDecl *D = nullptr;
-  NamedDecl *Specification = nullptr;
-
-  // TODO: Put some mark on CXXScopeSpec, and then on
-  //       resulting NestedNameSpec, that this is what we need.
-  NestedNameSpecifier *First = Loc.getNestedNameSpecifier();
-  for (NestedNameSpecifier *New = First->getPrefix(); New; New = First->getPrefix()) {
-    First = New;
-  }
-
-  if (auto *Id = First->getAsIdentifier()) {
-    // TODO: "global" keyword.
-    if (Id->getName() != "global")
-      return false;
-  } else {
-    llvm_unreachable("Dependent NNS should be an identifier");
-  }
-
-  if (!CodeSynthesisContexts.empty()) {
-
-    // Obviously we're in synthesis case.
-    // We're interested in top level synthesizing context
-    if (!(D = dyn_cast<TagDecl>(CodeSynthesisContexts.front().Entity)))
-      return false;
-
-    Specification = dyn_cast<NamedDecl>(D);
-  } else {
-
-    // Parser case.
-    // Check whether we parse some named decl (which is record though).
-
-    // Get decl context we're parsing.
-    auto *S = getCurScope();
-    for (S = getCurScope(); S && !S->getEntity(); S = S->getParent()) {
-      // do nothing
-    }
-
-    if (!S)
-      return false;
-
-    if (!(D = dyn_cast<TagDecl>(S->getEntity())))
-      return false;
-  }
-
-  // Get package-leveled decl.
-  D = dyn_cast<TagDecl>(getOutermostNonNamespaceDecl(D));
-
-  if (!D)
+  if (!isLevitationGlobal(Loc.getNestedNameSpecifier()))
     return false;
 
-  if (auto *NS = dyn_cast<NamespaceDecl>(D->getEnclosingNamespaceContext())) {
-    if (!NS->isLevitationPackage())
-      return false;
-  } else
+  bool IsBuildingSpecification;
+  Decl* BuildingDecl = getBuildingDeclaration(IsBuildingSpecification, this);
+
+  if (!BuildingDecl)
     return false;
 
-  llvm::errs()
-  << "Dependency begin\n"
-  << (CodeSynthesisContexts.empty() ? "Parser case\n" : "Template instantiation case\n");
+  auto Outermosts = getOutermostNamespaceAndTopLevelNamedDecl(BuildingDecl);
+  auto *NS = Outermosts.NS;
+  auto *OutermostND = Outermosts.OutermostNamedDecl;
+  auto *OutermostF = Outermosts.OutermostFunction;
 
-  if (Specification)
-    llvm::errs()
-    << "Specification: " << Specification->getName() << "\n";
+  if (!NS || !NS->isLevitationPackage() || !OutermostND)
+    return false;
 
-  llvm::errs()
-  << "Dependent: " << D->getName() << "\n";
-  Loc.getNestedNameSpecifier()->dump();
-  llvm::errs()
-  << ":" << Name->getName() << "\n"
-  << "Dependency end\n\n";
+  auto *TD = dyn_cast<TagDecl>(OutermostND);
+  if (!TD)
+    return false;
+
+  bool IsBodyDependency =
+          OutermostF &&
+          true; // TODO, modify GetGVALinkageForFunction and then use this:
+                //   Context.GetGVALinkageForFunction(OutermostF) == GVA_StrongExternal;
+
+  auto &out = llvm::errs();
+  TD->printQualifiedName(out);
+  out << " ";
+  TD->getLocation().print(out, SourceMgr);
+  out << " depends on ";
+  Loc.getNestedNameSpecifier()->dump(out);
+  out << ":";
+  out << Name->getName() << ", ";
+  Loc.getLocalBeginLoc().print(out, SourceMgr);
+
+  if (IsBodyDependency) {
+    out << " [definition only, for ";
+    OutermostF->printQualifiedName(out);
+    out << "]";
+  }
+
+  if (IsBuildingSpecification)
+    out << " [through its template specification] ";
+
+  out << "\n";
+
   return true;
 }
 
