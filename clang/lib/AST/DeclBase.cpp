@@ -1082,12 +1082,12 @@ bool DeclContext::isDependentContext() const {
   if (isFileContext())
     return false;
 
+  if (const auto *D = dyn_cast<Decl>(this))
+    if (D->isLevitationPackageDependent())
+      return true;
+
   if (isa<ClassTemplatePartialSpecializationDecl>(this))
     return true;
-
-  if (const auto *TD = dyn_cast<TagDecl>(this))
-    if (TD->isPackageDependent())
-      return true;
 
   if (const auto *Record = dyn_cast<CXXRecordDecl>(this)) {
     if (Record->getDescribedClassTemplate())

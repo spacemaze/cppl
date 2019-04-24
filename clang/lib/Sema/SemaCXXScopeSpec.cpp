@@ -826,7 +826,7 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S, NestedNameSpecInfo &IdInfo,
   else if (getLangOpts().LevitationMode &&
       // FIXME levitation: introduce 'global' keyword
       IdInfo.Identifier->getName() == "global") {
-    if (!IsInPackageClassInstantiationMode()) {
+    if (!IsPackageClassInstantiationStage()) {
       if (IsItAllowedToBuildLevitationGlobalNNS()) {
         // Levitation mode. If we're looking at "global" scope specifier,
         // then it is an attempt to refer another levitation class.

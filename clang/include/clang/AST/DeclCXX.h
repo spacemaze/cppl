@@ -807,17 +807,6 @@ public:
     return data().IsParsingBaseSpecifiers;
   }
 
-  bool isLevitationClass() const {
-    if (!hasDefinition())
-      return false;
-
-    if (auto *NS = dyn_cast<NamespaceDecl>(getDeclContext())) {
-      return NS->isLevitationPackage();
-    }
-
-    return false;
-  }
-
   unsigned getODRHash() const;
 
   /// Sets the base classes of this struct or class.

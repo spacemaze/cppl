@@ -989,9 +989,6 @@ public:
     if (InstName.isNull())
       return QualType();
 
-    if (SemaRef.getLangOpts().LevitationMode)
-      SemaRef.HandleLevitationPackageDependency(QualifierLoc, Name);
-
     // If it's still dependent, make a dependent specialization.
     if (InstName.getAsDependentTemplateName())
       return SemaRef.Context.getDependentTemplateSpecializationType(Keyword,
@@ -3606,7 +3603,7 @@ TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
 
       // FIXME levitation: add "global" keyword.
       if (SemaRef.getLangOpts().LevitationMode &&
-          SemaRef.IsInPackageClassInstantiationMode() &&
+          SemaRef.IsPackageClassInstantiationStage() &&
           QNNS->getAsIdentifier()->getName() == "global") {
         // If we are in package class instantiation mode,
         // and if're looking at "global" keyword, then

@@ -11040,12 +11040,12 @@ public:
   //
 private:
   /// Package instantiation mode flag.
-  bool IsInPackageClassInstantiation;
+  bool PackageClassInstantiationStage;
 
   /// TODO: return scope_exit object?
-  /// Sets package instantiation mode for C++Levitation
-  /// \param v true to set mode, false to relax mode.
-  void SetInPackageClassInstantiationMode(bool v) { IsInPackageClassInstantiation = v; }
+  /// Sets package instantiation stage for C++ Levitation
+  /// \param v true to set stage, false to unset.
+  void SetPackageClassInstantiationStage(bool v) { PackageClassInstantiationStage = v; }
 
   /// Determines whether we can build levitation 'global' nested name specifier.
   /// There are two possible ways how we fall into BuildCXXNestedNameSpecifier.
@@ -11095,6 +11095,19 @@ private:
 
 public:
 
+  /// Should be called by parser each time when we create declaration
+  /// which can be a levitation package dependent.
+  /// \param D declaration to be checked.
+  /// \return true if this declaration was marked as package dependent.
+  bool HandleLevitationDeclCreationByParser(Decl *D);
+
+  /// Should be called by instantiate methods (e.g. InstantiateEnum)
+  /// each time when we instantiate a declaration
+  /// which can be a levitation package dependent.
+  /// \param D declaration to be checked.
+  /// \return true if this declaration was marked as package dependent.
+  bool HandleLevitationDeclCreationByInstantiator(Decl *Instantiation, Decl *Pattern);
+
   /// Called during parsing or template instantiation for new dependent type
   /// or expression
   /// Checks whether we can consider it as a reference to another
@@ -11134,9 +11147,9 @@ public:
   /// name specifiers, and tries to replace them with real symbols.
   void InstantiatePackageClasses();
 
-  /// Check whether Sema is in levitatino package class instantiation mode.
-  /// \return true if Sema is in package class instantiation mode.
-  bool IsInPackageClassInstantiationMode() const { return IsInPackageClassInstantiation; }
+  /// Check whether Sema is in levitation package class instantiation stage.
+  /// \return true if Sema is in package class instantiation stage.
+  bool IsPackageClassInstantiationStage() const { return PackageClassInstantiationStage; }
 
   /// Runs package instantiation for target class.
   /// \param PatternPackageClass class to be instantiated.

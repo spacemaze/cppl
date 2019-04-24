@@ -3327,12 +3327,6 @@ public:
   static TagDecl *castFromDeclContext(const DeclContext *DC) {
     return static_cast<TagDecl *>(const_cast<DeclContext*>(DC));
   }
-
-  //===--------------------------------------------------------------------===//
-  // C++ Levitation Mode
-  //
-public:
-  bool isPackageDependent() const;
 };
 
 /// Represents an enum.  In C++11, enums can be forward-declared

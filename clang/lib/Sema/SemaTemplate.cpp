@@ -9481,9 +9481,9 @@ public:
     return true;
   }
 
-  bool VisitTagDecl(TagDecl *TD) {
-    if (TD->isPackageDependent()) {
-      PackageDependentDecls.push_back(TD);
+  bool VisitDecl(Decl *D) {
+    if (D->isLevitationPackageDependent()) {
+      PackageDependentDecls.push_back(D);
     }
     return true;
   }
@@ -9517,6 +9517,10 @@ void Sema::AddLevitationPackageBodyDependency(
 }
 
 static bool isLevitationGlobal(const NestedNameSpecifier *NNS) {
+
+  if (!NNS->isDependent())
+    return false;
+
   // TODO: Put some mark on NNS, and then on resulting NestedNameSpec,
   // that this is what we need.
   auto *First = NNS;
@@ -9593,12 +9597,36 @@ static LevitationPackageOutermostDecls getOutermostNamespaceAndTopLevelNamedDecl
   return {NS, ND, FD};
 }
 
+bool Sema::HandleLevitationDeclCreationByParser(clang::Decl *D) {
+  // So far, we support only EnumDecl and CXXRecordDecl
+  if (!isa<EnumDecl>(D) && !isa<CXXRecordDecl>(D))
+    return false;
+
+  auto Outermosts = getOutermostNamespaceAndTopLevelNamedDecl(D);
+
+  if (!Outermosts.NS->isLevitationPackage() ||
+       Outermosts.OutermostNamedDecl != D)
+    return false;
+
+  D->setLevitationPackageDependent(true);
+
+  return true;
+}
+
+bool Sema::HandleLevitationDeclCreationByInstantiator(Decl *Instantiation, Decl *Pattern) {
+  if (!PackageClassInstantiationStage)
+    Instantiation->setLevitationPackageDependent(Pattern->isLevitationPackageDependent());
+  else
+    Instantiation->setLevitationPackageDependent(false);
+}
+
 bool Sema::HandleLevitationPackageDependency(
       const NestedNameSpecifierLoc &Loc,
       const IdentifierInfo *Name
   ) {
-
-  // 0. Check whether this is a levitation 'global' reference. If not - boil out.
+  // 0.0. If Loc is not dependent, boil out. It happens when we instantiate
+  //      template, and convert dependent typename into regular one.
+  // 0.1. Check whether this is a levitation 'global' reference. If not - boil out.
   // 1. Get enclosing namespace, and top-level declaration which belongs
   //    to this namespace.
   // 2. If namespace is not a levitation package, boil out.
@@ -9682,12 +9710,12 @@ void Sema::InstantiatePackageClasses() {
 
 DeclResult Sema::ActOnPackageClassInstantiation(clang::CXXRecordDecl *PatternPackageClass) {
 
-  if (!PatternPackageClass->isPackageDependent())
+  if (!PatternPackageClass->isLevitationPackageDependent())
     llvm_unreachable("Pattern expected to be package dependent");
 
-  SetInPackageClassInstantiationMode(true);
+  SetPackageClassInstantiationStage(true);
   auto PackageClassInstantiationMode = llvm::make_scope_exit(
-      [this] { this->SetInPackageClassInstantiationMode(false); }
+      [this] { this->SetPackageClassInstantiationStage(false); }
   );
 
   auto *DC = PatternPackageClass->getDeclContext();
@@ -9966,7 +9994,8 @@ Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
     TL.getNamedTypeLoc().castAs<TypeSpecTypeLoc>().setNameLoc(IdLoc);
   }
 
-  HandleLevitationPackageDependency(SS.getWithLocInContext(Context), &II);
+  if (getLangOpts().LevitationMode)
+    HandleLevitationPackageDependency(SS.getWithLocInContext(Context), &II);
 
   return CreateParsedType(T, TSI);
 }

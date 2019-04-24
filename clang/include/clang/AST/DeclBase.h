@@ -306,6 +306,11 @@ private:
   /// definition.
   unsigned TopLevelDeclInObjCContainer : 1;
 
+  /// Whether this declaration is levitation package dependent.
+  /// In another words, whether you can define 'global::Some::Ref' somewhere
+  /// in its body.
+  unsigned LevitationPackageDependent : 1;
+
   /// Whether statistic collection is enabled.
   static bool StatisticsEnabled;
 
@@ -371,7 +376,9 @@ protected:
       : NextInContextAndBits(nullptr, getModuleOwnershipKindForChildOf(DC)),
         DeclCtx(DC), Loc(L), DeclKind(DK), InvalidDecl(false), HasAttrs(false),
         Implicit(false), Used(false), Referenced(false),
-        TopLevelDeclInObjCContainer(false), Access(AS_none), FromASTFile(0),
+        TopLevelDeclInObjCContainer(false),
+        LevitationPackageDependent(false),
+        Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(0) {
     if (StatisticsEnabled) add(DK);
@@ -380,6 +387,7 @@ protected:
   Decl(Kind DK, EmptyShell Empty)
       : DeclKind(DK), InvalidDecl(false), HasAttrs(false), Implicit(false),
         Used(false), Referenced(false), TopLevelDeclInObjCContainer(false),
+        LevitationPackageDependent(false),
         Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(0) {
@@ -1154,6 +1162,14 @@ private:
 
 protected:
   ASTMutationListener *getASTMutationListener() const;
+
+
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+public:
+  void setLevitationPackageDependent(bool v) { LevitationPackageDependent = v; }
+  bool isLevitationPackageDependent() const { return LevitationPackageDependent; }
 };
 
 /// Determine whether two declarations declare the same entity.
