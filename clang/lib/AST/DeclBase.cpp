@@ -1079,12 +1079,15 @@ bool DeclContext::isStdNamespace() const {
 }
 
 bool DeclContext::isDependentContext() const {
-  if (isFileContext())
-    return false;
 
-  if (const auto *D = dyn_cast<Decl>(this))
-    if (D->isLevitationPackageDependent())
-      return true;
+  if (isFileContext()) {
+
+    if (const auto *NS = dyn_cast<NamespaceDecl>(this))
+      if (NS->isLevitationPackage())
+        return true;
+
+    return false;
+  }
 
   if (isa<ClassTemplatePartialSpecializationDecl>(this))
     return true;
