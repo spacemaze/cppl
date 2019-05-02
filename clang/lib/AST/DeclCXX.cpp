@@ -2589,7 +2589,8 @@ NamespaceDecl::NamespaceDecl(ASTContext &C, DeclContext *DC, bool Inline,
                              IdentifierInfo *Id, NamespaceDecl *PrevDecl)
     : NamedDecl(Namespace, DC, IdLoc, Id), DeclContext(Namespace),
       redeclarable_base(C), LocStart(StartLoc),
-      AnonOrFirstNamespaceAndInline(nullptr, Inline) {
+      AnonOrFirstNamespaceAndInline(nullptr, Inline),
+      IsLevitationPackage(false) {
   setPreviousDecl(PrevDecl);
 
   if (PrevDecl)
