@@ -449,9 +449,7 @@ public:
   }
 
   /// Get the underlying, templated declaration.
-  NamedDecl *getTemplatedDecl() const {
-    return TemplatedDecl ? TemplatedDecl->getMostRecentDecl() : nullptr;
-  }
+  NamedDecl *getTemplatedDecl() const { return TemplatedDecl; }
 
   // Implement isa/cast/dyncast/etc.
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
@@ -2102,9 +2100,7 @@ public:
 
   /// Get the underlying class declarations of the template.
   CXXRecordDecl *getTemplatedDecl() const {
-    return TemplatedDecl ?
-        static_cast<CXXRecordDecl *>(TemplatedDecl->getMostRecentDecl()) :
-        nullptr;
+    return static_cast<CXXRecordDecl *>(TemplatedDecl);
   }
 
   /// Returns whether this template declaration defines the primary
