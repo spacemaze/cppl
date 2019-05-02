@@ -272,6 +272,10 @@ def warn_profile_data_unprofiled : Warning<
   "no profile data available for file \"%0\"">,
   InGroup<ProfileInstrUnprofiled>;
 
+// C++ Levitation frontend errors
+def err_fe_error_levitation_invalid_build_stage : Error<"invalid levitation build stage: %0">, DefaultFatal;
+def err_fe_error_levitation_missged_build_stage_parameter : Error<"levitation build stage parameter missed: %0">, DefaultFatal;
+
 } // end of instrumentation issue category
 
 }

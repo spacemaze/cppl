@@ -2609,6 +2609,33 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.ModulesErrorRecovery = !Args.hasArg(OPT_fno_modules_error_recovery);
   Opts.ImplicitModules = !Args.hasArg(OPT_fno_implicit_modules);
   Opts.LevitationMode = Args.hasArg(OPT_flevitation_mode);
+
+  if (Opts.LevitationMode) {
+
+    // Get Levitation mode build stage
+
+    if (Arg *A = Args.getLastArg(OPT_flevitation_build_stage)) {
+
+    switch (llvm::StringSwitch<unsigned>(A->getValue())
+          .Case("ast", LangOptions::LBSK_BuildAST)
+          .Case("obj", LangOptions::LBSK_BuildObjectFile)
+          .Default(LangOptions::LBSK_None)) {
+        default:
+          Diags.Report(diag::err_fe_error_levitation_invalid_build_stage)
+                  << "-flevitation-build-stage=" << A->getValue();
+          break;
+        case LangOptions::LBSK_BuildAST:
+          Opts.setLevitationBuildStage(LangOptions::LBSK_BuildAST);
+          break;
+        case LangOptions::LBSK_BuildObjectFile:
+          Opts.setLevitationBuildStage(LangOptions::LBSK_BuildObjectFile);
+          break;
+        }
+    } else {
+      Diags.Report(diag::err_fe_error_levitation_missged_build_stage_parameter)
+              << "-flevitation-build-stage=<build-stage>";
+    }
+  }
   Opts.CharIsSigned = Opts.OpenCL || !Args.hasArg(OPT_fno_signed_char);
   Opts.WChar = Opts.CPlusPlus && !Args.hasArg(OPT_fno_wchar);
   Opts.Char8 = Args.hasFlag(OPT_fchar8__t, OPT_fno_char8__t, Opts.CPlusPlus2a);

@@ -84,6 +84,12 @@ public:
     CMK_ModuleInterface,
   };
 
+  enum LevitationBuildStageKind {
+      LBSK_None,
+      LBSK_BuildAST,
+      LBSK_BuildObjectFile
+  };
+
   enum PragmaMSPointersToMembersKind {
     PPTMK_BestCase,
     PPTMK_FullGeneralitySingleInheritance,
