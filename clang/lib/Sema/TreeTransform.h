@@ -3603,7 +3603,7 @@ TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
 
       // FIXME levitation: add "global" keyword.
       if (SemaRef.getLangOpts().LevitationMode &&
-          SemaRef.IsPackageClassInstantiationStage() &&
+          SemaRef.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
           QNNS->getAsIdentifier()->getName() == "global") {
         // If we are in package class instantiation mode,
         // and if're looking at "global" keyword, then

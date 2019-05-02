@@ -336,7 +336,16 @@ void Sema::Initialize() {
   if (IdResolver.begin(BuiltinVaList) == IdResolver.end())
     PushOnScopeChains(Context.getBuiltinVaListDecl(), TUScope);
 
-  InstantiatePackageClasses();
+  // TODO levitation: move this into custom AST Consumer.
+  // This consumer should perform 3 steps:
+  // 1. It enables external sources and perhaps solves dependencies among them.
+  // 2. It runs package classes instantiation.
+  // 3. It produces obj file, ast file or whatever. This file should not contain
+  //    package dependent declarations. It should be 100% compatible with regular
+  //    C++ ASTs.
+  if (getLangOpts().LevitationMode &&
+      getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile)
+    InstantiatePackageClasses();
 }
 
 Sema::~Sema() {
