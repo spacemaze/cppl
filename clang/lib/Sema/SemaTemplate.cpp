@@ -9578,7 +9578,7 @@ void Sema::markLevitationPackageDeclsAsPackageDependent() {
 
 static bool isLevitationGlobal(const NestedNameSpecifier *NNS) {
 
-  if (!NNS->isDependent())
+  if (!NNS || !NNS->isDependent())
     return false;
 
   // TODO: Put some mark on NNS, and then on resulting NestedNameSpec,
@@ -9595,9 +9595,9 @@ static bool isLevitationGlobal(const NestedNameSpecifier *NNS) {
   if (auto *Id = First->getAsIdentifier()) {
     // TODO: "global" keyword.
     return Id->getName() == "global";
-  } else {
-    llvm_unreachable("Dependent NNS should be an identifier");
-  }
+  };
+
+  return false;
 }
 
 static Decl *getEnclosingDecl(Scope *S) {
