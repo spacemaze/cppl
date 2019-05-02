@@ -1481,8 +1481,17 @@ void DeclContext::removeDecl(Decl *D) {
       StoredDeclsMap *Map = DC->getPrimaryContext()->LookupPtr;
       if (Map) {
         StoredDeclsMap::iterator Pos = Map->find(ND->getDeclName());
-        assert(Pos != Map->end() && "no lookup entry for decl");
+        // FIXME levitation: If we never looked for particular name we shouldn't have
+        // any lookup entries.
+        // So I have replaced this:
+        // assert(Pos != Map->end() && "no lookup entry for decl");
+        // with "if(<no entry>) continue;"
+
         // Remove the decl only if it is contained.
+
+        if (Pos == Map->end())
+          continue;
+
         StoredDeclsList::DeclsTy *Vec = Pos->second.getAsVector();
         if ((Vec && is_contained(*Vec, ND)) || Pos->second.getAsDecl() == ND)
           Pos->second.remove(ND);
