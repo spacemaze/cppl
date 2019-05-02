@@ -11095,18 +11095,10 @@ private:
 
 public:
 
-  /// Should be called by parser each time when we create declaration
-  /// which can be a levitation package dependent.
-  /// \param D declaration to be checked.
-  /// \return true if this declaration was marked as package dependent.
-  bool HandleLevitationDeclCreationByParser(Decl *D);
-
-  /// Should be called by instantiate methods (e.g. InstantiateEnum)
-  /// each time when we instantiate a declaration
-  /// which can be a levitation package dependent.
-  /// \param D declaration to be checked.
-  /// \return true if this declaration was marked as package dependent.
-  bool HandleLevitationDeclCreationByInstantiator(Decl *Instantiation, Decl *Pattern);
+  /// Scans translation unit and looks for package namespace.
+  /// It checks package namespace decls, and marks them as
+  /// levitation package dependent if necessary.
+  void markLevitationPackageDeclsAsPackageDependent();
 
   /// Called during parsing or template instantiation for new dependent type
   /// or expression

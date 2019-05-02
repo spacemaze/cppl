@@ -2010,9 +2010,6 @@ Sema::InstantiateClass(SourceLocation PointOfInstantiation,
     return true;
   Pattern = PatternDef;
 
-  if (getLangOpts().LevitationMode)
-    HandleLevitationDeclCreationByInstantiator(Instantiation, Pattern);
-
   // Record the point of instantiation.
   if (MemberSpecializationInfo *MSInfo
         = Instantiation->getMemberSpecializationInfo()) {
@@ -2243,9 +2240,6 @@ bool Sema::InstantiateEnum(SourceLocation PointOfInstantiation,
                                      Pattern, PatternDef, TSK,/*Complain*/true))
     return true;
   Pattern = PatternDef;
-
-  if (getLangOpts().LevitationMode)
-    HandleLevitationDeclCreationByInstantiator(Instantiation, Pattern);
 
   // Record the point of instantiation.
   if (MemberSpecializationInfo *MSInfo

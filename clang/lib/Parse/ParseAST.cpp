@@ -166,6 +166,11 @@ void clang::ParseAST(Sema &S, bool PrintStats, bool SkipFunctionBodies) {
   for (Decl *D : S.WeakTopLevelDecls())
     Consumer->HandleTopLevelDecl(DeclGroupRef(D));
 
+  // TODO levitation: Create custom PCHGenerator customer and move this check into it.
+  if (S.getLangOpts().LevitationMode &&
+      S.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildAST)
+    S.markLevitationPackageDeclsAsPackageDependent();
+
   Consumer->HandleTranslationUnit(S.getASTContext());
 
   // Finalize the template instantiation observer chain.

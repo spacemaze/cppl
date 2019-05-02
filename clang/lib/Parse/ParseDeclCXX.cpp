@@ -3386,12 +3386,8 @@ void Parser::ParseCXXMemberSpecification(SourceLocation RecordLoc,
   ParsingClassDefinition ParsingDef(*this, TagDecl, NonNestedClass,
                                     TagType == DeclSpec::TST_interface);
 
-  if (TagDecl) {
-    if (Actions.getLangOpts().LevitationMode)
-      Actions.HandleLevitationDeclCreationByParser(TagDecl);
-
+  if (TagDecl)
     Actions.ActOnTagStartDefinition(getCurScope(), TagDecl);
-  }
 
   SourceLocation FinalLoc;
   bool IsFinalSpelledSealed = false;

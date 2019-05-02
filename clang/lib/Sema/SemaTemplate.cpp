@@ -9466,6 +9466,57 @@ DeclResult Sema::ActOnExplicitInstantiation(Scope *S,
   return (Decl*) nullptr;
 }
 
+class PackageDependentClassesMarker
+  : public RecursiveASTVisitor<PackageDependentClassesMarker> {
+
+    typedef RecursiveASTVisitor<PackageDependentClassesMarker> ParentTy;
+
+    // TODO levitation: It would be good to have a single
+    // PackageDependentDecls visitor for marking decls as
+    // dependent and for instantiating them.
+    class PackageDependentDeclsVisitor : public DeclVisitor<PackageDependentDeclsVisitor> {
+    public:
+      // This affects regular classes and structs (which are CXXRecordDecl)
+      // Also it affects ClassTemplateSpecializationDecl,
+      // which is inharited from CXXRecordDecl.
+      void VisitCXXRecordDecl(CXXRecordDecl *D) {
+        D->setLevitationPackageDependent(true);
+      }
+      void VisitEnumRecordDecl(EnumDecl *D) {
+        llvm_unreachable("Support is not implemented.");
+      }
+
+      // Methods which ignore package namespace enclosure
+      void VisitClassTemplatePartialSpecializationDecl(ClassTemplatePartialSpecializationDecl *D) {
+        // We do nothing.
+        // Basically we just keep LevitationPackageDependent = false
+      }
+      void VisitClassTemplateDecl(ClassTemplateDecl *D) {
+        // We do nothing.
+        // Basically we just keep LevitationPackageDependent = false
+      }
+
+      // Unsupported decls fall here.
+      // That should never happen, every unsupported case
+      // should be handled by parser with proper diagnostics.
+      void VisitNamedDecl(NamedDecl *D) {
+        llvm_unreachable("Not supported");
+      }
+    };
+
+public:
+    bool TraverseNamespaceDecl(NamespaceDecl *NS) {
+      if (!NS->isLevitationPackage())
+        return ParentTy::TraverseNamespaceDecl(NS);
+
+      PackageDependentDeclsVisitor DependentDeclsMarker;
+      for (auto *D : NS->decls())
+         DependentDeclsMarker.Visit(D);
+
+    return true;
+  }
+};
+
 class PackageDependentClassesCollector
   : public RecursiveASTVisitor<PackageDependentClassesCollector> {
 public:
@@ -9514,6 +9565,15 @@ void Sema::AddLevitationPackageBodyDependency(
       const IdentifierInfo *Name
   ) {
 
+}
+
+void Sema::markLevitationPackageDeclsAsPackageDependent() {
+
+  if (getLangOpts().getLevitationBuildStage() != LangOptions::LBSK_BuildAST)
+    llvm_unreachable("Package dependent marking allowed on AST build stage only.");
+
+  PackageDependentClassesMarker Marker;
+  Marker.TraverseDecl(Context.getTranslationUnitDecl());
 }
 
 static bool isLevitationGlobal(const NestedNameSpecifier *NNS) {
@@ -9595,29 +9655,6 @@ static LevitationPackageOutermostDecls getOutermostNamespaceAndTopLevelNamedDecl
   }
 
   return {NS, ND, FD};
-}
-
-bool Sema::HandleLevitationDeclCreationByParser(clang::Decl *D) {
-  // So far, we support only EnumDecl and CXXRecordDecl
-  if (!isa<EnumDecl>(D) && !isa<CXXRecordDecl>(D))
-    return false;
-
-  auto Outermosts = getOutermostNamespaceAndTopLevelNamedDecl(D);
-
-  if (!Outermosts.NS->isLevitationPackage() ||
-       Outermosts.OutermostNamedDecl != D)
-    return false;
-
-  D->setLevitationPackageDependent(true);
-
-  return true;
-}
-
-bool Sema::HandleLevitationDeclCreationByInstantiator(Decl *Instantiation, Decl *Pattern) {
-  if (!PackageClassInstantiationStage)
-    Instantiation->setLevitationPackageDependent(Pattern->isLevitationPackageDependent());
-  else
-    Instantiation->setLevitationPackageDependent(false);
 }
 
 bool Sema::HandleLevitationPackageDependency(
