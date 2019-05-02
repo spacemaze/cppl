@@ -362,6 +362,10 @@ public:
     if (!D->isInIdentifierNamespace(IDNS))
       return nullptr;
 
+    if (getSema().getLangOpts().LevitationMode &&
+        SemaPtr->isShadowedLevitationDecl(D))
+      return nullptr;
+
     if (isVisible(getSema(), D) || isHiddenDeclarationVisible(D))
       return D;
 

@@ -9576,6 +9576,14 @@ void Sema::markLevitationPackageDeclsAsPackageDependent() {
   Marker.TraverseDecl(Context.getTranslationUnitDecl());
 }
 
+bool Sema::isShadowedLevitationDecl(const Decl *D) const {
+  assert(getLangOpts().LevitationMode &&
+         "This method is supposed to be used by levitation mode only");
+  return
+    getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
+    D->isLevitationPackageDependent();
+}
+
 static bool isLevitationGlobal(const NestedNameSpecifier *NNS) {
 
   if (!NNS || !NNS->isDependent())

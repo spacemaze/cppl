@@ -11100,6 +11100,8 @@ public:
   /// levitation package dependent if necessary.
   void markLevitationPackageDeclsAsPackageDependent();
 
+  bool isShadowedLevitationDecl(const Decl *D) const;
+
   /// Called during parsing or template instantiation for new dependent type
   /// or expression
   /// Checks whether we can consider it as a reference to another
