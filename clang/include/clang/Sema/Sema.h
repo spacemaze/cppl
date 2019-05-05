@@ -11042,6 +11042,9 @@ private:
   /// Package instantiation mode flag.
   bool PackageClassInstantiationStage;
 
+  /// List of levitation package dependent declarations
+  llvm::SmallVector<NamedDecl *, 8> LevitationPackageDependentDecls;
+
   /// TODO: return scope_exit object?
   /// Sets package instantiation stage for C++ Levitation
   /// \param v true to set stage, false to unset.

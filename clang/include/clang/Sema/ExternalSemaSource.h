@@ -86,6 +86,11 @@ public:
   virtual void ReadMismatchingDeleteExpressions(llvm::MapVector<
       FieldDecl *, llvm::SmallVector<std::pair<SourceLocation, bool>, 4>> &);
 
+  /// Load package dependent levitation declarations
+  /// \param Undefined
+  virtual void ReadLevitationPackageDependentDecls(
+      llvm::SmallVectorImpl<clang::NamedDecl *> &PackageDependentDeclarations);
+
   /// Do last resort, unqualified lookup on a LookupResult that
   /// Sema cannot find.
   ///

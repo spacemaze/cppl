@@ -3504,6 +3504,12 @@ ASTReader::ReadASTBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
       }
       break;
     }
+
+    case LEVITATION_PACKAGE_DEPENDENT_DECLS:
+      for (unsigned I = 0, N = Record.size(); I != N; ++I) {
+        LevitationPackageDependentDecls.push_back(getGlobalDeclID(F, Record[I]));
+      }
+      break;
     }
   }
 }
@@ -8165,6 +8171,14 @@ void ASTReader::ReadMismatchingDeleteExpressions(llvm::MapVector<
       const bool IsArrayForm = DelayedDeleteExprs[Idx++];
       Exprs[FD].push_back(std::make_pair(DeleteLoc, IsArrayForm));
     }
+  }
+}
+
+void ASTReader::ReadLevitationPackageDependentDecls(
+    llvm::SmallVectorImpl<clang::NamedDecl *> &PackageDependentDeclarations) {
+  for (unsigned Idx = 0, N = LevitationPackageDependentDecls.size(); Idx != N; ++Idx) {
+    NamedDecl *D = cast<NamedDecl>(GetDecl(LevitationPackageDependentDecls[Idx]));
+    PackageDependentDeclarations.push_back(D);
   }
 }
 

@@ -594,7 +594,6 @@ void ASTDeclReader::VisitDecl(Decl *D) {
   IsDeclMarkedUsed |= D->Used;
   D->setReferenced(Record.readInt());
   D->setTopLevelDeclInObjCContainer(Record.readInt());
-  D->setLevitationPackageDependent(Record.readInt());
   D->setAccess((AccessSpecifier)Record.readInt());
   D->FromASTFile = true;
   bool ModulePrivate = Record.readInt();

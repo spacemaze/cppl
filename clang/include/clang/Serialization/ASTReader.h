@@ -897,6 +897,9 @@ private:
   // A list of late parsed template function data.
   SmallVector<uint64_t, 1> LateParsedTemplates;
 
+  /// List of levitation package dependent declarations
+  SmallVector<uint64_t, 8> LevitationPackageDependentDecls;
+
 public:
   struct ImportedSubmodule {
     serialization::SubmoduleID ID;
@@ -1993,6 +1996,9 @@ public:
   void ReadMismatchingDeleteExpressions(llvm::MapVector<
       FieldDecl *, llvm::SmallVector<std::pair<SourceLocation, bool>, 4>> &
                                             Exprs) override;
+
+  void ReadLevitationPackageDependentDecls(
+      llvm::SmallVectorImpl<clang::NamedDecl *> &PackageDependentDeclarations) override;
 
   void ReadTentativeDefinitions(
                             SmallVectorImpl<VarDecl *> &TentativeDefs) override;

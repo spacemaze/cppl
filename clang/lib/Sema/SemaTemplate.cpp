@@ -9470,17 +9470,28 @@ class PackageDependentClassesMarker
   : public RecursiveASTVisitor<PackageDependentClassesMarker> {
 
     typedef RecursiveASTVisitor<PackageDependentClassesMarker> ParentTy;
+    typedef std::function<void(NamedDecl *)> MarkActionTy;
 
     // TODO levitation: It would be good to have a single
     // PackageDependentDecls visitor for marking decls as
     // dependent and for instantiating them.
     class PackageDependentDeclsVisitor : public DeclVisitor<PackageDependentDeclsVisitor> {
+      MarkActionTy &MarkAction;
+
     public:
-      // This affects regular classes and structs (which are CXXRecordDecl)
+      PackageDependentDeclsVisitor(MarkActionTy &markAction) :
+        MarkAction(markAction) {}
+
+        // This affects regular classes and structs (which are CXXRecordDecl)
       // Also it affects ClassTemplateSpecializationDecl,
       // which is inharited from CXXRecordDecl.
       void VisitCXXRecordDecl(CXXRecordDecl *D) {
-        D->setLevitationPackageDependent(true);
+
+        // Ignore ClassTemplateDecl patterns.
+        if (D->getDescribedClassTemplate())
+          return;
+
+        MarkAction(D);
       }
       void VisitEnumRecordDecl(EnumDecl *D) {
         llvm_unreachable("Support is not implemented.");
@@ -9504,12 +9515,17 @@ class PackageDependentClassesMarker
       }
     };
 
+    MarkActionTy MarkAction;
+
 public:
+
+    PackageDependentClassesMarker(MarkActionTy markAction) : MarkAction(markAction) {}
+
     bool TraverseNamespaceDecl(NamespaceDecl *NS) {
       if (!NS->isLevitationPackage())
         return ParentTy::TraverseNamespaceDecl(NS);
 
-      PackageDependentDeclsVisitor DependentDeclsMarker;
+      PackageDependentDeclsVisitor DependentDeclsMarker(MarkAction);
       for (auto *D : NS->decls())
          DependentDeclsMarker.Visit(D);
 
@@ -9572,7 +9588,10 @@ void Sema::markLevitationPackageDeclsAsPackageDependent() {
   if (getLangOpts().getLevitationBuildStage() != LangOptions::LBSK_BuildAST)
     llvm_unreachable("Package dependent marking allowed on AST build stage only.");
 
-  PackageDependentClassesMarker Marker;
+  PackageDependentClassesMarker Marker([this] (NamedDecl *D) {
+    LevitationPackageDependentDecls.push_back(D);
+  });
+
   Marker.TraverseDecl(Context.getTranslationUnitDecl());
 }
 

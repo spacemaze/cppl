@@ -4790,6 +4790,15 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
     }
   }
 
+  // Levitation:
+  // Build record containing all levitation package dependent named declarations.
+  RecordData LevitationPackageDependentDecls;
+  if (SemaRef.getLangOpts().LevitationMode &&
+      SemaRef.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildAST) {
+    for (const auto &I : SemaRef.LevitationPackageDependentDecls)
+      AddDeclRef(I, LevitationPackageDependentDecls);
+  }
+
   // Write the control block
   WriteControlBlock(PP, Context, isysroot, OutputFile);
 
@@ -5086,6 +5095,9 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
 
   if (!DeleteExprsToAnalyze.empty())
     Stream.EmitRecord(DELETE_EXPRS_TO_ANALYZE, DeleteExprsToAnalyze);
+
+  if (!LevitationPackageDependentDecls.empty())
+    Stream.EmitRecord(LEVITATION_PACKAGE_DEPENDENT_DECLS, LevitationPackageDependentDecls);
 
   // Write the visible updates to DeclContexts.
   for (auto *DC : UpdatedDeclContexts)

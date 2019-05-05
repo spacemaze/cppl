@@ -242,6 +242,13 @@ void MultiplexExternalSemaSource::ReadMismatchingDeleteExpressions(
     Source->ReadMismatchingDeleteExpressions(Exprs);
 }
 
+void MultiplexExternalSemaSource::ReadLevitationPackageDependentDecls(
+    llvm::SmallVectorImpl<clang::NamedDecl *> &PackageDependentDeclarations) {
+
+  for (auto &Source : Sources)
+    Source->ReadLevitationPackageDependentDecls(PackageDependentDeclarations);
+}
+
 bool MultiplexExternalSemaSource::LookupUnqualified(LookupResult &R, Scope *S){
   for(size_t i = 0; i < Sources.size(); ++i)
     Sources[i]->LookupUnqualified(R, S);

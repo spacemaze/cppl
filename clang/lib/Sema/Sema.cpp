@@ -1817,6 +1817,9 @@ void ExternalSemaSource::ReadUndefinedButUsed(
 void ExternalSemaSource::ReadMismatchingDeleteExpressions(llvm::MapVector<
     FieldDecl *, llvm::SmallVector<std::pair<SourceLocation, bool>, 4>> &) {}
 
+void ExternalSemaSource::ReadLevitationPackageDependentDecls(
+      llvm::SmallVectorImpl<clang::NamedDecl *> &PackageDependentDeclarations) {}
+
 /// Figure out if an expression could be turned into a call.
 ///
 /// Use this when trying to recover from an error where the programmer may have
