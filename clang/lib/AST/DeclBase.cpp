@@ -1082,6 +1082,8 @@ bool DeclContext::isDependentContext() const {
 
   if (isFileContext()) {
 
+    // Levitation: on Build AST stage, we recognize
+    // dependent packages by its "belongness" to package namespace.
     if (const auto *NS = dyn_cast<NamespaceDecl>(this))
       if (NS->isLevitationPackage())
         return true;
@@ -1094,6 +1096,11 @@ bool DeclContext::isDependentContext() const {
 
   if (const auto *Record = dyn_cast<CXXRecordDecl>(this)) {
     if (Record->getDescribedClassTemplate())
+      return true;
+
+    // Levitation: on Build Obj stage, we recognize
+    // dependent packages directly by corresponding property.
+    if (Record->isLevitationPackageDependent())
       return true;
 
     if (Record->isDependentLambda())
