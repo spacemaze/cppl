@@ -255,8 +255,7 @@ namespace clang {
         return true; // Already imported.
       ToD = CreateFun(std::forward<Args>(args)...);
       // Keep track of imported Decls.
-      Importer.MapImported(FromD, ToD);
-      Importer.AddToLookupTable(ToD);
+      Importer.RegisterImportedDecl(FromD, ToD);
       InitializeImportedDecl(FromD, ToD);
       return false; // A new Decl is created.
     }
@@ -1767,6 +1766,9 @@ Error ASTNodeImporter::ImportDefinition(
     ToData.HasDeclaredCopyAssignmentWithConstParam
       = FromData.HasDeclaredCopyAssignmentWithConstParam;
 
+    // Copy over the data stored in RecordDeclBits
+    ToCXX->setArgPassingRestrictions(FromCXX->getArgPassingRestrictions());
+
     SmallVector<CXXBaseSpecifier *, 4> Bases;
     for (const auto &Base1 : FromCXX->bases()) {
       ExpectedType TyOrErr = import(Base1.getType());
@@ -1946,6 +1948,12 @@ bool ASTNodeImporter::IsStructuralMatch(VarDecl *FromVar, VarDecl *ToVar,
 }
 
 bool ASTNodeImporter::IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToEnum) {
+  // Eliminate a potential failure point where we attempt to re-import
+  // something we're trying to import while completing ToEnum.
+  if (Decl *ToOrigin = Importer.GetOriginalDecl(ToEnum))
+    if (auto *ToOriginEnum = dyn_cast<EnumDecl>(ToOrigin))
+        ToEnum = ToOriginEnum;
+
   StructuralEquivalenceContext Ctx(
       Importer.getFromContext(), Importer.getToContext(),
       Importer.getNonEquivalentDecls(), getStructuralEquivalenceKind(Importer));
@@ -2435,7 +2443,7 @@ ExpectedDecl ASTNodeImporter::VisitEnumDecl(EnumDecl *D) {
     }
 
     if (!ConflictingDecls.empty()) {
-      Name = Importer.HandleNameConflict(Name, DC, IDNS,
+      Name = Importer.HandleNameConflict(SearchName, DC, IDNS,
                                          ConflictingDecls.data(),
                                          ConflictingDecls.size());
       if (!Name)
@@ -2955,7 +2963,7 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
           continue;
 
         // Complain about inconsistent function types.
-        Importer.ToDiag(Loc, diag::err_odr_function_type_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_function_type_inconsistent)
             << Name << D->getType() << FoundFunction->getType();
         Importer.ToDiag(FoundFunction->getLocation(), diag::note_odr_value_here)
             << FoundFunction->getType();
@@ -3039,11 +3047,20 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   // Create the imported function.
   FunctionDecl *ToFunction = nullptr;
   if (auto *FromConstructor = dyn_cast<CXXConstructorDecl>(D)) {
+    Expr *ExplicitExpr = nullptr;
+    if (FromConstructor->getExplicitSpecifier().getExpr()) {
+      auto Imp = importSeq(FromConstructor->getExplicitSpecifier().getExpr());
+      if (!Imp)
+        return Imp.takeError();
+      std::tie(ExplicitExpr) = *Imp;
+    }
     if (GetImportedOrCreateDecl<CXXConstructorDecl>(
-        ToFunction, D, Importer.getToContext(), cast<CXXRecordDecl>(DC),
-        ToInnerLocStart, NameInfo, T, TInfo,
-        FromConstructor->isExplicit(),
-        D->isInlineSpecified(), D->isImplicit(), D->isConstexpr()))
+            ToFunction, D, Importer.getToContext(), cast<CXXRecordDecl>(DC),
+            ToInnerLocStart, NameInfo, T, TInfo,
+            ExplicitSpecifier(
+                ExplicitExpr,
+                FromConstructor->getExplicitSpecifier().getKind()),
+            D->isInlineSpecified(), D->isImplicit(), D->isConstexpr()))
       return ToFunction;
   } else if (CXXDestructorDecl *FromDtor = dyn_cast<CXXDestructorDecl>(D)) {
 
@@ -3069,10 +3086,19 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
     ToDtor->setOperatorDelete(ToOperatorDelete, ToThisArg);
   } else if (CXXConversionDecl *FromConversion =
                  dyn_cast<CXXConversionDecl>(D)) {
+    Expr *ExplicitExpr = nullptr;
+    if (FromConversion->getExplicitSpecifier().getExpr()) {
+      auto Imp = importSeq(FromConversion->getExplicitSpecifier().getExpr());
+      if (!Imp)
+        return Imp.takeError();
+      std::tie(ExplicitExpr) = *Imp;
+    }
     if (GetImportedOrCreateDecl<CXXConversionDecl>(
             ToFunction, D, Importer.getToContext(), cast<CXXRecordDecl>(DC),
             ToInnerLocStart, NameInfo, T, TInfo, D->isInlineSpecified(),
-            FromConversion->isExplicit(), D->isConstexpr(), SourceLocation()))
+            ExplicitSpecifier(ExplicitExpr,
+                              FromConversion->getExplicitSpecifier().getKind()),
+            D->isConstexpr(), SourceLocation()))
       return ToFunction;
   } else if (auto *Method = dyn_cast<CXXMethodDecl>(D)) {
     if (GetImportedOrCreateDecl<CXXMethodDecl>(
@@ -3259,7 +3285,7 @@ ExpectedDecl ASTNodeImporter::VisitFieldDecl(FieldDecl *D) {
       }
 
       // FIXME: Why is this case not handled with calling HandleNameConflict?
-      Importer.ToDiag(Loc, diag::err_odr_field_type_inconsistent)
+      Importer.ToDiag(Loc, diag::warn_odr_field_type_inconsistent)
         << Name << D->getType() << FoundField->getType();
       Importer.ToDiag(FoundField->getLocation(), diag::note_odr_value_here)
         << FoundField->getType();
@@ -3330,7 +3356,7 @@ ExpectedDecl ASTNodeImporter::VisitIndirectFieldDecl(IndirectFieldDecl *D) {
         continue;
 
       // FIXME: Why is this case not handled with calling HandleNameConflict?
-      Importer.ToDiag(Loc, diag::err_odr_field_type_inconsistent)
+      Importer.ToDiag(Loc, diag::warn_odr_field_type_inconsistent)
         << Name << D->getType() << FoundField->getType();
       Importer.ToDiag(FoundField->getLocation(), diag::note_odr_value_here)
         << FoundField->getType();
@@ -3461,7 +3487,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCIvarDecl(ObjCIvarDecl *D) {
         return FoundIvar;
       }
 
-      Importer.ToDiag(Loc, diag::err_odr_ivar_type_inconsistent)
+      Importer.ToDiag(Loc, diag::warn_odr_ivar_type_inconsistent)
         << Name << D->getType() << FoundIvar->getType();
       Importer.ToDiag(FoundIvar->getLocation(), diag::note_odr_value_here)
         << FoundIvar->getType();
@@ -3574,7 +3600,7 @@ ExpectedDecl ASTNodeImporter::VisitVarDecl(VarDecl *D) {
           }
         }
 
-        Importer.ToDiag(Loc, diag::err_odr_variable_type_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_variable_type_inconsistent)
           << Name << D->getType() << FoundVar->getType();
         Importer.ToDiag(FoundVar->getLocation(), diag::note_odr_value_here)
           << FoundVar->getType();
@@ -3739,7 +3765,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCMethodDecl(ObjCMethodDecl *D) {
       // Check return types.
       if (!Importer.IsStructurallyEquivalent(D->getReturnType(),
                                              FoundMethod->getReturnType())) {
-        Importer.ToDiag(Loc, diag::err_odr_objc_method_result_type_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_objc_method_result_type_inconsistent)
             << D->isInstanceMethod() << Name << D->getReturnType()
             << FoundMethod->getReturnType();
         Importer.ToDiag(FoundMethod->getLocation(),
@@ -3751,7 +3777,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCMethodDecl(ObjCMethodDecl *D) {
 
       // Check the number of parameters.
       if (D->param_size() != FoundMethod->param_size()) {
-        Importer.ToDiag(Loc, diag::err_odr_objc_method_num_params_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_objc_method_num_params_inconsistent)
           << D->isInstanceMethod() << Name
           << D->param_size() << FoundMethod->param_size();
         Importer.ToDiag(FoundMethod->getLocation(),
@@ -3768,7 +3794,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCMethodDecl(ObjCMethodDecl *D) {
         if (!Importer.IsStructurallyEquivalent((*P)->getType(),
                                                (*FoundP)->getType())) {
           Importer.FromDiag((*P)->getLocation(),
-                            diag::err_odr_objc_method_param_type_inconsistent)
+                            diag::warn_odr_objc_method_param_type_inconsistent)
             << D->isInstanceMethod() << Name
             << (*P)->getType() << (*FoundP)->getType();
           Importer.ToDiag((*FoundP)->getLocation(), diag::note_odr_value_here)
@@ -3781,7 +3807,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCMethodDecl(ObjCMethodDecl *D) {
       // Check variadic/non-variadic.
       // Check the number of parameters.
       if (D->isVariadic() != FoundMethod->isVariadic()) {
-        Importer.ToDiag(Loc, diag::err_odr_objc_method_variadic_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_objc_method_variadic_inconsistent)
           << D->isInstanceMethod() << Name;
         Importer.ToDiag(FoundMethod->getLocation(),
                         diag::note_odr_objc_method_here)
@@ -4326,7 +4352,7 @@ Error ASTNodeImporter::ImportDefinition(
     if ((bool)FromSuper != (bool)ToSuper ||
         (FromSuper && !declaresSameEntity(FromSuper, ToSuper))) {
       Importer.ToDiag(To->getLocation(),
-                      diag::err_odr_objc_superclass_inconsistent)
+                      diag::warn_odr_objc_superclass_inconsistent)
         << To->getDeclName();
       if (ToSuper)
         Importer.ToDiag(To->getSuperClassLoc(), diag::note_odr_objc_superclass)
@@ -4595,7 +4621,7 @@ ASTNodeImporter::VisitObjCImplementationDecl(ObjCImplementationDecl *D) {
          !declaresSameEntity(Super->getCanonicalDecl(),
                              Impl->getSuperClass()))) {
       Importer.ToDiag(Impl->getLocation(),
-                      diag::err_odr_objc_superclass_inconsistent)
+                      diag::warn_odr_objc_superclass_inconsistent)
         << Iface->getDeclName();
       // FIXME: It would be nice to have the location of the superclass
       // below.
@@ -4643,7 +4669,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCPropertyDecl(ObjCPropertyDecl *D) {
       // Check property types.
       if (!Importer.IsStructurallyEquivalent(D->getType(),
                                              FoundProp->getType())) {
-        Importer.ToDiag(Loc, diag::err_odr_objc_property_type_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_objc_property_type_inconsistent)
           << Name << D->getType() << FoundProp->getType();
         Importer.ToDiag(FoundProp->getLocation(), diag::note_odr_value_here)
           << FoundProp->getType();
@@ -4750,7 +4776,7 @@ ASTNodeImporter::VisitObjCPropertyImplDecl(ObjCPropertyImplDecl *D) {
     // vs. @dynamic).
     if (D->getPropertyImplementation() != ToImpl->getPropertyImplementation()) {
       Importer.ToDiag(ToImpl->getLocation(),
-                      diag::err_odr_objc_property_impl_kind_inconsistent)
+                      diag::warn_odr_objc_property_impl_kind_inconsistent)
         << Property->getDeclName()
         << (ToImpl->getPropertyImplementation()
                                               == ObjCPropertyImplDecl::Dynamic);
@@ -4766,7 +4792,7 @@ ASTNodeImporter::VisitObjCPropertyImplDecl(ObjCPropertyImplDecl *D) {
     if (D->getPropertyImplementation() == ObjCPropertyImplDecl::Synthesize &&
         Ivar != ToImpl->getPropertyIvarDecl()) {
       Importer.ToDiag(ToImpl->getPropertyIvarDeclLoc(),
-                      diag::err_odr_objc_synthesize_ivar_inconsistent)
+                      diag::warn_odr_objc_synthesize_ivar_inconsistent)
         << Property->getDeclName()
         << ToImpl->getPropertyIvarDecl()->getDeclName()
         << Ivar->getDeclName();
@@ -7647,6 +7673,17 @@ void ASTImporter::AddToLookupTable(Decl *ToD) {
       LookupTable->add(ToND);
 }
 
+Expected<Decl *> ASTImporter::ImportImpl(Decl *FromD) {
+  // Import the decl using ASTNodeImporter.
+  ASTNodeImporter Importer(*this);
+  return Importer.Visit(FromD);
+}
+
+void ASTImporter::RegisterImportedDecl(Decl *FromD, Decl *ToD) {
+  MapImported(FromD, ToD);
+  AddToLookupTable(ToD);
+}
+
 Expected<QualType> ASTImporter::Import_New(QualType FromT) {
   if (FromT.isNull())
     return QualType{};
@@ -7740,7 +7777,6 @@ Expected<Decl *> ASTImporter::Import_New(Decl *FromD) {
   if (!FromD)
     return nullptr;
 
-  ASTNodeImporter Importer(*this);
 
   // Check whether we've already imported this declaration.
   Decl *ToD = GetAlreadyImportedOrNull(FromD);
@@ -7751,7 +7787,7 @@ Expected<Decl *> ASTImporter::Import_New(Decl *FromD) {
   }
 
   // Import the declaration.
-  ExpectedDecl ToDOrErr = Importer.Visit(FromD);
+  ExpectedDecl ToDOrErr = ImportImpl(FromD);
   if (!ToDOrErr)
     return ToDOrErr;
   ToD = *ToDOrErr;
@@ -7761,6 +7797,9 @@ Expected<Decl *> ASTImporter::Import_New(Decl *FromD) {
   if (!ToD) {
     return nullptr;
   }
+
+  // Make sure that ImportImpl registered the imported decl.
+  assert(ImportedDecls.count(FromD) != 0 && "Missing call to MapImported?");
 
   // Once the decl is connected to the existing declarations, i.e. when the
   // redecl chain is properly set then we populate the lookup again.
@@ -7786,9 +7825,10 @@ Expected<DeclContext *> ASTImporter::ImportContext(DeclContext *FromDC) {
   if (!FromDC)
     return FromDC;
 
-  auto *ToDC = cast_or_null<DeclContext>(Import(cast<Decl>(FromDC)));
-  if (!ToDC)
-    return nullptr;
+  ExpectedDecl ToDCOrErr = Import_New(cast<Decl>(FromDC));
+  if (!ToDCOrErr)
+    return ToDCOrErr.takeError();
+  auto *ToDC = cast<DeclContext>(*ToDCOrErr);
 
   // When we're using a record/enum/Objective-C class/protocol as a context, we
   // need it to have a definition.
@@ -8584,10 +8624,16 @@ Decl *ASTImporter::MapImported(Decl *From, Decl *To) {
 
 bool ASTImporter::IsStructurallyEquivalent(QualType From, QualType To,
                                            bool Complain) {
-  llvm::DenseMap<const Type *, const Type *>::iterator Pos
-   = ImportedTypes.find(From.getTypePtr());
-  if (Pos != ImportedTypes.end() && ToContext.hasSameType(Import(From), To))
-    return true;
+  llvm::DenseMap<const Type *, const Type *>::iterator Pos =
+      ImportedTypes.find(From.getTypePtr());
+  if (Pos != ImportedTypes.end()) {
+    if (ExpectedType ToFromOrErr = Import_New(From)) {
+      if (ToContext.hasSameType(*ToFromOrErr, To))
+        return true;
+    } else {
+      llvm::consumeError(ToFromOrErr.takeError());
+    }
+  }
 
   StructuralEquivalenceContext Ctx(FromContext, ToContext, NonEquivalentDecls,
                                    getStructuralEquivalenceKind(*this), false,

@@ -455,7 +455,6 @@ define <2 x i32> @check_i32(<4 x i32> %v) nounwind {
 define <4 x i16> @check_i16(<8 x i16> %v) nounwind {
 ; CHECK-LABEL: check_i16:
 ; CHECK:       @ %bb.0:
-; CHECK-NEXT:    vmov d17, r2, r3
 ; CHECK-NEXT:    vmov d16, r0, r1
 ; CHECK-NEXT:    vdup.16 d16, d16[3]
 ; CHECK-NEXT:    vmov r0, r1, d16
@@ -469,7 +468,6 @@ define <4 x i16> @check_i16(<8 x i16> %v) nounwind {
 define <8 x i8> @check_i8(<16 x i8> %v) nounwind {
 ; CHECK-LABEL: check_i8:
 ; CHECK:       @ %bb.0:
-; CHECK-NEXT:    vmov d17, r2, r3
 ; CHECK-NEXT:    vmov d16, r0, r1
 ; CHECK-NEXT:    vdup.8 d16, d16[3]
 ; CHECK-NEXT:    vmov r0, r1, d16

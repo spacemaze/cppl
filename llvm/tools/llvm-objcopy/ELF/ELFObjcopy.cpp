@@ -70,7 +70,22 @@ static bool onlyKeepDWOPred(const Object &Obj, const SectionBase &Sec) {
   return !isDWOSection(Sec);
 }
 
-static uint64_t setSectionFlagsPreserveMask(uint64_t OldFlags,
+uint64_t getNewShfFlags(SectionFlag AllFlags) {
+  uint64_t NewFlags = 0;
+  if (AllFlags & SectionFlag::SecAlloc)
+    NewFlags |= ELF::SHF_ALLOC;
+  if (!(AllFlags & SectionFlag::SecReadonly))
+    NewFlags |= ELF::SHF_WRITE;
+  if (AllFlags & SectionFlag::SecCode)
+    NewFlags |= ELF::SHF_EXECINSTR;
+  if (AllFlags & SectionFlag::SecMerge)
+    NewFlags |= ELF::SHF_MERGE;
+  if (AllFlags & SectionFlag::SecStrings)
+    NewFlags |= ELF::SHF_STRINGS;
+  return NewFlags;
+}
+
+static uint64_t getSectionFlagsPreserveMask(uint64_t OldFlags,
                                             uint64_t NewFlags) {
   // Preserve some flags which should not be dropped when setting flags.
   // Also, preserve anything OS/processor dependant.
@@ -79,6 +94,18 @@ static uint64_t setSectionFlagsPreserveMask(uint64_t OldFlags,
                                 ELF::SHF_MASKOS | ELF::SHF_MASKPROC |
                                 ELF::SHF_TLS | ELF::SHF_INFO_LINK;
   return (OldFlags & PreserveMask) | (NewFlags & ~PreserveMask);
+}
+
+static void setSectionFlagsAndType(SectionBase &Sec, SectionFlag Flags) {
+  Sec.Flags = getSectionFlagsPreserveMask(Sec.Flags, getNewShfFlags(Flags));
+
+  // In GNU objcopy, certain flags promote SHT_NOBITS to SHT_PROGBITS. This rule
+  // may promote more non-ALLOC sections than GNU objcopy, but it is fine as
+  // non-ALLOC SHT_NOBITS sections do not make much sense.
+  if (Sec.Type == SHT_NOBITS &&
+      (!(Sec.Flags & ELF::SHF_ALLOC) ||
+       Flags & (SectionFlag::SecContents | SectionFlag::SecLoad)))
+    Sec.Type = SHT_PROGBITS;
 }
 
 static ElfType getOutputElfType(const Binary &Bin) {
@@ -222,7 +249,8 @@ static Error splitDWOToFile(const CopyConfig &Config, const Reader &Reader,
   auto OnlyKeepDWOPred = [&DWOFile](const SectionBase &Sec) {
     return onlyKeepDWOPred(*DWOFile, Sec);
   };
-  if (Error E = DWOFile->removeSections(OnlyKeepDWOPred))
+  if (Error E = DWOFile->removeSections(Config.AllowBrokenLinks,
+                                        OnlyKeepDWOPred))
     return E;
   if (Config.OutputArch) {
     DWOFile->Machine = Config.OutputArch.getValue().EMachine;
@@ -519,7 +547,7 @@ static Error replaceAndRemoveSections(const CopyConfig &Config, Object &Obj) {
           return &Obj.addSection<DecompressedSection>(*CS);
         });
 
-  return Obj.removeSections(RemovePred);
+  return Obj.removeSections(Config.AllowBrokenLinks, RemovePred);
 }
 
 // This function handles the high level operations of GNU objcopy including
@@ -559,8 +587,7 @@ static Error handleArgs(const CopyConfig &Config, Object &Obj,
         const SectionRename &SR = Iter->second;
         Sec.Name = SR.NewName;
         if (SR.NewFlags.hasValue())
-          Sec.Flags =
-              setSectionFlagsPreserveMask(Sec.Flags, SR.NewFlags.getValue());
+          setSectionFlagsAndType(Sec, SR.NewFlags.getValue());
       }
     }
   }
@@ -570,11 +597,11 @@ static Error handleArgs(const CopyConfig &Config, Object &Obj,
       const auto Iter = Config.SetSectionFlags.find(Sec.Name);
       if (Iter != Config.SetSectionFlags.end()) {
         const SectionFlagsUpdate &SFU = Iter->second;
-        Sec.Flags = setSectionFlagsPreserveMask(Sec.Flags, SFU.NewFlags);
+        setSectionFlagsAndType(Sec, SFU.NewFlags);
       }
     }
   }
-  
+
   for (const auto &Flag : Config.AddSection) {
     std::pair<StringRef, StringRef> SecPair = Flag.split("=");
     StringRef SecName = SecPair.first;

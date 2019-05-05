@@ -1266,7 +1266,6 @@ void ASTWriter::WriteBlockInfoBlock() {
   RECORD(DECL_CXX_RECORD);
   RECORD(DECL_CXX_METHOD);
   RECORD(DECL_CXX_CONSTRUCTOR);
-  RECORD(DECL_CXX_INHERITED_CONSTRUCTOR);
   RECORD(DECL_CXX_DESTRUCTOR);
   RECORD(DECL_CXX_CONVERSION);
   RECORD(DECL_ACCESS_SPEC);
@@ -4278,14 +4277,32 @@ void ASTWriter::WriteOpenCLExtensionTypes(Sema &SemaRef) {
   if (!SemaRef.Context.getLangOpts().OpenCL)
     return;
 
+  // Sort the elements of the map OpenCLTypeExtMap by TypeIDs,
+  // without copying them.
+  const llvm::DenseMap<const Type *, std::set<std::string>> &OpenCLTypeExtMap =
+      SemaRef.OpenCLTypeExtMap;
+  using ElementTy = std::pair<TypeID, const std::set<std::string> *>;
+  llvm::SmallVector<ElementTy, 8> StableOpenCLTypeExtMap;
+  StableOpenCLTypeExtMap.reserve(OpenCLTypeExtMap.size());
+
+  for (const auto &I : OpenCLTypeExtMap)
+    StableOpenCLTypeExtMap.emplace_back(
+        getTypeID(I.first->getCanonicalTypeInternal()), &I.second);
+
+  auto CompareByTypeID = [](const ElementTy &E1, const ElementTy &E2) -> bool {
+    return E1.first < E2.first;
+  };
+  llvm::sort(StableOpenCLTypeExtMap, CompareByTypeID);
+
   RecordData Record;
-  for (const auto &I : SemaRef.OpenCLTypeExtMap) {
-    Record.push_back(
-        static_cast<unsigned>(getTypeID(I.first->getCanonicalTypeInternal())));
-    Record.push_back(I.second.size());
-    for (auto Ext : I.second)
+  for (const ElementTy &E : StableOpenCLTypeExtMap) {
+    Record.push_back(E.first); // TypeID
+    const std::set<std::string> *ExtSet = E.second;
+    Record.push_back(static_cast<unsigned>(ExtSet->size()));
+    for (const std::string &Ext : *ExtSet)
       AddString(Ext, Record);
   }
+
   Stream.EmitRecord(OPENCL_EXTENSION_TYPES, Record);
 }
 
@@ -4293,13 +4310,31 @@ void ASTWriter::WriteOpenCLExtensionDecls(Sema &SemaRef) {
   if (!SemaRef.Context.getLangOpts().OpenCL)
     return;
 
+  // Sort the elements of the map OpenCLDeclExtMap by DeclIDs,
+  // without copying them.
+  const llvm::DenseMap<const Decl *, std::set<std::string>> &OpenCLDeclExtMap =
+      SemaRef.OpenCLDeclExtMap;
+  using ElementTy = std::pair<DeclID, const std::set<std::string> *>;
+  llvm::SmallVector<ElementTy, 8> StableOpenCLDeclExtMap;
+  StableOpenCLDeclExtMap.reserve(OpenCLDeclExtMap.size());
+
+  for (const auto &I : OpenCLDeclExtMap)
+    StableOpenCLDeclExtMap.emplace_back(getDeclID(I.first), &I.second);
+
+  auto CompareByDeclID = [](const ElementTy &E1, const ElementTy &E2) -> bool {
+    return E1.first < E2.first;
+  };
+  llvm::sort(StableOpenCLDeclExtMap, CompareByDeclID);
+
   RecordData Record;
-  for (const auto &I : SemaRef.OpenCLDeclExtMap) {
-    Record.push_back(getDeclID(I.first));
-    Record.push_back(static_cast<unsigned>(I.second.size()));
-    for (auto Ext : I.second)
+  for (const ElementTy &E : StableOpenCLDeclExtMap) {
+    Record.push_back(E.first); // DeclID
+    const std::set<std::string> *ExtSet = E.second;
+    Record.push_back(static_cast<unsigned>(ExtSet->size()));
+    for (const std::string &Ext : *ExtSet)
       AddString(Ext, Record);
   }
+
   Stream.EmitRecord(OPENCL_EXTENSION_DECLS, Record);
 }
 
@@ -6841,6 +6876,15 @@ void OMPClauseWriter::VisitOMPMapClause(OMPMapClause *C) {
     Record.AddStmt(M.getAssociatedExpression());
     Record.AddDeclRef(M.getAssociatedDeclaration());
   }
+}
+
+void OMPClauseWriter::VisitOMPAllocateClause(OMPAllocateClause *C) {
+  Record.push_back(C->varlist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  Record.AddSourceLocation(C->getColonLoc());
+  Record.AddStmt(C->getAllocator());
+  for (auto *VE : C->varlists())
+    Record.AddStmt(VE);
 }
 
 void OMPClauseWriter::VisitOMPNumTeamsClause(OMPNumTeamsClause *C) {

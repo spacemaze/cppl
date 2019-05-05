@@ -2605,6 +2605,11 @@ static std::string
 FormatFunctionParameter(const PrintingPolicy &Policy, const ParmVarDecl *Param,
                         bool SuppressName = false, bool SuppressBlock = false,
                         Optional<ArrayRef<QualType>> ObjCSubsts = None) {
+  // Params are unavailable in FunctionTypeLoc if the FunctionType is invalid.
+  // It would be better to pass in the param Type, which is usually avaliable.
+  // But this case is rare, so just pretend we fell back to int as elsewhere.
+  if (!Param)
+    return "int";
   bool ObjCMethodParam = isa<ObjCMethodDecl>(Param->getDeclContext());
   if (Param->getType()->isDependentType() ||
       !Param->getType()->isBlockPointerType()) {
@@ -4784,22 +4789,19 @@ typedef CodeCompleteConsumer::OverloadCandidate ResultCandidate;
 static void mergeCandidatesWithResults(
     Sema &SemaRef, SmallVectorImpl<ResultCandidate> &Results,
     OverloadCandidateSet &CandidateSet, SourceLocation Loc) {
-  if (!CandidateSet.empty()) {
-    // Sort the overload candidate set by placing the best overloads first.
-    std::stable_sort(
-        CandidateSet.begin(), CandidateSet.end(),
-        [&](const OverloadCandidate &X, const OverloadCandidate &Y) {
-          return isBetterOverloadCandidate(SemaRef, X, Y, Loc,
-                                           CandidateSet.getKind());
-        });
+  // Sort the overload candidate set by placing the best overloads first.
+  llvm::stable_sort(CandidateSet, [&](const OverloadCandidate &X,
+                                      const OverloadCandidate &Y) {
+    return isBetterOverloadCandidate(SemaRef, X, Y, Loc,
+                                     CandidateSet.getKind());
+  });
 
-    // Add the remaining viable overload candidates as code-completion results.
-    for (OverloadCandidate &Candidate : CandidateSet) {
-      if (Candidate.Function && Candidate.Function->isDeleted())
-        continue;
-      if (Candidate.Viable)
-        Results.push_back(ResultCandidate(Candidate.Function));
-    }
+  // Add the remaining viable overload candidates as code-completion results.
+  for (OverloadCandidate &Candidate : CandidateSet) {
+    if (Candidate.Function && Candidate.Function->isDeleted())
+      continue;
+    if (Candidate.Viable)
+      Results.push_back(ResultCandidate(Candidate.Function));
   }
 }
 
@@ -4959,13 +4961,15 @@ QualType Sema::ProduceConstructorSignatureHelp(Scope *S, QualType Type,
       AddOverloadCandidate(FD, DeclAccessPair::make(FD, C->getAccess()), Args,
                            CandidateSet,
                            /*SuppressUsedConversions=*/false,
-                           /*PartialOverloading=*/true);
+                           /*PartialOverloading=*/true,
+                           /*AllowExplicit*/ true);
     } else if (auto *FTD = dyn_cast<FunctionTemplateDecl>(C)) {
       AddTemplateOverloadCandidate(
           FTD, DeclAccessPair::make(FTD, C->getAccess()),
           /*ExplicitTemplateArgs=*/nullptr, Args, CandidateSet,
           /*SuppressUsedConversions=*/false,
-          /*PartialOverloading=*/true);
+          /*PartialOverloading=*/true,
+          /*AllowExplicit*/ true);
     }
   }
 

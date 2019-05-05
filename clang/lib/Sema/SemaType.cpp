@@ -255,13 +255,27 @@ namespace {
       return T;
     }
 
+    /// Completely replace the \c auto in \p TypeWithAuto by
+    /// \p Replacement. Also replace \p TypeWithAuto in \c TypeAttrPair if
+    /// necessary.
+    QualType ReplaceAutoType(QualType TypeWithAuto, QualType Replacement) {
+      QualType T = sema.ReplaceAutoType(TypeWithAuto, Replacement);
+      if (auto *AttrTy = TypeWithAuto->getAs<AttributedType>()) {
+        // Attributed type still should be an attributed type after replacement.
+        auto *NewAttrTy = cast<AttributedType>(T.getTypePtr());
+        for (TypeAttrPair &A : AttrsForTypes) {
+          if (A.first == AttrTy)
+            A.first = NewAttrTy;
+        }
+        AttrsForTypesSorted = false;
+      }
+      return T;
+    }
+
     /// Extract and remove the Attr* for a given attributed type.
     const Attr *takeAttrForAttributedType(const AttributedType *AT) {
       if (!AttrsForTypesSorted) {
-        std::stable_sort(AttrsForTypes.begin(), AttrsForTypes.end(),
-                         [](const TypeAttrPair &A, const TypeAttrPair &B) {
-                           return A.first < B.first;
-                         });
+        llvm::stable_sort(AttrsForTypes, llvm::less_first());
         AttrsForTypesSorted = true;
       }
 
@@ -517,8 +531,8 @@ static void distributeObjCPointerTypeAttrFromDeclarator(
       // attribute from being applied multiple times and gives
       // the source-location-filler something to work with.
       state.saveDeclSpecAttrs();
-      moveAttrFromListToList(attr, declarator.getAttributes(),
-                             declarator.getMutableDeclSpec().getAttributes());
+      declarator.getMutableDeclSpec().getAttributes().takeOneFrom(
+          declarator.getAttributes(), &attr);
       return;
     }
   }
@@ -2921,7 +2935,7 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
         sema::LambdaScopeInfo *LSI = SemaRef.getCurLambda();
         assert(LSI && "No LambdaScopeInfo on the stack!");
         const unsigned TemplateParameterDepth = LSI->AutoTemplateParameterDepth;
-        const unsigned AutoParameterPosition = LSI->AutoTemplateParams.size();
+        const unsigned AutoParameterPosition = LSI->TemplateParams.size();
         const bool IsParameterPack = D.hasEllipsis();
 
         // Create the TemplateTypeParmDecl here to retrieve the corresponding
@@ -2933,12 +2947,13 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
                 /*KeyLoc*/ SourceLocation(), /*NameLoc*/ D.getBeginLoc(),
                 TemplateParameterDepth, AutoParameterPosition,
                 /*Identifier*/ nullptr, false, IsParameterPack);
-        LSI->AutoTemplateParams.push_back(CorrespondingTemplateParam);
+        CorrespondingTemplateParam->setImplicit();
+        LSI->TemplateParams.push_back(CorrespondingTemplateParam);
         // Replace the 'auto' in the function parameter with this invented
         // template type parameter.
         // FIXME: Retain some type sugar to indicate that this was written
         // as 'auto'.
-        T = SemaRef.ReplaceAutoType(
+        T = state.ReplaceAutoType(
             T, QualType(CorrespondingTemplateParam->getTypeForDecl(), 0));
       }
       break;
@@ -7294,8 +7309,10 @@ static void deduceOpenCLImplicitAddrSpace(TypeProcessingState &State,
        // otherwise it will fail some sema check.
       IsFuncReturnType || IsFuncType ||
       // Do not deduce addr space for member types of struct, except the pointee
-      // type of a pointer member type.
-      (D.getContext() == DeclaratorContext::MemberContext && !IsPointee) ||
+      // type of a pointer member type or static data members.
+      (D.getContext() == DeclaratorContext::MemberContext &&
+       (!IsPointee &&
+        D.getDeclSpec().getStorageClassSpec() != DeclSpec::SCS_static)) ||
       // Do not deduce addr space for types used to define a typedef and the
       // typedef itself, except the pointee type of a pointer type which is used
       // to define the typedef.

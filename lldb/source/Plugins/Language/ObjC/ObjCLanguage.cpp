@@ -48,9 +48,7 @@ lldb_private::ConstString ObjCLanguage::GetPluginNameStatic() {
   return g_name;
 }
 
-//------------------------------------------------------------------
 // PluginInterface protocol
-//------------------------------------------------------------------
 
 lldb_private::ConstString ObjCLanguage::GetPluginName() {
   return GetPluginNameStatic();
@@ -58,9 +56,7 @@ lldb_private::ConstString ObjCLanguage::GetPluginName() {
 
 uint32_t ObjCLanguage::GetPluginVersion() { return 1; }
 
-//------------------------------------------------------------------
 // Static Functions
-//------------------------------------------------------------------
 
 Language *ObjCLanguage::CreateInstance(lldb::LanguageType language) {
   switch (language) {
@@ -998,7 +994,7 @@ std::unique_ptr<Language::TypeScavenger> ObjCLanguage::GetTypeScavenger() {
   
   class ObjCDebugInfoScavenger : public Language::ImageListTypeScavenger {
   public:
-    virtual CompilerType AdjustForInclusion(CompilerType &candidate) override {
+    CompilerType AdjustForInclusion(CompilerType &candidate) override {
       LanguageType lang_type(candidate.GetMinimumLanguage());
       if (!Language::LanguageIsObjC(lang_type))
         return CompilerType();

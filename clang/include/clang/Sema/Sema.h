@@ -1213,6 +1213,11 @@ public:
   /// of -Wselector.
   llvm::MapVector<Selector, SourceLocation> ReferencedSelectors;
 
+  /// List of SourceLocations where 'self' is implicitly retained inside a
+  /// block.
+  llvm::SmallVector<std::pair<SourceLocation, const BlockDecl *>, 1>
+      ImplicitlyRetainedSelfLocs;
+
   /// Kinds of C++ special members.
   enum CXXSpecialMember {
     CXXDefaultConstructor,
@@ -1381,8 +1386,21 @@ public:
 
   void emitAndClearUnusedLocalTypedefWarnings();
 
+  enum TUFragmentKind {
+    /// The global module fragment, between 'module;' and a module-declaration.
+    Global,
+    /// A normal translation unit fragment. For a non-module unit, this is the
+    /// entire translation unit. Otherwise, it runs from the module-declaration
+    /// to the private-module-fragment (if any) or the end of the TU (if not).
+    Normal,
+    /// The private module fragment, between 'module :private;' and the end of
+    /// the translation unit.
+    Private
+  };
+
   void ActOnStartOfTranslationUnit();
   void ActOnEndOfTranslationUnit();
+  void ActOnEndOfTranslationUnitFragment(TUFragmentKind Kind);
 
   void CheckDelegatingCtorCycles();
 
@@ -1624,12 +1642,17 @@ private:
                                TypeDiagnoser *Diagnoser);
 
   struct ModuleScope {
+    SourceLocation BeginLoc;
     clang::Module *Module = nullptr;
     bool ModuleInterface = false;
+    bool ImplicitGlobalModuleFragment = false;
     VisibleModuleSet OuterVisibleModules;
   };
   /// The modules we're currently parsing.
   llvm::SmallVector<ModuleScope, 16> ModuleScopes;
+
+  /// Namespace definitions that we will export when they finish.
+  llvm::SmallPtrSet<const NamespaceDecl*, 8> DeferredExportedNamespaces;
 
   /// Get the module whose scope we are currently within.
   Module *getCurrentModule() const {
@@ -2017,7 +2040,7 @@ public:
   bool CheckVariableDeclaration(VarDecl *NewVD, LookupResult &Previous);
   void CheckVariableDeclarationType(VarDecl *NewVD);
   bool DeduceVariableDeclarationType(VarDecl *VDecl, bool DirectInit,
-                                     Expr *&Init);
+                                     Expr *Init);
   void CheckCompleteVariableDeclaration(VarDecl *VD);
   void CheckCompleteDecompositionDeclaration(DecompositionDecl *DD);
   void MaybeSuggestAddingStaticToDecl(const FunctionDecl *D);
@@ -2155,24 +2178,40 @@ public:
   enum class ModuleDeclKind {
     Interface,      ///< 'export module X;'
     Implementation, ///< 'module X;'
-    Partition,      ///< 'module partition X;'
   };
 
   /// The parser has processed a module-declaration that begins the definition
   /// of a module interface or implementation.
   DeclGroupPtrTy ActOnModuleDecl(SourceLocation StartLoc,
                                  SourceLocation ModuleLoc, ModuleDeclKind MDK,
-                                 ModuleIdPath Path);
+                                 ModuleIdPath Path, bool IsFirstDecl);
+
+  /// The parser has processed a global-module-fragment declaration that begins
+  /// the definition of the global module fragment of the current module unit.
+  /// \param ModuleLoc The location of the 'module' keyword.
+  DeclGroupPtrTy ActOnGlobalModuleFragmentDecl(SourceLocation ModuleLoc);
+
+  /// The parser has processed a private-module-fragment declaration that begins
+  /// the definition of the private module fragment of the current module unit.
+  /// \param ModuleLoc The location of the 'module' keyword.
+  /// \param PrivateLoc The location of the 'private' keyword.
+  DeclGroupPtrTy ActOnPrivateModuleFragmentDecl(SourceLocation ModuleLoc,
+                                                SourceLocation PrivateLoc);
 
   /// The parser has processed a module import declaration.
   ///
-  /// \param AtLoc The location of the '@' symbol, if any.
-  ///
+  /// \param StartLoc The location of the first token in the declaration. This
+  ///        could be the location of an '@', 'export', or 'import'.
+  /// \param ExportLoc The location of the 'export' keyword, if any.
   /// \param ImportLoc The location of the 'import' keyword.
-  ///
   /// \param Path The module access path.
-  DeclResult ActOnModuleImport(SourceLocation AtLoc, SourceLocation ImportLoc,
-                               ModuleIdPath Path);
+  DeclResult ActOnModuleImport(SourceLocation StartLoc,
+                               SourceLocation ExportLoc,
+                               SourceLocation ImportLoc, ModuleIdPath Path);
+  DeclResult ActOnModuleImport(SourceLocation StartLoc,
+                               SourceLocation ExportLoc,
+                               SourceLocation ImportLoc, Module *M,
+                               ModuleIdPath Path = {});
 
   /// The parser has processed a module import translated from a
   /// #include or similar preprocessing directive.
@@ -2466,14 +2505,6 @@ public:
   /// Add this decl to the scope shadowed decl chains.
   void PushOnScopeChains(NamedDecl *D, Scope *S, bool AddToContext = true);
 
-  /// Make the given externally-produced declaration visible at the
-  /// top level scope.
-  ///
-  /// \param D The externally-produced declaration to push.
-  ///
-  /// \param Name The name of the externally-produced declaration.
-  void pushExternalDeclIntoScope(NamedDecl *D, DeclarationName Name);
-
   /// isDeclInScope - If 'Ctx' is a function/method, isDeclInScope returns true
   /// if 'D' is in Scope 'S', otherwise 'S' is ignored and isDeclInScope returns
   /// true if 'D' belongs to the given declaration context.
@@ -2713,7 +2744,8 @@ public:
     CCEK_Enumerator,  ///< Enumerator value with fixed underlying type.
     CCEK_TemplateArg, ///< Value of a non-type template parameter.
     CCEK_NewExpr,     ///< Constant expression in a noptr-new-declarator.
-    CCEK_ConstexprIf  ///< Condition in a constexpr if statement.
+    CCEK_ConstexprIf, ///< Condition in a constexpr if statement.
+    CCEK_ExplicitBool ///< Condition in an explicit(bool) specifier.
   };
   ExprResult CheckConvertedConstantExpression(Expr *From, QualType T,
                                               llvm::APSInt &Value, CCEKind CCE);
@@ -2836,6 +2868,7 @@ public:
                             bool SuppressUserConversions = false,
                             bool PartialOverloading = false,
                             bool AllowExplicit = false,
+                            bool AllowExplicitConversion = false,
                             ADLCallKind IsADLCandidate = ADLCallKind::NotADL,
                             ConversionSequenceList EarlyConversions = None);
   void AddFunctionCandidates(const UnresolvedSetImpl &Functions,
@@ -2874,7 +2907,7 @@ public:
       FunctionTemplateDecl *FunctionTemplate, DeclAccessPair FoundDecl,
       TemplateArgumentListInfo *ExplicitTemplateArgs, ArrayRef<Expr *> Args,
       OverloadCandidateSet &CandidateSet, bool SuppressUserConversions = false,
-      bool PartialOverloading = false,
+      bool PartialOverloading = false, bool AllowExplicit = false,
       ADLCallKind IsADLCandidate = ADLCallKind::NotADL);
   bool CheckNonDependentConversions(FunctionTemplateDecl *FunctionTemplate,
                                     ArrayRef<QualType> ParamTypes,
@@ -2886,20 +2919,16 @@ public:
                                     QualType ObjectType = QualType(),
                                     Expr::Classification
                                         ObjectClassification = {});
-  void AddConversionCandidate(CXXConversionDecl *Conversion,
-                              DeclAccessPair FoundDecl,
-                              CXXRecordDecl *ActingContext,
-                              Expr *From, QualType ToType,
-                              OverloadCandidateSet& CandidateSet,
-                              bool AllowObjCConversionOnExplicit,
-                              bool AllowResultConversion = true);
-  void AddTemplateConversionCandidate(FunctionTemplateDecl *FunctionTemplate,
-                                      DeclAccessPair FoundDecl,
-                                      CXXRecordDecl *ActingContext,
-                                      Expr *From, QualType ToType,
-                                      OverloadCandidateSet &CandidateSet,
-                                      bool AllowObjCConversionOnExplicit,
-                                      bool AllowResultConversion = true);
+  void AddConversionCandidate(
+      CXXConversionDecl *Conversion, DeclAccessPair FoundDecl,
+      CXXRecordDecl *ActingContext, Expr *From, QualType ToType,
+      OverloadCandidateSet &CandidateSet, bool AllowObjCConversionOnExplicit,
+      bool AllowExplicit, bool AllowResultConversion = true);
+  void AddTemplateConversionCandidate(
+      FunctionTemplateDecl *FunctionTemplate, DeclAccessPair FoundDecl,
+      CXXRecordDecl *ActingContext, Expr *From, QualType ToType,
+      OverloadCandidateSet &CandidateSet, bool AllowObjCConversionOnExplicit,
+      bool AllowExplicit, bool AllowResultConversion = true);
   void AddSurrogateCandidate(CXXConversionDecl *Conversion,
                              DeclAccessPair FoundDecl,
                              CXXRecordDecl *ActingContext,
@@ -4222,6 +4251,10 @@ public:
   /// reachability analysis to determine if the statement is reachable.
   /// If it is unreachable, the diagnostic will not be emitted.
   bool DiagRuntimeBehavior(SourceLocation Loc, const Stmt *Statement,
+                           const PartialDiagnostic &PD);
+  /// Similar, but diagnostic is only produced if all the specified statements
+  /// are reachable.
+  bool DiagRuntimeBehavior(SourceLocation Loc, ArrayRef<const Stmt*> Stmts,
                            const PartialDiagnostic &PD);
 
   // Primary Expressions.
@@ -5697,6 +5730,12 @@ public:
   /// Note that we have finished the explicit captures for the
   /// given lambda.
   void finishLambdaExplicitCaptures(sema::LambdaScopeInfo *LSI);
+
+  /// \brief This is called after parsing the explicit template parameter list
+  /// on a lambda (if it exists) in C++2a.
+  void ActOnLambdaExplicitTemplateParameterList(SourceLocation LAngleLoc,
+                                                ArrayRef<NamedDecl *> TParams,
+                                                SourceLocation RAngleLoc);
 
   /// Introduce the lambda parameters into scope.
   void addLambdaParameters(
@@ -7194,7 +7233,7 @@ public:
   QualType deduceVarTypeFromInitializer(VarDecl *VDecl, DeclarationName Name,
                                         QualType Type, TypeSourceInfo *TSI,
                                         SourceRange Range, bool DirectInit,
-                                        Expr *&Init);
+                                        Expr *Init);
 
   TypeLoc getReturnTypeLoc(FunctionDecl *FD) const;
 
@@ -8020,7 +8059,8 @@ public:
                              LateInstantiatedAttrVec *LateAttrs,
                              DeclContext *Owner,
                              LocalInstantiationScope *StartingScope,
-                             bool InstantiatingVarTemplate = false);
+                             bool InstantiatingVarTemplate = false,
+                             VarTemplateSpecializationDecl *PrevVTSD = nullptr);
   void InstantiateVariableInitializer(
       VarDecl *Var, VarDecl *OldVar,
       const MultiLevelTemplateArgumentList &TemplateArgs);
@@ -8113,17 +8153,19 @@ public:
       const SourceLocation *ProtoLocs, SourceLocation EndProtoLoc,
       const ParsedAttributesView &AttrList);
 
-  Decl *ActOnStartClassImplementation(
-                    SourceLocation AtClassImplLoc,
-                    IdentifierInfo *ClassName, SourceLocation ClassLoc,
-                    IdentifierInfo *SuperClassname,
-                    SourceLocation SuperClassLoc);
+  Decl *ActOnStartClassImplementation(SourceLocation AtClassImplLoc,
+                                      IdentifierInfo *ClassName,
+                                      SourceLocation ClassLoc,
+                                      IdentifierInfo *SuperClassname,
+                                      SourceLocation SuperClassLoc,
+                                      const ParsedAttributesView &AttrList);
 
   Decl *ActOnStartCategoryImplementation(SourceLocation AtCatImplLoc,
                                          IdentifierInfo *ClassName,
                                          SourceLocation ClassLoc,
                                          IdentifierInfo *CatName,
-                                         SourceLocation CatLoc);
+                                         SourceLocation CatLoc,
+                                         const ParsedAttributesView &AttrList);
 
   DeclGroupPtrTy ActOnFinishObjCImplementation(Decl *ObjCImpDecl,
                                                ArrayRef<Decl *> Decls);
@@ -9397,6 +9439,11 @@ public:
       ArrayRef<OpenMPMapModifierKind> MapTypeModifiers,
       ArrayRef<SourceLocation> MapTypeModifiersLoc, OpenMPMapClauseKind MapType,
       bool IsMapTypeImplicit, SourceLocation DepLinMapLoc);
+  /// Called on well-formed 'allocate' clause.
+  OMPClause *
+  ActOnOpenMPAllocateClause(Expr *Allocator, ArrayRef<Expr *> VarList,
+                            SourceLocation StartLoc, SourceLocation ColonLoc,
+                            SourceLocation LParenLoc, SourceLocation EndLoc);
   /// Called on well-formed 'private' clause.
   OMPClause *ActOnOpenMPPrivateClause(ArrayRef<Expr *> VarList,
                                       SourceLocation StartLoc,
@@ -10089,6 +10136,14 @@ public:
   ExprResult CheckBooleanCondition(SourceLocation Loc, Expr *E,
                                    bool IsConstexpr = false);
 
+  /// ActOnExplicitBoolSpecifier - Build an ExplicitSpecifier from an expression
+  /// found in an explicit(bool) specifier.
+  ExplicitSpecifier ActOnExplicitBoolSpecifier(Expr *E);
+
+  /// tryResolveExplicitSpecifier - Attempt to resolve the explict specifier.
+  /// Returns true if the explicit specifier is now resolved.
+  bool tryResolveExplicitSpecifier(ExplicitSpecifier &ExplicitSpec);
+
   /// DiagnoseAssignmentAsCondition - Given that an expression is
   /// being used as a boolean condition, warn if it's an assignment.
   void DiagnoseAssignmentAsCondition(Expr *E);
@@ -10729,6 +10784,7 @@ private:
   bool SemaBuiltinARMSpecialReg(unsigned BuiltinID, CallExpr *TheCall,
                                 int ArgNum, unsigned ExpectedFieldNum,
                                 bool AllowName);
+  bool SemaBuiltinARMMemoryTaggingCall(unsigned BuiltinID, CallExpr *TheCall);
 public:
   enum FormatStringType {
     FST_Scanf,

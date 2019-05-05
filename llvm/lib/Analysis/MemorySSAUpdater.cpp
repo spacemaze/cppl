@@ -72,7 +72,10 @@ MemoryAccess *MemorySSAUpdater::getPreviousDefRecursive(
     // potential phi node. This will insert phi nodes if we cycle in order to
     // break the cycle and have an operand.
     for (auto *Pred : predecessors(BB))
-      PhiOps.push_back(getPreviousDefFromEnd(Pred, CachedPreviousDef));
+      if (MSSA->DT->isReachableFromEntry(Pred))
+        PhiOps.push_back(getPreviousDefFromEnd(Pred, CachedPreviousDef));
+      else
+        PhiOps.push_back(MSSA->getLiveOnEntryDef());
 
     // Now try to simplify the ops to avoid placing a phi.
     // This may return null if we never created a phi yet, that's okay
@@ -156,8 +159,10 @@ MemoryAccess *MemorySSAUpdater::getPreviousDefFromEnd(
     DenseMap<BasicBlock *, TrackingVH<MemoryAccess>> &CachedPreviousDef) {
   auto *Defs = MSSA->getWritableBlockDefs(BB);
 
-  if (Defs)
+  if (Defs) {
+    CachedPreviousDef.insert({BB, &*Defs->rbegin()});
     return &*Defs->rbegin();
+  }
 
   return getPreviousDefRecursive(BB, CachedPreviousDef);
 }
@@ -309,8 +314,15 @@ void MemorySSAUpdater::insertDef(MemoryDef *MD, bool RenameUses) {
       IDFs.calculate(IDFBlocks);
       SmallVector<AssertingVH<MemoryPhi>, 4> NewInsertedPHIs;
       for (auto *BBIDF : IDFBlocks)
-        if (!MSSA->getMemoryAccess(BBIDF))
-          NewInsertedPHIs.push_back(MSSA->createMemoryPhi(BBIDF));
+        if (!MSSA->getMemoryAccess(BBIDF)) {
+          auto *MPhi = MSSA->createMemoryPhi(BBIDF);
+          NewInsertedPHIs.push_back(MPhi);
+          // Add the phis created into the IDF blocks to NonOptPhis, so they are
+          // not optimized out as trivial by the call to getPreviousDefFromEnd
+          // below. Once they are complete, all these Phis are added to the
+          // FixupList, and removed from NonOptPhis inside fixupDefs().
+          NonOptPhis.insert(MPhi);
+        }
 
       for (auto &MPhi : NewInsertedPHIs) {
         auto *BBIDF = MPhi->getBlock();
@@ -346,12 +358,9 @@ void MemorySSAUpdater::insertDef(MemoryDef *MD, bool RenameUses) {
   }
 
   // Optimize potentially non-minimal phis added in this method.
-  for (unsigned Idx = NewPhiIndex; Idx < NewPhiIndexEnd; ++Idx) {
-    if (auto *MPhi = cast_or_null<MemoryPhi>(InsertedPHIs[Idx])) {
-      auto OperRange = MPhi->operands();
-      tryRemoveTrivialPhi(MPhi, OperRange);
-    }
-  }
+  unsigned NewPhiSize = NewPhiIndexEnd - NewPhiIndex;
+  if (NewPhiSize)
+    tryRemoveTrivialPhis(ArrayRef<WeakVH>(&InsertedPHIs[NewPhiIndex], NewPhiSize));
 
   // Now that all fixups are done, rename all uses if we are asked.
   if (RenameUses) {
@@ -1204,6 +1213,14 @@ void MemorySSAUpdater::removeBlocks(
       MSSA->removeFromLists(MA);
     }
   }
+}
+
+void MemorySSAUpdater::tryRemoveTrivialPhis(ArrayRef<WeakVH> UpdatedPHIs) {
+  for (auto &VH : UpdatedPHIs)
+    if (auto *MPhi = cast_or_null<MemoryPhi>(VH)) {
+      auto OperRange = MPhi->operands();
+      tryRemoveTrivialPhi(MPhi, OperRange);
+    }
 }
 
 MemoryAccess *MemorySSAUpdater::createMemoryAccessInBB(

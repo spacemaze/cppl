@@ -1090,8 +1090,7 @@ public:
     if (Kind != k_Register || Reg.Kind != RegKind::SVEDataVector)
       return DiagnosticPredicateTy::NoMatch;
 
-    if (isSVEVectorReg<Class>() &&
-           (ElementWidth == 0 || Reg.ElementWidth == ElementWidth))
+    if (isSVEVectorReg<Class>() && Reg.ElementWidth == ElementWidth)
       return DiagnosticPredicateTy::Match;
 
     return DiagnosticPredicateTy::NearMatch;
@@ -1271,9 +1270,11 @@ public:
   bool isExtend64() const {
     if (!isExtend())
       return false;
-    // UXTX and SXTX require a 64-bit source register (the ExtendLSL64 class).
+    // Make sure the extend expects a 32-bit source register.
     AArch64_AM::ShiftExtendType ET = getShiftExtendType();
-    return ET != AArch64_AM::UXTX && ET != AArch64_AM::SXTX;
+    return ET == AArch64_AM::UXTB || ET == AArch64_AM::SXTB ||
+           ET == AArch64_AM::UXTH || ET == AArch64_AM::SXTH ||
+           ET == AArch64_AM::UXTW || ET == AArch64_AM::SXTW;
   }
 
   bool isExtendLSL64() const {
@@ -4097,15 +4098,6 @@ bool AArch64AsmParser::validateInstruction(MCInst &Inst, SMLoc &IDLoc,
                    "unpredictable STXP instruction, status is also a source");
     break;
   }
-  case AArch64::LDGV: {
-    unsigned Rt = Inst.getOperand(0).getReg();
-    unsigned Rn = Inst.getOperand(1).getReg();
-    if (RI->isSubRegisterEq(Rt, Rn)) {
-      return Error(Loc[0],
-                  "unpredictable LDGV instruction, writeback register is also "
-                  "the target register");
-    }
-  }
   }
 
 
@@ -4199,7 +4191,7 @@ bool AArch64AsmParser::showMatchError(SMLoc Loc, unsigned ErrCode,
     return Error(Loc, "expected AArch64 condition code");
   case Match_AddSubRegExtendSmall:
     return Error(Loc,
-      "expected '[su]xt[bhw]' or 'lsl' with optional integer in range [0, 4]");
+      "expected '[su]xt[bhw]' with optional integer in range [0, 4]");
   case Match_AddSubRegExtendLarge:
     return Error(Loc,
       "expected 'sxtx' 'uxtx' or 'lsl' with optional integer in range [0, 4]");
@@ -4442,7 +4434,7 @@ bool AArch64AsmParser::showMatchError(SMLoc Loc, unsigned ErrCode,
   case Match_InvalidZPR64LSL64:
     return Error(Loc, "invalid shift/extend specified, expected 'z[0..31].d, lsl #3'");
   case Match_InvalidZPR0:
-    return Error(Loc, "expected register without element width sufix");
+    return Error(Loc, "expected register without element width suffix");
   case Match_InvalidZPR8:
   case Match_InvalidZPR16:
   case Match_InvalidZPR32:
@@ -5163,15 +5155,9 @@ bool AArch64AsmParser::parseDirectiveArch(SMLoc L) {
 /// parseDirectiveArchExtension
 ///   ::= .arch_extension [no]feature
 bool AArch64AsmParser::parseDirectiveArchExtension(SMLoc L) {
-  MCAsmParser &Parser = getParser();
+  SMLoc ExtLoc = getLoc();
 
-  if (getLexer().isNot(AsmToken::Identifier))
-    return Error(getLexer().getLoc(), "expected architecture extension name");
-
-  const AsmToken &Tok = Parser.getTok();
-  StringRef Name = Tok.getString();
-  SMLoc ExtLoc = Tok.getLoc();
-  Lex();
+  StringRef Name = getParser().parseStringToEndOfStatement().trim();
 
   if (parseToken(AsmToken::EndOfStatement,
                  "unexpected token in '.arch_extension' directive"))

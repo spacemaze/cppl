@@ -136,8 +136,8 @@ public:
     m_collection_sp->Initialize(g_properties);
   }
 
-  FileSpecList &GetSymLinkPaths() {
-    OptionValueFileSpecList *option_value =
+  FileSpecList GetSymLinkPaths() {
+    const OptionValueFileSpecList *option_value =
         m_collection_sp->GetPropertyAtIndexAsOptionValueFileSpecList(
             nullptr, true, ePropertySymLinkPaths);
     assert(option_value);
@@ -159,7 +159,7 @@ static const SymbolFileDWARFPropertiesSP &GetGlobalPluginProperties() {
 
 } // anonymous namespace end
 
-const FileSpecList &SymbolFileDWARF::GetSymlinkPaths() {
+FileSpecList SymbolFileDWARF::GetSymlinkPaths() {
   return GetGlobalPluginProperties()->GetSymLinkPaths();
 }
 
@@ -328,10 +328,8 @@ size_t SymbolFileDWARF::GetTypes(SymbolContextScope *sc_scope,
   return num_types_added;
 }
 
-//----------------------------------------------------------------------
 // Gets the first parent that is a lexical block, function or inlined
 // subroutine, or compile unit.
-//----------------------------------------------------------------------
 DWARFDIE
 SymbolFileDWARF::GetParentSymbolContextDIE(const DWARFDIE &child_die) {
   DWARFDIE die;
@@ -911,9 +909,6 @@ bool SymbolFileDWARF::ParseImportedModules(
     return false;
   UpdateExternalModuleListIfNeeded();
 
-  if (!sc.comp_unit)
-    return false;
-
   const DWARFDIE die = dwarf_cu->DIE();
   if (!die)
     return false;
@@ -959,9 +954,7 @@ struct ParseDWARFLineTableCallbackInfo {
   lldb::addr_t addr_mask;
 };
 
-//----------------------------------------------------------------------
 // ParseStatementTableCallback
-//----------------------------------------------------------------------
 static void ParseDWARFLineTableCallback(dw_offset_t offset,
                                         const DWARFDebugLine::State &state,
                                         void *userData) {
@@ -1648,9 +1641,7 @@ void SymbolFileDWARF::UpdateExternalModuleListIfNeeded() {
             // printed. However, as one can notice in this case we don't
             // actually need to try to load the already loaded module
             // (corresponding to .dwo) so we simply skip it.
-            if (m_obj_file->GetFileSpec()
-                        .GetFileNameExtension()
-                        .GetStringRef() == ".dwo" &&
+            if (m_obj_file->GetFileSpec().GetFileNameExtension() == ".dwo" &&
                 llvm::StringRef(m_obj_file->GetFileSpec().GetPath())
                     .endswith(dwo_module_spec.GetFileSpec().GetPath())) {
               continue;
@@ -2040,6 +2031,7 @@ uint32_t SymbolFileDWARF::FindGlobalVariables(
 
   llvm::StringRef basename;
   llvm::StringRef context;
+  bool name_is_mangled = (bool)Mangled(name);
 
   if (!CPlusPlusLanguage::ExtractContextAndIdentifier(name.GetCString(),
                                                       context, basename))
@@ -2089,7 +2081,8 @@ uint32_t SymbolFileDWARF::FindGlobalVariables(
                          &variables);
           while (pruned_idx < variables.GetSize()) {
             VariableSP var_sp = variables.GetVariableAtIndex(pruned_idx);
-            if (var_sp->GetName().GetStringRef().contains(name.GetStringRef()))
+            if (name_is_mangled ||
+                var_sp->GetName().GetStringRef().contains(name.GetStringRef()))
               ++pruned_idx;
             else
               variables.RemoveVariableAtIndex(pruned_idx);
@@ -2787,7 +2780,6 @@ TypeSP SymbolFileDWARF::FindCompleteObjCDefinitionTypeForDIE(
   return type_sp;
 }
 
-//----------------------------------------------------------------------
 // This function helps to ensure that the declaration contexts match for two
 // different DIEs. Often times debug information will refer to a forward
 // declaration of a type (the equivalent of "struct my_struct;". There will
@@ -2797,7 +2789,6 @@ TypeSP SymbolFileDWARF::FindCompleteObjCDefinitionTypeForDIE(
 // type was in the same declaration context as the original DIE. This function
 // can efficiently compare two DIEs and will return true when the declaration
 // context matches, and false when they don't.
-//----------------------------------------------------------------------
 bool SymbolFileDWARF::DIEDeclContextsMatch(const DWARFDIE &die1,
                                            const DWARFDIE &die2) {
   if (die1 == die2)
@@ -3788,9 +3779,7 @@ SymbolFileDWARF::ParseCallEdgesInFunction(UserID func_id) {
   return {};
 }
 
-//------------------------------------------------------------------
 // PluginInterface protocol
-//------------------------------------------------------------------
 ConstString SymbolFileDWARF::GetPluginName() { return GetPluginNameStatic(); }
 
 uint32_t SymbolFileDWARF::GetPluginVersion() { return 1; }

@@ -87,7 +87,6 @@ int main(int argc, char **argv) {
     return 1;
 
   yaml::Input YIn(Buf.get()->getBuffer());
-
   int Res = convertYAML(YIn, Out->os());
   if (Res == 0)
     Out->keep();

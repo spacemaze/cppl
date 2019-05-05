@@ -66,7 +66,7 @@ define i64 @test6(i64 %x) nounwind {
 ; CHECK-LABEL: test6:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    movq %rdi, %rax
-; CHECK-NEXT:    andq $-65536, %rax # imm = 0xFFFF0000
+; CHECK-NEXT:    andl $-65536, %eax # imm = 0xFFFF0000
 ; CHECK-NEXT:    shlq $32, %rax
 ; CHECK-NEXT:    retq
   %and = shl i64 %x, 32
@@ -138,9 +138,8 @@ define i64 @test11(i64 %x) nounwind {
 define i32 @test12(i32 %x, i32* %y) nounwind {
 ; CHECK-LABEL: test12:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    movl %edi, %eax
-; CHECK-NEXT:    andl $127, %eax
-; CHECK-NEXT:    addl %eax, %eax
+; CHECK-NEXT:    addl %edi, %edi
+; CHECK-NEXT:    movzbl %dil, %eax
 ; CHECK-NEXT:    movl %eax, (%rsi)
 ; CHECK-NEXT:    retq
   %and = shl i32 %x, 1
@@ -152,9 +151,8 @@ define i32 @test12(i32 %x, i32* %y) nounwind {
 define i64 @test13(i64 %x, i64* %y) nounwind {
 ; CHECK-LABEL: test13:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    movq %rdi, %rax
-; CHECK-NEXT:    andl $127, %eax
-; CHECK-NEXT:    addq %rax, %rax
+; CHECK-NEXT:    addl %edi, %edi
+; CHECK-NEXT:    movzbl %dil, %eax
 ; CHECK-NEXT:    movq %rax, (%rsi)
 ; CHECK-NEXT:    retq
   %and = shl i64 %x, 1
@@ -166,9 +164,9 @@ define i64 @test13(i64 %x, i64* %y) nounwind {
 define i64 @test14(i64 %x, i64* %y) nounwind {
 ; CHECK-LABEL: test14:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    shlq $8, %rdi
-; CHECK-NEXT:    movabsq $1095216660480, %rax # imm = 0xFF00000000
-; CHECK-NEXT:    andq %rdi, %rax
+; CHECK-NEXT:    movq %rdi, %rax
+; CHECK-NEXT:    andl $-16777216, %eax # imm = 0xFF000000
+; CHECK-NEXT:    shlq $8, %rax
 ; CHECK-NEXT:    retq
   %and = shl i64 %x, 8
   %shl = and i64 %and, 1095216660480
@@ -178,9 +176,9 @@ define i64 @test14(i64 %x, i64* %y) nounwind {
 define i64 @test15(i64 %x, i64* %y) nounwind {
 ; CHECK-LABEL: test15:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    shlq $8, %rdi
-; CHECK-NEXT:    movabsq $1095216660480, %rax # imm = 0xFF00000000
+; CHECK-NEXT:    movl $4278190080, %eax # imm = 0xFF000000
 ; CHECK-NEXT:    orq %rdi, %rax
+; CHECK-NEXT:    shlq $8, %rax
 ; CHECK-NEXT:    retq
   %or = shl i64 %x, 8
   %shl = or i64 %or, 1095216660480
@@ -190,11 +188,66 @@ define i64 @test15(i64 %x, i64* %y) nounwind {
 define i64 @test16(i64 %x, i64* %y) nounwind {
 ; CHECK-LABEL: test16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    shlq $8, %rdi
-; CHECK-NEXT:    movabsq $1095216660480, %rax # imm = 0xFF00000000
+; CHECK-NEXT:    movl $4278190080, %eax # imm = 0xFF000000
 ; CHECK-NEXT:    xorq %rdi, %rax
+; CHECK-NEXT:    shlq $8, %rax
 ; CHECK-NEXT:    retq
   %xor = shl i64 %x, 8
   %shl = xor i64 %xor, 1095216660480
+  ret i64 %shl
+}
+
+define i32 @test17(i32 %x) nounwind {
+; CHECK-LABEL: test17:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    movzbl %dil, %eax
+; CHECK-NEXT:    shll $10, %eax
+; CHECK-NEXT:    retq
+  %and = shl i32 %x, 10
+  %shl = and i32 %and, 261120
+  ret i32 %shl
+}
+
+define i64 @test18(i64 %x) nounwind {
+; CHECK-LABEL: test18:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    movzbl %dil, %eax
+; CHECK-NEXT:    shlq $10, %rax
+; CHECK-NEXT:    retq
+  %and = shl i64 %x, 10
+  %shl = and i64 %and, 261120
+  ret i64 %shl
+}
+
+define i32 @test19(i32 %x) nounwind {
+; CHECK-LABEL: test19:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    movzwl %di, %eax
+; CHECK-NEXT:    shll $10, %eax
+; CHECK-NEXT:    retq
+  %and = shl i32 %x, 10
+  %shl = and i32 %and, 67107840
+  ret i32 %shl
+}
+
+define i64 @test20(i64 %x) nounwind {
+; CHECK-LABEL: test20:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    movzwl %di, %eax
+; CHECK-NEXT:    shlq $10, %rax
+; CHECK-NEXT:    retq
+  %and = shl i64 %x, 10
+  %shl = and i64 %and, 67107840
+  ret i64 %shl
+}
+
+define i64 @test21(i64 %x) nounwind {
+; CHECK-LABEL: test21:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    movl %edi, %eax
+; CHECK-NEXT:    shlq $10, %rax
+; CHECK-NEXT:    retq
+  %and = shl i64 %x, 10
+  %shl = and i64 %and, 4398046510080
   ret i64 %shl
 }

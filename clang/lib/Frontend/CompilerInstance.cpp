@@ -46,6 +46,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Signals.h"
+#include "llvm/Support/TimeProfiler.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
 #include <sys/stat.h>
@@ -584,12 +585,6 @@ void CompilerInstance::createCodeCompletionConsumer() {
     setCodeCompletionConsumer(nullptr);
     return;
   }
-
-  if (CompletionConsumer->isOutputBinary() &&
-      llvm::sys::ChangeStdoutToBinary()) {
-    getPreprocessor().getDiagnostics().Report(diag::err_fe_stdout_binary);
-    setCodeCompletionConsumer(nullptr);
-  }
 }
 
 void CompilerInstance::createFrontendTimer() {
@@ -1025,6 +1020,8 @@ compileModuleImpl(CompilerInstance &ImportingInstance, SourceLocation ImportLoc,
                       [](CompilerInstance &) {},
                   llvm::function_ref<void(CompilerInstance &)> PostBuildStep =
                       [](CompilerInstance &) {}) {
+  llvm::TimeTraceScope TimeScope("Module Compile", ModuleName);
+
   // Construct a compiler invocation for creating this module.
   auto Invocation =
       std::make_shared<CompilerInvocation>(ImportingInstance.getInvocation());
@@ -1701,6 +1698,7 @@ CompilerInstance::loadModule(SourceLocation ImportLoc,
       Timer.init("loading." + ModuleFileName, "Loading " + ModuleFileName,
                  *FrontendTimerGroup);
     llvm::TimeRegion TimeLoading(FrontendTimerGroup ? &Timer : nullptr);
+    llvm::TimeTraceScope TimeScope("Module Load", ModuleName);
 
     // Try to load the module file. If we are not trying to load from the
     // module cache, we don't know how to rebuild modules.

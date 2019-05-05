@@ -23,6 +23,7 @@
 #include "CodeRegion.h"
 #include "CodeRegionGenerator.h"
 #include "PipelinePrinter.h"
+#include "Views/BottleneckAnalysis.h"
 #include "Views/DispatchStatistics.h"
 #include "Views/InstructionInfoView.h"
 #include "Views/RegisterFileStatistics.h"
@@ -99,6 +100,17 @@ static cl::opt<unsigned>
                      cl::desc("Maximum number of physical registers which can "
                               "be used for register mappings"),
                      cl::cat(ToolOptions), cl::init(0));
+
+static cl::opt<unsigned>
+    MicroOpQueue("micro-op-queue-size", cl::Hidden,
+                 cl::desc("Number of entries in the micro-op queue"),
+                 cl::cat(ToolOptions), cl::init(0));
+
+static cl::opt<unsigned>
+    DecoderThroughput("decoder-throughput", cl::Hidden,
+                      cl::desc("Maximum throughput from the decoders "
+                               "(instructions per cycle)"),
+                      cl::cat(ToolOptions), cl::init(0));
 
 static cl::opt<bool>
     PrintRegisterFileStats("register-file-stats",
@@ -387,9 +399,9 @@ int main(int argc, char **argv) {
   // Create a context to control ownership of the pipeline hardware.
   mca::Context MCA(*MRI, *STI);
 
-  mca::PipelineOptions PO(DispatchWidth, RegisterFileSize, LoadQueueSize,
-                          StoreQueueSize, AssumeNoAlias,
-                          EnableBottleneckAnalysis);
+  mca::PipelineOptions PO(MicroOpQueue, DecoderThroughput, DispatchWidth,
+                          RegisterFileSize, LoadQueueSize, StoreQueueSize,
+                          AssumeNoAlias, EnableBottleneckAnalysis);
 
   // Number each region in the sequence.
   unsigned RegionIdx = 0;
@@ -466,7 +478,10 @@ int main(int argc, char **argv) {
 
     if (PrintSummaryView)
       Printer.addView(llvm::make_unique<mca::SummaryView>(
-          SM, Insts, DispatchWidth, EnableBottleneckAnalysis));
+          SM, Insts, DispatchWidth));
+
+    if (EnableBottleneckAnalysis)
+      Printer.addView(llvm::make_unique<mca::BottleneckAnalysis>(SM));
 
     if (PrintInstructionInfoView)
       Printer.addView(

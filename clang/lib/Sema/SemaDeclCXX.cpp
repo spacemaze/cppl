@@ -657,14 +657,13 @@ bool Sema::MergeCXXFunctionDecl(FunctionDecl *New, FunctionDecl *Old,
     Invalid = true;
   }
 
-  // FIXME: It's not clear what should happen if multiple declarations of a
-  // deduction guide have different explicitness. For now at least we simply
-  // reject any case where the explicitness changes.
-  auto *NewGuide = dyn_cast<CXXDeductionGuideDecl>(New);
-  if (NewGuide && NewGuide->isExplicitSpecified() !=
-                      cast<CXXDeductionGuideDecl>(Old)->isExplicitSpecified()) {
-    Diag(New->getLocation(), diag::err_deduction_guide_explicit_mismatch)
-      << NewGuide->isExplicitSpecified();
+  // C++17 [temp.deduct.guide]p3:
+  //   Two deduction guide declarations in the same translation unit
+  //   for the same class template shall not have equivalent
+  //   parameter-declaration-clauses.
+  if (isa<CXXDeductionGuideDecl>(New) &&
+      !New->isFunctionTemplateSpecialization()) {
+    Diag(New->getLocation(), diag::err_deduction_guide_redeclared);
     Diag(Old->getLocation(), diag::note_previous_declaration);
   }
 
@@ -5697,9 +5696,11 @@ void Sema::checkClassLevelDLLAttribute(CXXRecordDecl *Class) {
 
   TemplateSpecializationKind TSK = Class->getTemplateSpecializationKind();
 
-  // Ignore explicit dllexport on explicit class template instantiation declarations.
+  // Ignore explicit dllexport on explicit class template instantiation
+  // declarations, except in MinGW mode.
   if (ClassExported && !ClassAttr->isInherited() &&
-      TSK == TSK_ExplicitInstantiationDeclaration) {
+      TSK == TSK_ExplicitInstantiationDeclaration &&
+      !Context.getTargetInfo().getTriple().isWindowsGNUEnvironment()) {
     Class->dropAttr<DLLExportAttr>();
     return;
   }
@@ -5724,9 +5725,12 @@ void Sema::checkClassLevelDLLAttribute(CXXRecordDecl *Class) {
         continue;
 
       if (MD->isInlined()) {
-        // MinGW does not import or export inline methods.
+        // MinGW does not import or export inline methods. But do it for
+        // template instantiations.
         if (!Context.getTargetInfo().getCXXABI().isMicrosoft() &&
-            !Context.getTargetInfo().getTriple().isWindowsItaniumEnvironment())
+            !Context.getTargetInfo().getTriple().isWindowsItaniumEnvironment() &&
+            TSK != TSK_ExplicitInstantiationDeclaration &&
+            TSK != TSK_ExplicitInstantiationDefinition)
           continue;
 
         // MSVC versions before 2015 don't export the move assignment operators
@@ -5952,8 +5956,11 @@ static bool canPassInRegisters(Sema &S, CXXRecordDecl *D,
 
     // Note: This permits small classes with nontrivial destructors to be
     // passed in registers, which is non-conforming.
+    bool isAArch64 = S.Context.getTargetInfo().getTriple().isAArch64();
+    uint64_t TypeSize = isAArch64 ? 128 : 64;
+
     if (CopyCtorIsTrivial &&
-        S.getASTContext().getTypeSize(D->getTypeForDecl()) <= 64)
+        S.getASTContext().getTypeSize(D->getTypeForDecl()) <= TypeSize)
       return true;
     return false;
   }
@@ -8632,12 +8639,12 @@ void Sema::CheckConversionDeclarator(Declarator &D, QualType &R,
     R = Context.getFunctionType(ConvType, None, Proto->getExtProtoInfo());
 
   // C++0x explicit conversion operators.
-  if (DS.isExplicitSpecified())
+  if (DS.hasExplicitSpecifier() && !getLangOpts().CPlusPlus2a)
     Diag(DS.getExplicitSpecLoc(),
          getLangOpts().CPlusPlus11
              ? diag::warn_cxx98_compat_explicit_conversion_functions
              : diag::ext_explicit_conversion_functions)
-        << SourceRange(DS.getExplicitSpecLoc());
+        << SourceRange(DS.getExplicitSpecRange());
 }
 
 /// ActOnConversionDeclarator - Called by ActOnDeclarator to complete
@@ -9147,6 +9154,9 @@ void Sema::ActOnFinishNamespaceDef(Decl *Dcl, SourceLocation RBrace) {
   PopDeclContext();
   if (Namespc->hasAttr<VisibilityAttr>())
     PopPragmaVisibility(true, RBrace);
+  // If this namespace contains an export-declaration, export it now.
+  if (DeferredExportedNamespaces.erase(Namespc))
+    Dcl->setModuleOwnershipKind(Decl::ModuleOwnershipKind::VisibleWhenImported);
 }
 
 CXXRecordDecl *Sema::getStdBadAlloc() const {
@@ -10965,6 +10975,28 @@ struct ComputingExceptionSpec {
 };
 }
 
+bool Sema::tryResolveExplicitSpecifier(ExplicitSpecifier &ExplicitSpec) {
+  llvm::APSInt Result;
+  ExprResult Converted = CheckConvertedConstantExpression(
+      ExplicitSpec.getExpr(), Context.BoolTy, Result, CCEK_ExplicitBool);
+  ExplicitSpec.setExpr(Converted.get());
+  if (Converted.isUsable() && !Converted.get()->isValueDependent()) {
+    ExplicitSpec.setKind(Result.getBoolValue()
+                             ? ExplicitSpecKind::ResolvedTrue
+                             : ExplicitSpecKind::ResolvedFalse);
+    return true;
+  }
+  ExplicitSpec.setKind(ExplicitSpecKind::Unresolved);
+  return false;
+}
+
+ExplicitSpecifier Sema::ActOnExplicitBoolSpecifier(Expr *ExplicitExpr) {
+  ExplicitSpecifier ES(ExplicitExpr, ExplicitSpecKind::Unresolved);
+  if (!ExplicitExpr->isTypeDependent())
+    tryResolveExplicitSpecifier(ES);
+  return ES;
+}
+
 static Sema::ImplicitExceptionSpecification
 ComputeDefaultedSpecialMemberExceptionSpec(
     Sema &S, SourceLocation Loc, CXXMethodDecl *MD, Sema::CXXSpecialMember CSM,
@@ -11113,9 +11145,9 @@ CXXConstructorDecl *Sema::DeclareImplicitDefaultConstructor(
     = Context.DeclarationNames.getCXXConstructorName(ClassType);
   DeclarationNameInfo NameInfo(Name, ClassLoc);
   CXXConstructorDecl *DefaultCon = CXXConstructorDecl::Create(
-      Context, ClassDecl, ClassLoc, NameInfo, /*Type*/QualType(),
-      /*TInfo=*/nullptr, /*isExplicit=*/false, /*isInline=*/true,
-      /*isImplicitlyDeclared=*/true, Constexpr);
+      Context, ClassDecl, ClassLoc, NameInfo, /*Type*/ QualType(),
+      /*TInfo=*/nullptr, ExplicitSpecifier(),
+      /*isInline=*/true, /*isImplicitlyDeclared=*/true, Constexpr);
   DefaultCon->setAccess(AS_public);
   DefaultCon->setDefaulted();
 
@@ -11234,7 +11266,7 @@ Sema::findInheritingConstructor(SourceLocation Loc,
 
   CXXConstructorDecl *DerivedCtor = CXXConstructorDecl::Create(
       Context, Derived, UsingLoc, NameInfo, TInfo->getType(), TInfo,
-      BaseCtor->isExplicit(), /*Inline=*/true,
+      BaseCtor->getExplicitSpecifier(), /*Inline=*/true,
       /*ImplicitlyDeclared=*/true, Constexpr,
       InheritedConstructor(Shadow, BaseCtor));
   if (Shadow->isInvalidDecl())
@@ -12687,8 +12719,9 @@ CXXConstructorDecl *Sema::DeclareImplicitCopyConstructor(
   //   member of its class.
   CXXConstructorDecl *CopyConstructor = CXXConstructorDecl::Create(
       Context, ClassDecl, ClassLoc, NameInfo, QualType(), /*TInfo=*/nullptr,
-      /*isExplicit=*/false, /*isInline=*/true, /*isImplicitlyDeclared=*/true,
-      Constexpr);
+      ExplicitSpecifier(),
+      /*isInline=*/true,
+      /*isImplicitlyDeclared=*/true, Constexpr);
   CopyConstructor->setAccess(AS_public);
   CopyConstructor->setDefaulted();
 
@@ -12817,8 +12850,9 @@ CXXConstructorDecl *Sema::DeclareImplicitMoveConstructor(
   //   member of its class.
   CXXConstructorDecl *MoveConstructor = CXXConstructorDecl::Create(
       Context, ClassDecl, ClassLoc, NameInfo, QualType(), /*TInfo=*/nullptr,
-      /*isExplicit=*/false, /*isInline=*/true, /*isImplicitlyDeclared=*/true,
-      Constexpr);
+      ExplicitSpecifier(),
+      /*isInline=*/true,
+      /*isImplicitlyDeclared=*/true, Constexpr);
   MoveConstructor->setAccess(AS_public);
   MoveConstructor->setDefaulted();
 

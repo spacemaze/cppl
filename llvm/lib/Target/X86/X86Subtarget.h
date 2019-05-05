@@ -297,6 +297,9 @@ protected:
   /// True if the processor supports macrofusion.
   bool HasMacroFusion = false;
 
+  /// True if the processor supports branch fusion.
+  bool HasBranchFusion = false;
+
   /// True if the processor has enhanced REP MOVSB/STOSB.
   bool HasERMSB = false;
 
@@ -389,6 +392,9 @@ protected:
 
   /// Try harder to combine to horizontal vector ops if they are fast.
   bool HasFastHorizontalOps = false;
+
+  /// Prefer a left/right vector logical shifts pair over a shift+and pair.
+  bool HasFastVectorShiftMasks = false;
 
   /// Use a retpoline thunk rather than indirect calls to block speculative
   /// execution.
@@ -641,7 +647,9 @@ public:
   bool hasFastSHLDRotate() const { return HasFastSHLDRotate; }
   bool hasFastBEXTR() const { return HasFastBEXTR; }
   bool hasFastHorizontalOps() const { return HasFastHorizontalOps; }
+  bool hasFastVectorShiftMasks() const { return HasFastVectorShiftMasks; }
   bool hasMacroFusion() const { return HasMacroFusion; }
+  bool hasBranchFusion() const { return HasBranchFusion; }
   bool hasERMSB() const { return HasERMSB; }
   bool hasSlowDivide32() const { return HasSlowDivide32; }
   bool hasSlowDivide64() const { return HasSlowDivide64; }
@@ -838,6 +846,9 @@ public:
   bool enableMachineScheduler() const override { return true; }
 
   bool enableEarlyIfConversion() const override;
+
+  void getPostRAMutations(std::vector<std::unique_ptr<ScheduleDAGMutation>>
+                              &Mutations) const override;
 
   AntiDepBreakMode getAntiDepBreakMode() const override {
     return TargetSubtargetInfo::ANTIDEP_CRITICAL;

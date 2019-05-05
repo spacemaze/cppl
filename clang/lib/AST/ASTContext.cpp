@@ -99,19 +99,12 @@ enum FloatingRank {
 };
 
 RawComment *ASTContext::getRawCommentForDeclNoCache(const Decl *D) const {
-  if (!CommentsLoaded && ExternalSource) {
-    ExternalSource->ReadComments();
-
-#ifndef NDEBUG
-    ArrayRef<RawComment *> RawComments = Comments.getComments();
-    assert(std::is_sorted(RawComments.begin(), RawComments.end(),
-                          BeforeThanCompare<RawComment>(SourceMgr)));
-#endif
-
-    CommentsLoaded = true;
-  }
-
   assert(D);
+
+  // If we already tried to load comments but there are none,
+  // we won't find anything.
+  if (CommentsLoaded && Comments.getComments().empty())
+    return nullptr;
 
   // User can not attach documentation to implicit declarations.
   if (D->isImplicit())
@@ -162,12 +155,6 @@ RawComment *ASTContext::getRawCommentForDeclNoCache(const Decl *D) const {
       isa<TemplateTemplateParmDecl>(D))
     return nullptr;
 
-  ArrayRef<RawComment *> RawComments = Comments.getComments();
-
-  // If there are no comments anywhere, we won't find anything.
-  if (RawComments.empty())
-    return nullptr;
-
   // Find declaration location.
   // For Objective-C declarations we generally don't expect to have multiple
   // declarators, thus use declaration starting location as the "declaration
@@ -204,6 +191,23 @@ RawComment *ASTContext::getRawCommentForDeclNoCache(const Decl *D) const {
   // If the declaration doesn't map directly to a location in a file, we
   // can't find the comment.
   if (DeclLoc.isInvalid() || !DeclLoc.isFileID())
+    return nullptr;
+
+  if (!CommentsLoaded && ExternalSource) {
+    ExternalSource->ReadComments();
+
+#ifndef NDEBUG
+    ArrayRef<RawComment *> RawComments = Comments.getComments();
+    assert(std::is_sorted(RawComments.begin(), RawComments.end(),
+                          BeforeThanCompare<RawComment>(SourceMgr)));
+#endif
+
+    CommentsLoaded = true;
+  }
+
+  ArrayRef<RawComment *> RawComments = Comments.getComments();
+  // If there are no comments anywhere, we won't find anything.
+  if (RawComments.empty())
     return nullptr;
 
   // Find the comment that occurs just after this declaration.
@@ -1377,24 +1381,6 @@ ASTContext::setTemplateOrSpecializationInfo(VarDecl *Inst,
   TemplateOrInstantiation[Inst] = TSI;
 }
 
-FunctionDecl *ASTContext::getClassScopeSpecializationPattern(
-                                                     const FunctionDecl *FD){
-  assert(FD && "Specialization is 0");
-  llvm::DenseMap<const FunctionDecl*, FunctionDecl *>::const_iterator Pos
-    = ClassScopeSpecializationPattern.find(FD);
-  if (Pos == ClassScopeSpecializationPattern.end())
-    return nullptr;
-
-  return Pos->second;
-}
-
-void ASTContext::setClassScopeSpecializationPattern(FunctionDecl *FD,
-                                        FunctionDecl *Pattern) {
-  assert(FD && "Specialization is 0");
-  assert(Pattern && "Class scope specialization pattern is 0");
-  ClassScopeSpecializationPattern[FD] = Pattern;
-}
-
 NamedDecl *
 ASTContext::getInstantiatedFromUsingDecl(NamedDecl *UUD) {
   auto Pos = InstantiatedFromUsingDecl.find(UUD);
@@ -1596,8 +1582,10 @@ CharUnits ASTContext::getDeclAlign(const Decl *D, bool ForAlignof) const {
       if (BaseT.getQualifiers().hasUnaligned())
         Align = Target->getCharWidth();
       if (const auto *VD = dyn_cast<VarDecl>(D)) {
-        if (VD->hasGlobalStorage() && !ForAlignof)
-          Align = std::max(Align, getTargetInfo().getMinGlobalAlign());
+        if (VD->hasGlobalStorage() && !ForAlignof) {
+          uint64_t TypeSize = getTypeSize(T.getTypePtr());
+          Align = std::max(Align, getTargetInfo().getMinGlobalAlign(TypeSize));
+        }
       }
     }
 
@@ -2235,7 +2223,8 @@ unsigned ASTContext::getTargetDefaultAlignForAttributeAligned() const {
 /// getAlignOfGlobalVar - Return the alignment in bits that should be given
 /// to a global variable of the specified type.
 unsigned ASTContext::getAlignOfGlobalVar(QualType T) const {
-  return std::max(getTypeAlign(T), getTargetInfo().getMinGlobalAlign());
+  uint64_t TypeSize = getTypeSize(T.getTypePtr());
+  return std::max(getTypeAlign(T), getTargetInfo().getMinGlobalAlign(TypeSize));
 }
 
 /// getAlignOfGlobalVarInChars - Return the alignment in characters that
@@ -2576,7 +2565,7 @@ ASTContext::getBlockVarCopyInit(const VarDecl*VD) const {
   return {nullptr, false};
 }
 
-/// Set the copy inialization expression of a block var decl.
+/// Set the copy initialization expression of a block var decl.
 void ASTContext::setBlockVarCopyInit(const VarDecl*VD, Expr *CopyExpr,
                                      bool CanThrow) {
   assert(VD && CopyExpr && "Passed null params");
@@ -10026,8 +10015,7 @@ size_t ASTContext::getSideTableAllocatedMemory() const {
          llvm::capacity_in_bytes(InstantiatedFromUnnamedFieldDecl) +
          llvm::capacity_in_bytes(OverriddenMethods) +
          llvm::capacity_in_bytes(Types) +
-         llvm::capacity_in_bytes(VariableArrayTypes) +
-         llvm::capacity_in_bytes(ClassScopeSpecializationPattern);
+         llvm::capacity_in_bytes(VariableArrayTypes);
 }
 
 /// getIntTypeForBitwidth -

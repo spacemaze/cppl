@@ -11,6 +11,7 @@
 
 #include "ClangdServer.h"
 #include "DraftStore.h"
+#include "Features.inc"
 #include "FindSymbols.h"
 #include "GlobalCompilationDatabase.h"
 #include "Path.h"
@@ -40,6 +41,7 @@ public:
   ClangdLSPServer(Transport &Transp, const FileSystemProvider &FSProvider,
                   const clangd::CodeCompleteOptions &CCOpts,
                   llvm::Optional<Path> CompileCommandsDir, bool UseDirBasedCDB,
+                  llvm::Optional<OffsetEncoding> ForcedOffsetEncoding,
                   const ClangdServer::Options &Opts);
   ~ClangdLSPServer();
 
@@ -165,6 +167,7 @@ private:
   // It is destroyed before run() returns, to ensure worker threads exit.
   ClangdServer::Options ClangdServerOpts;
   llvm::Optional<ClangdServer> Server;
+  llvm::Optional<OffsetEncoding> NegotiatedOffsetEncoding;
 };
 } // namespace clangd
 } // namespace clang

@@ -34,7 +34,6 @@
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/BinaryFormat/ELF.h"
-#include "llvm/CodeGen/AsmPrinterHandler.h"
 #include "llvm/CodeGen/GCMetadata.h"
 #include "llvm/CodeGen/GCMetadataPrinter.h"
 #include "llvm/CodeGen/GCStrategy.h"
@@ -259,6 +258,9 @@ bool AsmPrinter::doInitialization(Module &M) {
   const_cast<TargetLoweringObjectFile&>(getObjFileLowering())
     .Initialize(OutContext, TM);
 
+  const_cast<TargetLoweringObjectFile &>(getObjFileLowering())
+      .getModuleMetadata(M);
+
   OutStreamer->InitSections(false);
 
   // Emit the version-min deployment target directive if needed.
@@ -307,16 +309,17 @@ bool AsmPrinter::doInitialization(Module &M) {
   if (MAI->doesSupportDebugInformation()) {
     bool EmitCodeView = MMI->getModule()->getCodeViewFlag();
     if (EmitCodeView && TM.getTargetTriple().isOSWindows()) {
-      Handlers.push_back(HandlerInfo(new CodeViewDebug(this),
-                                     DbgTimerName, DbgTimerDescription,
-                                     CodeViewLineTablesGroupName,
-                                     CodeViewLineTablesGroupDescription));
+      Handlers.emplace_back(llvm::make_unique<CodeViewDebug>(this),
+                            DbgTimerName, DbgTimerDescription,
+                            CodeViewLineTablesGroupName,
+                            CodeViewLineTablesGroupDescription);
     }
     if (!EmitCodeView || MMI->getModule()->getDwarfVersion()) {
       DD = new DwarfDebug(this, &M);
       DD->beginModule();
-      Handlers.push_back(HandlerInfo(DD, DbgTimerName, DbgTimerDescription,
-                                     DWARFGroupName, DWARFGroupDescription));
+      Handlers.emplace_back(std::unique_ptr<DwarfDebug>(DD), DbgTimerName,
+                            DbgTimerDescription, DWARFGroupName,
+                            DWARFGroupDescription);
     }
   }
 
@@ -369,14 +372,15 @@ bool AsmPrinter::doInitialization(Module &M) {
     break;
   }
   if (ES)
-    Handlers.push_back(HandlerInfo(ES, EHTimerName, EHTimerDescription,
-                                   DWARFGroupName, DWARFGroupDescription));
+    Handlers.emplace_back(std::unique_ptr<EHStreamer>(ES), EHTimerName,
+                          EHTimerDescription, DWARFGroupName,
+                          DWARFGroupDescription);
 
   if (mdconst::extract_or_null<ConstantInt>(
           MMI->getModule()->getModuleFlag("cfguardtable")))
-    Handlers.push_back(HandlerInfo(new WinCFGuard(this), CFGuardName,
-                                   CFGuardDescription, DWARFGroupName,
-                                   DWARFGroupDescription));
+    Handlers.emplace_back(llvm::make_unique<WinCFGuard>(this), CFGuardName,
+                          CFGuardDescription, DWARFGroupName,
+                          DWARFGroupDescription);
 
   return false;
 }
@@ -1231,7 +1235,7 @@ static bool isGOTEquivalentCandidate(const GlobalVariable *GV,
   // GlobalVariable or Function, i.e., as GlobalValue.
   if (!GV->hasGlobalUnnamedAddr() || !GV->hasInitializer() ||
       !GV->isConstant() || !GV->isDiscardableIfUnused() ||
-      !dyn_cast<GlobalValue>(GV->getOperand(0)))
+      !isa<GlobalValue>(GV->getOperand(0)))
     return false;
 
   // To be a got equivalent, at least one of its users need to be a constant
@@ -1359,6 +1363,29 @@ void AsmPrinter::emitRemarksSection(Module &M) {
   support::endian::write64le(Version.data(), remarks::Version);
   OutStreamer->EmitBinaryData(StringRef(Version.data(), Version.size()));
 
+  // Emit the string table in the section.
+  // Note: we need to use the streamer here to emit it in the section. We can't
+  // just use the serialize function with a raw_ostream because of the way
+  // MCStreamers work.
+  const remarks::StringTable &StrTab = RS->getStringTable();
+  std::vector<StringRef> StrTabStrings = StrTab.serialize();
+  uint64_t StrTabSize = StrTab.SerializedSize;
+  // Emit the total size of the string table (the size itself excluded):
+  // little-endian uint64_t.
+  // The total size is located after the version number.
+  std::array<char, 8> StrTabSizeBuf;
+  support::endian::write64le(StrTabSizeBuf.data(), StrTabSize);
+  OutStreamer->EmitBinaryData(
+      StringRef(StrTabSizeBuf.data(), StrTabSizeBuf.size()));
+  // Emit a list of null-terminated strings.
+  // Note: the order is important here: the ID used in the remarks corresponds
+  // to the position of the string in the section.
+  for (StringRef Str : StrTabStrings) {
+    OutStreamer->EmitBytes(Str);
+    // Explicitly emit a '\0'.
+    OutStreamer->EmitIntValue(/*Value=*/0, /*Size=*/1);
+  }
+
   // Emit the null-terminated absolute path to the remark file.
   // The path is located at the offset 0x4 in the section.
   StringRef FilenameRef = RS->getFilename();
@@ -1461,7 +1488,6 @@ bool AsmPrinter::doFinalization(Module &M) {
     NamedRegionTimer T(HI.TimerName, HI.TimerDescription, HI.TimerGroupName,
                        HI.TimerGroupDescription, TimePassesIsEnabled);
     HI.Handler->endModule();
-    delete HI.Handler;
   }
   Handlers.clear();
   DD = nullptr;
@@ -1976,9 +2002,9 @@ void AsmPrinter::EmitXXStructorList(const DataLayout &DL, const Constant *List,
 
   // Emit the function pointers in the target-specific order
   unsigned Align = Log2_32(DL.getPointerPrefAlignment());
-  std::stable_sort(Structors.begin(), Structors.end(),
-                   [](const Structor &L,
-                      const Structor &R) { return L.Priority < R.Priority; });
+  llvm::stable_sort(Structors, [](const Structor &L, const Structor &R) {
+    return L.Priority < R.Priority;
+  });
   for (Structor &S : Structors) {
     const TargetLoweringObjectFile &Obj = getObjFileLowering();
     const MCSymbol *KeySym = nullptr;
@@ -2865,7 +2891,7 @@ void AsmPrinter::setupCodePaddingContext(const MachineBasicBlock &MBB,
                                          MCCodePaddingContext &Context) const {
   assert(MF != nullptr && "Machine function must be valid");
   Context.IsPaddingActive = !MF->hasInlineAsm() &&
-                            !MF->getFunction().optForSize() &&
+                            !MF->getFunction().hasOptSize() &&
                             TM.getOptLevel() != CodeGenOpt::None;
   Context.IsBasicBlockReachableViaFallthrough =
       std::find(MBB.pred_begin(), MBB.pred_end(), MBB.getPrevNode()) !=
@@ -2925,13 +2951,16 @@ void AsmPrinter::EmitBasicBlockStart(const MachineBasicBlock &MBB) const {
 
   // Print the main label for the block.
   if (MBB.pred_empty() ||
-      (isBlockOnlyReachableByFallthrough(&MBB) && !MBB.isEHFuncletEntry())) {
+      (isBlockOnlyReachableByFallthrough(&MBB) && !MBB.isEHFuncletEntry() &&
+       !MBB.hasLabelMustBeEmitted())) {
     if (isVerbose()) {
       // NOTE: Want this comment at start of line, don't emit with AddComment.
       OutStreamer->emitRawComment(" %bb." + Twine(MBB.getNumber()) + ":",
                                   false);
     }
   } else {
+    if (isVerbose() && MBB.hasLabelMustBeEmitted())
+      OutStreamer->AddComment("Label of block must be emitted");
     OutStreamer->EmitLabel(MBB.getSymbol());
   }
 }

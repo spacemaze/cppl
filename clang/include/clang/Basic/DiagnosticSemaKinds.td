@@ -83,11 +83,11 @@ def err_typecheck_converted_constant_expression_indirect : Error<
   "bind reference to a temporary">;
 def err_expr_not_cce : Error<
   "%select{case value|enumerator value|non-type template argument|"
-  "array size|constexpr if condition}0 "
+  "array size|constexpr if condition|explicit specifier argument}0 "
   "is not a constant expression">;
 def ext_cce_narrowing : ExtWarn<
   "%select{case value|enumerator value|non-type template argument|"
-  "array size|constexpr if condition}0 "
+  "array size|constexpr if condition|explicit specifier argument}0 "
   "%select{cannot be narrowed from type %2 to %3|"
   "evaluates to %2, which cannot be narrowed to type %3}1">,
   InGroup<CXX11Narrowing>, DefaultError, SFINAEFailure;
@@ -1911,8 +1911,8 @@ def note_var_declared_here : Note<"variable %0 is declared here">;
 def note_uninit_var_use : Note<
   "%select{uninitialized use occurs|variable is captured by block}0 here">;
 def warn_uninit_byref_blockvar_captured_by_block : Warning<
-  "block pointer variable %0 is uninitialized when captured by block">,
-  InGroup<Uninitialized>, DefaultIgnore;
+  "block pointer variable %0 is %select{uninitialized|null}1 when captured by "
+  "block">, InGroup<Uninitialized>, DefaultIgnore;
 def note_block_var_fixit_add_initialization : Note<
   "did you mean to use __block %0?">;
 def note_in_omitted_aggregate_initializer : Note<
@@ -2115,9 +2115,8 @@ def err_deduction_guide_wrong_scope : Error<
   "deduction guide must be declared in the same scope as template %q0">;
 def err_deduction_guide_defines_function : Error<
   "deduction guide cannot have a function definition">;
-def err_deduction_guide_explicit_mismatch : Error<
-  "deduction guide is %select{not |}0declared 'explicit' but "
-  "previous declaration was%select{ not|}0">;
+def err_deduction_guide_redeclared : Error<
+  "redeclaration of deduction guide">;
 def err_deduction_guide_specialized : Error<"deduction guide cannot be "
   "%select{explicitly instantiated|explicitly specialized}0">;
 def err_deduction_guide_template_not_deducible : Error<
@@ -2863,6 +2862,9 @@ def warn_attribute_dllimport_static_field_definition : Warning<
 def warn_attribute_dllexport_explicit_instantiation_decl : Warning<
   "explicit instantiation declaration should not be 'dllexport'">,
   InGroup<DiagGroup<"dllexport-explicit-instantiation-decl">>;
+def warn_attribute_dllexport_explicit_instantiation_def : Warning<
+  "'dllexport' attribute ignored on explicit instantiation definition">,
+  InGroup<IgnoredAttributes>;
 def warn_invalid_initializer_from_system_header : Warning<
   "invalid constructor form class in system header, should not be explicit">,
   InGroup<DiagGroup<"invalid-initializer-from-system-header">>;
@@ -3637,6 +3639,10 @@ def note_ovl_candidate : Note<
     "| has different qualifiers (expected %5 but found %6)"
     "| has different exception specification}4">;
 
+def note_ovl_candidate_explicit_forbidden : Note<
+    "candidate %0 ignored: cannot be explicit">;
+def note_explicit_bool_resolved_to_true : Note<
+    "explicit(bool) specifier resolved to true">;
 def note_ovl_candidate_inherited_constructor : Note<
     "constructor from base class %0 inherited here">;
 def note_ovl_candidate_inherited_constructor_slice : Note<
@@ -4384,6 +4390,8 @@ def err_explicit_instantiation_of_typedef : Error<
   "explicit instantiation of typedef %0">;
 def err_explicit_instantiation_storage_class : Error<
   "explicit instantiation cannot have a storage class">;
+def err_explicit_instantiation_internal_linkage : Error<
+  "explicit instantiation declaration of %0 with internal linkage">;
 def err_explicit_instantiation_not_known : Error<
   "explicit instantiation of %0 does not refer to a function template, "
   "variable template, member function, member class, or static data member">;
@@ -9132,6 +9140,10 @@ def err_omp_requires_clause_redeclaration : Error <
   "Only one %0 clause can appear on a requires directive in a single translation unit">;
 def note_omp_requires_previous_clause : Note <
   "%0 clause previously used here">;
+def err_omp_target_before_requires : Error <
+  "target region encountered before requires directive with '%0' clause">;
+def note_omp_requires_encountered_target : Note <
+  "target previously encountered here">;
 def err_omp_invalid_scope : Error <
   "'#pragma omp %0' directive must appear only in file scope">;
 def note_omp_invalid_length_on_this_ptr_mapping : Note <
@@ -9158,6 +9170,20 @@ def note_omp_previous_allocator : Note<
 def err_expected_allocator_clause : Error<"expected an 'allocator' clause "
   "inside of the target region; provide an 'allocator' clause or use 'requires'"
   " directive with the 'dynamic_allocators' clause">;
+def err_expected_allocator_expression : Error<"expected an allocator expression "
+  "inside of the target region; provide an allocator expression or use 'requires'"
+  " directive with the 'dynamic_allocators' clause">;
+def warn_omp_allocate_thread_on_task_target_directive : Warning<
+  "allocator with the 'thread' trait access has unspecified behavior on '%0' directive">,
+  InGroup<OpenMPClauses>;
+def err_omp_expected_private_copy_for_allocate : Error<
+  "the referenced item is not found in any private clause on the same directive">;
+def err_omp_stmt_depends_on_loop_counter : Error<
+  "the loop %select{initializer|condition}0 expression depends on the current loop control variable">;
+def err_omp_invariant_or_linear_dependency : Error<
+  "expected loop invariant expression or '<invariant1> * %0 + <invariant2>' kind of expression">;
+def err_omp_wrong_dependency_iterator_type : Error<
+  "expected an integer or a pointer type of the outer loop counter '%0' for non-rectangular nests">;
 } // end of OpenMP category
 
 let CategoryName = "Related Result Type Issue" in {
@@ -9191,7 +9217,7 @@ let CategoryName = "Modules Issue" in {
 def err_module_decl_in_module_map_module : Error<
   "'module' declaration found while building module from module map">;
 def err_module_decl_in_header_module : Error<
-  "'module' declaration found while building header module">;
+  "'module' declaration found while building header unit">;
 def err_module_interface_implementation_mismatch : Error<
   "missing 'export' specifier in module declaration while "
   "building module interface">;
@@ -9209,6 +9235,9 @@ def err_module_redeclaration : Error<
 def note_prev_module_declaration : Note<"previous module declaration is here">;
 def err_module_declaration_missing : Error<
   "missing 'export module' declaration in module interface unit">;
+def err_module_declaration_missing_after_global_module_introducer : Error<
+  "missing 'module' declaration at end of global module fragment "
+  "introduced here">;
 def err_module_private_specialization : Error<
   "%select{template|partial|member}0 specialization cannot be "
   "declared __module_private__">;
@@ -9227,6 +9256,12 @@ def err_module_unimported_use_header : Error<
   "%select{declaration|definition|default argument|"
   "explicit specialization|partial specialization}0 of %1 must be imported "
   "from module '%2' before it is required">;
+def err_module_unimported_use_global_module_fragment : Error<
+  "%select{missing '#include'|missing '#include %3'}2; "
+  "%select{||default argument of |explicit specialization of |"
+  "partial specialization of }0%1 must be "
+  "%select{declared|defined|defined|declared|declared}0 "
+  "before it is used">;
 def err_module_unimported_use_multiple : Error<
   "%select{declaration|definition|default argument|"
   "explicit specialization|partial specialization}0 of %1 must be imported "
@@ -9246,12 +9281,48 @@ def err_module_self_import : Error<
 def err_module_import_in_implementation : Error<
   "@import of module '%0' in implementation of '%1'; use #import">;
 
-// C++ Modules TS
+// C++ Modules
+def err_module_decl_not_at_start : Error<
+  "module declaration must occur at the start of the translation unit">;
+def note_global_module_introducer_missing : Note<
+  "add 'module;' to the start of the file to introduce a "
+  "global module fragment">;
+def err_export_within_anonymous_namespace : Error<
+  "export declaration appears within anonymous namespace">;
+def note_anonymous_namespace : Note<"anonymous namespace begins here">;
+def ext_export_no_name_block : ExtWarn<
+  "ISO C++20 does not permit %select{an empty|a static_assert}0 declaration "
+  "to appear in an export block">, InGroup<ExportUnnamed>;
+def ext_export_no_names : ExtWarn<
+  "ISO C++20 does not permit a declaration that does not introduce any names "
+  "to be exported">, InGroup<ExportUnnamed>;
+def note_export : Note<"export block begins here">;
+def err_export_no_name : Error<
+  "%select{empty|static_assert|asm}0 declaration cannot be exported">;
+def ext_export_using_directive : ExtWarn<
+  "ISO C++20 does not permit using directive to be exported">,
+  InGroup<DiagGroup<"export-using-directive">>;
 def err_export_within_export : Error<
   "export declaration appears within another export declaration">;
+def err_export_internal : Error<
+  "declaration of %0 with internal linkage cannot be exported">;
+def err_export_using_internal : Error<
+  "using declaration referring to %0 with internal linkage cannot be exported">;
 def err_export_not_in_module_interface : Error<
-  "export declaration can only be used within a module interface unit after "
-  "the module declaration">;
+  "export declaration can only be used within a module interface unit"
+  "%select{ after the module declaration|}0">;
+def err_export_in_private_module_fragment : Error<
+  "export declaration cannot be used in a private module fragment">;
+def note_private_module_fragment : Note<
+  "private module fragment begins here">;
+def err_private_module_fragment_not_module : Error<
+  "private module fragment declaration with no preceding module declaration">;
+def err_private_module_fragment_redefined : Error<
+  "private module fragment redefined">;
+def err_private_module_fragment_not_module_interface : Error<
+  "private module fragment in module implementation unit">;
+def note_not_module_interface_add_export : Note<
+  "add 'export' here if this is intended to be a module interface unit">;
 
 def ext_equivalent_internal_linkage_decl_in_modules : ExtWarn<
   "ambiguous use of internal linkage declaration %0 defined in multiple modules">,
@@ -9552,6 +9623,18 @@ def err_std_compare_type_not_supported : Error<
    "member '%2' is missing|"
    "the type is not trivially copyable|"
    "the type does not have the expected form}1">;
+
+// Memory Tagging Extensions (MTE) diagnostics
+def err_memtag_arg_null_or_pointer : Error<
+  "%0 argument of MTE builtin function must be a null or a pointer (%1 invalid)">;
+def err_memtag_any2arg_pointer : Error<
+  "at least one argument of MTE builtin function must be a pointer (%0, %1 invalid)">;
+def err_memtag_arg_must_be_pointer : Error<
+  "%0 argument of MTE builtin function must be a pointer (%1 invalid)">;
+def err_memtag_arg_must_be_integer : Error<
+  "%0 argument of MTE builtin function must be an integer type (%1 invalid)">;
+def err_memtag_arg_must_be_unsigned : Error<
+  "%0 argument  of MTE builtin function must be an unsigned integer type (%1 invalid)">;
 
 def warn_dereference_of_noderef_type : Warning<
   "dereferencing %0; was declared with a 'noderef' type">, InGroup<NoDeref>;

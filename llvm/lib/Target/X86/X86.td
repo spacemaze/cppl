@@ -344,6 +344,12 @@ def FeatureERMSB
           "ermsb", "HasERMSB", "true",
           "REP MOVS/STOS are fast">;
 
+// Bulldozer and newer processors can merge CMP/TEST (but not other
+// instructions) with conditional branches.
+def FeatureBranchFusion
+    : SubtargetFeature<"branchfusion", "HasBranchFusion", "true",
+                 "CMP/TEST can be fused with conditional branches">;
+
 // Sandy Bridge and newer processors have many instructions that can be
 // fused with conditional branches and pass through the CPU as a single
 // operation.
@@ -417,6 +423,11 @@ def FeatureFastHorizontalOps
         "fast-hops", "HasFastHorizontalOps", "true",
         "Prefer horizontal vector math instructions (haddp, phsub, etc.) over "
         "normal vector instructions with shuffles", [FeatureSSE3]>;
+
+def FeatureFastVectorShiftMasks
+    : SubtargetFeature<
+        "fast-vector-shift-masks", "HasFastVectorShiftMasks", "true",
+        "Prefer a left/right vector logical shift pair over a shift+and pair">;
 
 // Merge branches using three-way conditional code.
 def FeatureMergeToThreeWayBranch : SubtargetFeature<"merge-to-threeway-branch",
@@ -769,7 +780,8 @@ def ProcessorFeatures {
                                                       FeaturePOPCNT,
                                                       FeatureSlowSHLD,
                                                       FeatureLAHFSAHF,
-                                                      FeatureFast15ByteNOP];
+                                                      FeatureFast15ByteNOP,
+                                                      FeatureFastVectorShiftMasks];
   list<SubtargetFeature> BtVer1Features = BtVer1InheritableFeatures;
 
   // Jaguar
@@ -810,7 +822,7 @@ def ProcessorFeatures {
                                                       FeatureSlowSHLD,
                                                       FeatureLAHFSAHF,
                                                       FeatureFast11ByteNOP,
-                                                      FeatureMacroFusion];
+                                                      FeatureBranchFusion];
   list<SubtargetFeature> BdVer1Features = BdVer1InheritableFeatures;
 
   // PileDriver
@@ -860,7 +872,7 @@ def ProcessorFeatures {
                                        FeatureLZCNT,
                                        FeatureFastBEXTR,
                                        FeatureFast15ByteNOP,
-                                       FeatureMacroFusion,
+                                       FeatureBranchFusion,
                                        FeatureMMX,
                                        FeatureMOVBE,
                                        FeatureMWAITX,

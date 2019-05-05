@@ -181,6 +181,9 @@ BitVector SIRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   reserveRegisterTuples(Reserved, AMDGPU::TTMP12_TTMP13);
   reserveRegisterTuples(Reserved, AMDGPU::TTMP14_TTMP15);
 
+  // Reserve null register - it shall never be allocated
+  reserveRegisterTuples(Reserved, AMDGPU::SGPR_NULL);
+
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
 
   unsigned MaxNumSGPRs = ST.getMaxNumSGPRs(MF);
@@ -230,6 +233,10 @@ BitVector SIRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
     assert(!isSubRegister(ScratchRSrcReg, FrameReg));
   }
 
+  for (unsigned Reg : MFI->WWMReservedRegs) {
+    reserveRegisterTuples(Reserved, Reg);
+  }
+
   return Reserved;
 }
 
@@ -257,11 +264,20 @@ bool SIRegisterInfo::requiresFrameIndexScavenging(
 
 bool SIRegisterInfo::requiresFrameIndexReplacementScavenging(
   const MachineFunction &MF) const {
-  // m0 is needed for the scalar store offset. m0 is unallocatable, so we can't
-  // create a virtual register for it during frame index elimination, so the
-  // scavenger is directly needed.
-  return MF.getFrameInfo().hasStackObjects() &&
-         MF.getSubtarget<GCNSubtarget>().hasScalarStores() &&
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  if (!MFI.hasStackObjects())
+    return false;
+
+  // The scavenger is used for large frames which may require finding a free
+  // register for large offsets.
+  if (!isUInt<12>(MFI.getStackSize()))
+    return true;
+
+  // If using scalar stores, for spills, m0 is needed for the scalar store
+  // offset (pre-GFX9). m0 is unallocatable, so we can't create a virtual
+  // register for it during frame index elimination, so the scavenger is
+  // directly needed.
+  return MF.getSubtarget<GCNSubtarget>().hasScalarStores() &&
          MF.getInfo<SIMachineFunctionInfo>()->hasSpilledSGPRs();
 }
 
@@ -520,6 +536,7 @@ static bool buildMUBUFOffsetLoadStore(const SIInstrInfo *TII,
           .addImm(0) // glc
           .addImm(0) // slc
           .addImm(0) // tfe
+          .addImm(0) // dlc
           .cloneMemRefs(*MI);
 
   const MachineOperand *VDataIn = TII->getNamedOperand(*MI,
@@ -575,7 +592,7 @@ void SIRegisterInfo::buildSpillLoadStore(MachineBasicBlock::iterator MI,
     // We don't have access to the register scavenger if this function is called
     // during  PEI::scavengeFrameVirtualRegs().
     if (RS)
-      SOffset = RS->FindUnusedReg(&AMDGPU::SGPR_32RegClass);
+      SOffset = RS->scavengeRegister(&AMDGPU::SGPR_32RegClass, MI, 0, false);
 
     if (SOffset == AMDGPU::NoRegister) {
       // There are no free SGPRs, and since we are in the process of spilling
@@ -623,6 +640,7 @@ void SIRegisterInfo::buildSpillLoadStore(MachineBasicBlock::iterator MI,
       .addImm(0) // glc
       .addImm(0) // slc
       .addImm(0) // tfe
+      .addImm(0) // dlc
       .addMemOperand(NewMMO);
 
     if (NumSubRegs > 1)
@@ -753,6 +771,7 @@ bool SIRegisterInfo::spillSGPR(MachineBasicBlock::iterator MI,
         .addReg(MFI->getScratchRSrcReg())        // sbase
         .addReg(OffsetReg, RegState::Kill)       // soff
         .addImm(0)                               // glc
+        .addImm(0)                               // dlc
         .addMemOperand(MMO);
 
       continue;
@@ -912,9 +931,10 @@ bool SIRegisterInfo::restoreSGPR(MachineBasicBlock::iterator MI,
 
       auto MIB =
         BuildMI(*MBB, MI, DL, TII->get(ScalarLoadOp), SubReg)
-        .addReg(MFI->getScratchRSrcReg()) // sbase
-        .addReg(OffsetReg, RegState::Kill)                // soff
-        .addImm(0)                        // glc
+        .addReg(MFI->getScratchRSrcReg())  // sbase
+        .addReg(OffsetReg, RegState::Kill) // soff
+        .addImm(0)                         // glc
+        .addImm(0)                         // dlc
         .addMemOperand(MMO);
 
       if (NumSubRegs > 1 && i == 0)
@@ -1200,9 +1220,9 @@ StringRef SIRegisterInfo::getRegAsmName(unsigned Reg) const {
     }
 
   REG_RANGE(AMDGPU::VGPR0, AMDGPU::VGPR255, VGPR32RegNames);
-  REG_RANGE(AMDGPU::SGPR0, AMDGPU::SGPR103, SGPR32RegNames);
+  REG_RANGE(AMDGPU::SGPR0, AMDGPU::SGPR105, SGPR32RegNames);
   REG_RANGE(AMDGPU::VGPR0_VGPR1, AMDGPU::VGPR254_VGPR255, VGPR64RegNames);
-  REG_RANGE(AMDGPU::SGPR0_SGPR1, AMDGPU::SGPR102_SGPR103, SGPR64RegNames);
+  REG_RANGE(AMDGPU::SGPR0_SGPR1, AMDGPU::SGPR104_SGPR105, SGPR64RegNames);
   REG_RANGE(AMDGPU::VGPR0_VGPR1_VGPR2, AMDGPU::VGPR253_VGPR254_VGPR255,
             VGPR96RegNames);
 

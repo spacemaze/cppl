@@ -2575,11 +2575,9 @@ Sema::LookupInObjCMethod(LookupResult &Lookup, Scope *S,
             !Diags.isIgnored(diag::warn_arc_repeated_use_of_weak, Loc))
           getCurFunction()->recordUseOfWeak(Result);
       }
-      if (getLangOpts().ObjCAutoRefCount) {
-        if (CurContext->isClosure())
-          Diag(Loc, diag::warn_implicitly_retains_self)
-            << FixItHint::CreateInsertion(Loc, "self->");
-      }
+      if (getLangOpts().ObjCAutoRefCount)
+        if (const BlockDecl *BD = CurContext->getInnermostBlockDecl())
+          ImplicitlyRetainedSelfLocs.push_back({Loc, BD});
 
       return Result;
     }
@@ -14861,7 +14859,8 @@ void Sema::MarkFunctionReferenced(SourceLocation Loc, FunctionDecl *Func,
   // Implicit instantiation of function templates and member functions of
   // class templates.
   if (Func->isImplicitlyInstantiable()) {
-    TemplateSpecializationKind TSK = Func->getTemplateSpecializationKind();
+    TemplateSpecializationKind TSK =
+        Func->getTemplateSpecializationKindForInstantiation();
     SourceLocation PointOfInstantiation = Func->getPointOfInstantiation();
     bool FirstInstantiation = PointOfInstantiation.isInvalid();
     if (FirstInstantiation) {
@@ -15722,7 +15721,12 @@ static void DoMarkVarDeclReferenced(Sema &SemaRef, SourceLocation Loc,
          "Invalid Expr argument to DoMarkVarDeclReferenced");
   Var->setReferenced();
 
-  TemplateSpecializationKind TSK = Var->getTemplateSpecializationKind();
+  if (Var->isInvalidDecl())
+    return;
+
+  auto *MSI = Var->getMemberSpecializationInfo();
+  TemplateSpecializationKind TSK = MSI ? MSI->getTemplateSpecializationKind()
+                                       : Var->getTemplateSpecializationKind();
 
   bool OdrUseContext = isOdrUseContext(SemaRef);
   bool UsableInConstantExpr =
@@ -15755,11 +15759,15 @@ static void DoMarkVarDeclReferenced(Sema &SemaRef, SourceLocation Loc,
         (TSK == TSK_ExplicitInstantiationDeclaration && UsableInConstantExpr);
 
     if (TryInstantiating) {
-      SourceLocation PointOfInstantiation = Var->getPointOfInstantiation();
+      SourceLocation PointOfInstantiation =
+          MSI ? MSI->getPointOfInstantiation() : Var->getPointOfInstantiation();
       bool FirstInstantiation = PointOfInstantiation.isInvalid();
       if (FirstInstantiation) {
         PointOfInstantiation = Loc;
-        Var->setTemplateSpecializationKind(TSK, PointOfInstantiation);
+        if (MSI)
+          MSI->setPointOfInstantiation(PointOfInstantiation);
+        else
+          Var->setTemplateSpecializationKind(TSK, PointOfInstantiation);
       }
 
       bool InstantiationDependent = false;
@@ -16071,7 +16079,7 @@ void Sema::MarkDeclarationsReferencedInExpr(Expr *E,
 /// behavior of a program, such as passing a non-POD value through an ellipsis.
 /// Failure to do so will likely result in spurious diagnostics or failures
 /// during overload resolution or within sizeof/alignof/typeof/typeid.
-bool Sema::DiagRuntimeBehavior(SourceLocation Loc, const Stmt *Statement,
+bool Sema::DiagRuntimeBehavior(SourceLocation Loc, ArrayRef<const Stmt*> Stmts,
                                const PartialDiagnostic &PD) {
   switch (ExprEvalContexts.back().Context) {
   case ExpressionEvaluationContext::Unevaluated:
@@ -16087,9 +16095,9 @@ bool Sema::DiagRuntimeBehavior(SourceLocation Loc, const Stmt *Statement,
 
   case ExpressionEvaluationContext::PotentiallyEvaluated:
   case ExpressionEvaluationContext::PotentiallyEvaluatedIfUsed:
-    if (Statement && getCurFunctionOrMethodDecl()) {
+    if (!Stmts.empty() && getCurFunctionOrMethodDecl()) {
       FunctionScopes.back()->PossiblyUnreachableDiags.
-        push_back(sema::PossiblyUnreachableDiag(PD, Loc, Statement));
+        push_back(sema::PossiblyUnreachableDiag(PD, Loc, Stmts));
       return true;
     }
 
@@ -16112,6 +16120,12 @@ bool Sema::DiagRuntimeBehavior(SourceLocation Loc, const Stmt *Statement,
   }
 
   return false;
+}
+
+bool Sema::DiagRuntimeBehavior(SourceLocation Loc, const Stmt *Statement,
+                               const PartialDiagnostic &PD) {
+  return DiagRuntimeBehavior(
+      Loc, Statement ? llvm::makeArrayRef(Statement) : llvm::None, PD);
 }
 
 bool Sema::CheckCallReturnType(QualType ReturnType, SourceLocation Loc,
@@ -16975,10 +16989,9 @@ ExprResult Sema::ActOnObjCAvailabilityCheckExpr(
 
   StringRef Platform = getASTContext().getTargetInfo().getPlatformName();
 
-  auto Spec = std::find_if(AvailSpecs.begin(), AvailSpecs.end(),
-                           [&](const AvailabilitySpec &Spec) {
-                             return Spec.getPlatform() == Platform;
-                           });
+  auto Spec = llvm::find_if(AvailSpecs, [&](const AvailabilitySpec &Spec) {
+    return Spec.getPlatform() == Platform;
+  });
 
   VersionTuple Version;
   if (Spec != AvailSpecs.end())

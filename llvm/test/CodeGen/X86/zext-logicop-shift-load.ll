@@ -2,13 +2,11 @@
 ; RUN: llc < %s -mtriple=x86_64-unknown-unknown | FileCheck %s
 
 
-; FIXME: masked extend should be folded into and.
 define i64 @test1(i8* %data) {
 ; CHECK-LABEL: test1:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    movb (%rdi), %al
-; CHECK-NEXT:    shlb $2, %al
-; CHECK-NEXT:    movzbl %al, %eax
+; CHECK-NEXT:    movl (%rdi), %eax
+; CHECK-NEXT:    shll $2, %eax
 ; CHECK-NEXT:    andl $60, %eax
 ; CHECK-NEXT:    retq
 entry:
@@ -19,15 +17,12 @@ entry:
   ret i64 %mul
 }
 
-; FIXME: masked extend should be folded into and.
 define i8* @test2(i8* %data) {
 ; CHECK-LABEL: test2:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    movb (%rdi), %al
-; CHECK-NEXT:    shlb $2, %al
-; CHECK-NEXT:    movzbl %al, %eax
-; CHECK-NEXT:    andl $60, %eax
-; CHECK-NEXT:    addq %rdi, %rax
+; CHECK-NEXT:    movl (%rdi), %eax
+; CHECK-NEXT:    andl $15, %eax
+; CHECK-NEXT:    leaq (%rdi,%rax,4), %rax
 ; CHECK-NEXT:    retq
 entry:
   %bf.load = load i8, i8* %data, align 4
@@ -58,7 +53,7 @@ entry:
 define i64 @test4(i8* %data) {
 ; CHECK-LABEL: test4:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    movzbl (%rdi), %eax
+; CHECK-NEXT:    movl (%rdi), %eax
 ; CHECK-NEXT:    shrq $2, %rax
 ; CHECK-NEXT:    andl $60, %eax
 ; CHECK-NEXT:    retq

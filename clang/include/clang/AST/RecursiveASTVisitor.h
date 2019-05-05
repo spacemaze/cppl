@@ -1458,9 +1458,9 @@ DEF_TRAVERSE_DECL(ClassScopeFunctionSpecializationDecl, {
   TRY_TO(TraverseDecl(D->getSpecialization()));
 
   if (D->hasExplicitTemplateArgs()) {
-    const TemplateArgumentListInfo &args = D->templateArgs();
-    TRY_TO(TraverseTemplateArgumentLocsHelper(args.getArgumentArray(),
-                                              args.size()));
+    TRY_TO(TraverseTemplateArgumentLocsHelper(
+        D->getTemplateArgsAsWritten()->getTemplateArgs(),
+        D->getTemplateArgsAsWritten()->NumTemplateArgs));
   }
 })
 
@@ -2423,6 +2423,10 @@ DEF_TRAVERSE_STMT(LambdaExpr, {
     TypeLoc TL = S->getCallOperator()->getTypeSourceInfo()->getTypeLoc();
     FunctionProtoTypeLoc Proto = TL.getAsAdjusted<FunctionProtoTypeLoc>();
 
+    for (Decl *D : S->getExplicitTemplateParameters()) {
+      // Visit explicit template parameters.
+      TRY_TO(TraverseDecl(D));
+    }
     if (S->hasExplicitParameters()) {
       // Visit parameters.
       for (unsigned I = 0, N = Proto.getNumParams(); I != N; ++I)
@@ -2804,7 +2808,6 @@ bool RecursiveASTVisitor<Derived>::TraverseOMPClause(OMPClause *C) {
     break;
 #include "clang/Basic/OpenMPKinds.def"
   case OMPC_threadprivate:
-  case OMPC_allocate:
   case OMPC_uniform:
   case OMPC_unknown:
     break;
@@ -2831,6 +2834,13 @@ template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPAllocatorClause(
     OMPAllocatorClause *C) {
   TRY_TO(TraverseStmt(C->getAllocator()));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitOMPAllocateClause(OMPAllocateClause *C) {
+  TRY_TO(TraverseStmt(C->getAllocator()));
+  TRY_TO(VisitOMPClauseList(C));
   return true;
 }
 

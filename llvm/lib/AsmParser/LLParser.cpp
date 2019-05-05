@@ -821,19 +821,23 @@ bool LLParser::ParseSummaryEntry() {
   if (!Index)
     return SkipModuleSummaryEntry();
 
+  bool result = false;
   switch (Lex.getKind()) {
   case lltok::kw_gv:
-    return ParseGVEntry(SummaryID);
+    result = ParseGVEntry(SummaryID);
+    break;
   case lltok::kw_module:
-    return ParseModuleEntry(SummaryID);
+    result = ParseModuleEntry(SummaryID);
+    break;
   case lltok::kw_typeid:
-    return ParseTypeIdEntry(SummaryID);
+    result = ParseTypeIdEntry(SummaryID);
     break;
   default:
-    return Error(Lex.getLoc(), "unexpected summary kind");
+    result = Error(Lex.getLoc(), "unexpected summary kind");
+    break;
   }
   Lex.setIgnoreColonInIdentifiers(false);
-  return false;
+  return result;
 }
 
 static bool isValidVisibilityForLinkage(unsigned V, unsigned L) {
@@ -4661,6 +4665,24 @@ bool LLParser::ParseDILexicalBlockFile(MDNode *&Result, bool IsDistinct) {
 
   Result = GET_OR_DISTINCT(DILexicalBlockFile,
                            (Context, scope.Val, file.Val, discriminator.Val));
+  return false;
+}
+
+/// ParseDICommonBlock:
+///   ::= !DICommonBlock(scope: !0, file: !2, name: "COMMON name", line: 9)
+bool LLParser::ParseDICommonBlock(MDNode *&Result, bool IsDistinct) {
+#define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
+  REQUIRED(scope, MDField, );                                                  \
+  OPTIONAL(declaration, MDField, );                                            \
+  OPTIONAL(name, MDStringField, );                                             \
+  OPTIONAL(file, MDField, );                                                   \
+  OPTIONAL(line, LineField, );						       
+  PARSE_MD_FIELDS();
+#undef VISIT_MD_FIELDS
+
+  Result = GET_OR_DISTINCT(DICommonBlock,
+                           (Context, scope.Val, declaration.Val, name.Val,
+                            file.Val, line.Val));
   return false;
 }
 

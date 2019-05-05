@@ -23,7 +23,7 @@ class OutputSection;
 class SectionBase;
 
 // Represents a relocation type, such as R_X86_64_PC32 or R_ARM_THM_CALL.
-typedef uint32_t RelType;
+using RelType = uint32_t;
 
 // List of target-independent relocation types. Relocations read
 // from files are converted to these types so that the main code
@@ -31,6 +31,7 @@ typedef uint32_t RelType;
 enum RelExpr {
   R_ABS,
   R_ADDEND,
+  R_DTPREL,
   R_GOT,
   R_GOT_OFF,
   R_GOT_PC,
@@ -49,8 +50,8 @@ enum RelExpr {
   R_RELAX_GOT_PC_NOPIC,
   R_RELAX_TLS_GD_TO_IE,
   R_RELAX_TLS_GD_TO_IE_ABS,
-  R_RELAX_TLS_GD_TO_IE_END,
   R_RELAX_TLS_GD_TO_IE_GOT_OFF,
+  R_RELAX_TLS_GD_TO_IE_GOTPLT,
   R_RELAX_TLS_GD_TO_LE,
   R_RELAX_TLS_GD_TO_LE_NEG,
   R_RELAX_TLS_IE_TO_LE,
