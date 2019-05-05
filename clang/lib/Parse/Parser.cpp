@@ -870,7 +870,6 @@ Parser::ParseExternalDeclaration(ParsedAttributesWithRange &attrs,
   // Package namespaces (enabled for levitation syntax extension)
   case tok::kw_package:
     if (getLangOpts().CPlusPlus && getLangOpts().LevitationMode) {
-      tok::TokenKind NextKind = NextToken().getKind();
       SourceLocation DeclEnd;
       return ParseDeclaration(DeclaratorContext::FileContext, DeclEnd, attrs);
     }
