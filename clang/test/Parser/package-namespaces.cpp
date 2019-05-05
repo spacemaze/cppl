@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++17 -flevitation-mode -fsyntax-only -verify %s
+// RUN: %clang_cc1 -std=c++17 -flevitation-mode -flevitation-build-stage=ast -fsyntax-only -verify %s
 
 // Example of correct construction
 package namespace A::B {}
