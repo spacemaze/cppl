@@ -9507,6 +9507,10 @@ class PackageDependentClassesMarker
         // Basically we just keep LevitationPackageDependent = false
       }
 
+      void VisitNamespaceDecl(NamespaceDecl *D) {
+        // Do nothing.
+      }
+
       // Unsupported decls fall here.
       // That should never happen, every unsupported case
       // should be handled by parser with proper diagnostics.
