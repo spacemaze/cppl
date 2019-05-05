@@ -953,7 +953,12 @@ void DeclPrinter::VisitCXXRecordDecl(CXXRecordDecl *D) {
   prettyPrintAttributes(D);
 
   if (D->getIdentifier()) {
-    Out << ' ' << *D;
+    Out << ' ';
+
+    if (auto *Q = D->getQualifier())
+      Q->print(Out, Policy);
+
+    Out << *D;
 
     if (auto S = dyn_cast<ClassTemplatePartialSpecializationDecl>(D))
       printTemplateArguments(S->getTemplateArgs(), S->getTemplateParameters());
