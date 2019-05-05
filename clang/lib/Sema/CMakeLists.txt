@@ -42,6 +42,7 @@ add_clang_library(clangSema
   SemaFixItUtils.cpp
   SemaInit.cpp
   SemaLambda.cpp
+  SemaLevitation.cpp
   SemaLookup.cpp
   SemaModule.cpp
   SemaObjCProperty.cpp
