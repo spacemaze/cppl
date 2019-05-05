@@ -5282,6 +5282,11 @@ NamedDecl *Sema::FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
                = dyn_cast<ClassTemplatePartialSpecializationDecl>(Record))
       ClassTemplate = PartialSpec->getSpecializedTemplate()->getCanonicalDecl();
 
+    if (!ClassTemplate && getLangOpts().LevitationMode) {
+      if (auto *D = substLevitationPackageDependentDecl(Record))
+        return cast<CXXRecordDecl>(D);
+    }
+
     // Walk the current context to find either the record or an instantiation of
     // it.
     DeclContext *DC = CurContext;

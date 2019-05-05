@@ -11045,28 +11045,12 @@ private:
   /// List of levitation package dependent declarations
   llvm::SmallVector<NamedDecl *, 8> LevitationPackageDependentDecls;
 
-  /// TODO: return scope_exit object?
-  /// Sets package instantiation stage for C++ Levitation
-  /// \param v true to set stage, false to unset.
-  void SetPackageClassInstantiationStage(bool v) { PackageClassInstantiationStage = v; }
+  /// Map of instantiations of package dependent declarations.
+  /// Key - is dependent declaration
+  /// Value - is its instantiated version.
+  llvm::DenseMap<const Decl*, Decl*> PackageDependentDeclInstantiations;
 
-  /// Determines whether we can build levitation 'global' nested name specifier.
-  /// There are two possible ways how we fall into BuildCXXNestedNameSpecifier.
-  /// 1. Is when we parse something. Parser case.
-  /// 2. Is when we instantiate something. Synthesis case.
-  ///
-  /// For 'parser' case we can get it by checking Sema::CurScope and going
-  /// up till top level NamedDecl (the first level after namespace level)
-  ///
-  /// For 'synthesis' case we should checkout for CodeSynthesisContexts
-  /// stack.
-  ///
-  /// 'Synthesis' case has higher priority, since it may happen even during
-  /// parsing process.
-  ///
-  /// \return true if we can build 'global' NNS
-  ///         and false otherwise.
-  bool IsItAllowedToBuildLevitationGlobalNNS();
+  Decl* findLevitationPackageDependentInstantiationFor(const Decl *D);
 
   /// Adds dependency for declaration DependentDecl.
   /// E.g. for 'class C { global::A::D d; };' it will add
@@ -11097,6 +11081,14 @@ private:
   );
 
 public:
+
+  /// Registers instantiation of package dependent declaration.
+  /// \param PackageDependent package dependent declaration
+  /// \param Instantiation instantiation
+  void addLevitationPackageDependentInstatiation(
+      const Decl *PackageDependent,
+      Decl* Instantiation
+  );
 
   /// Scans translation unit and looks for package namespace.
   /// It checks package namespace decls, and marks them as
@@ -11132,6 +11124,8 @@ public:
       const DeclarationNameInfo &Name
   );
 
+  Decl *substLevitationPackageDependentDecl(const Decl *D);
+
   /// Entry point for levitation package classes instantiation mode.
   /// Should be called straight after Sema has been initialized, and in fact
   /// is part of initialization process.
@@ -11144,14 +11138,14 @@ public:
   /// name specifiers, and tries to replace them with real symbols.
   void InstantiatePackageClasses();
 
+  /// Sets package instantiation stage for C++ Levitation
+  /// \param v true to set stage, false to unset.
+  void setPackageClassInstantiationStage(bool v) { PackageClassInstantiationStage = v; }
+
   /// Check whether Sema is in levitation package class instantiation stage.
   /// \return true if Sema is in package class instantiation stage.
   bool IsPackageClassInstantiationStage() const { return PackageClassInstantiationStage; }
 
-  /// Runs package instantiation for target class.
-  /// \param PatternPackageClass class to be instantiated.
-  /// \return Instantiation of package class.
-  DeclResult ActOnPackageClassInstantiation(CXXRecordDecl* PatternPackageClass);
 };
 
 /// RAII object that enters a new expression evaluation context.

@@ -9533,39 +9533,23 @@ public:
   }
 };
 
-class PackageDependentClassesCollector
-  : public RecursiveASTVisitor<PackageDependentClassesCollector> {
-public:
+void Sema::addLevitationPackageDependentInstatiation(
+    const clang::Decl *PackageDependent,
+    clang::Decl *Instantiation) {
 
-  bool VisitNamespaceDecl(NamespaceDecl *NS) {
-    if (NS->isLevitationPackage()) {
-      // decls call also forces Sema to load all lazy decls from
-      // external sources.
-      for (auto *D : NS->decls()) {
-        VisitDecl(D);
-      }
-    }
-    return true;
-  }
+  auto insertRes = PackageDependentDeclInstantiations.insert({
+    PackageDependent, Instantiation
+  });
 
-  bool VisitDecl(Decl *D) {
-    if (D->isLevitationPackageDependent()) {
-      PackageDependentDecls.push_back(D);
-    }
-    return true;
-  }
+  if (!insertRes.second)
+    llvm_unreachable("Package dependent declaration can't be instatiated twice");
+}
 
-  SmallVectorImpl<Decl *> &GetPackageDependentDelcs() {
-    return PackageDependentDecls;
-  }
-
-protected:
-  SmallVector<Decl*, 16> PackageDependentDecls;
-};
-
-
-bool Sema::IsItAllowedToBuildLevitationGlobalNNS() {
-  return true;
+Decl* Sema::findLevitationPackageDependentInstantiationFor(const Decl* D) {
+  auto Found = PackageDependentDeclInstantiations.find(D);
+  if (Found != PackageDependentDeclInstantiations.end())
+    return Found->second;
+  return nullptr;
 }
 
 void Sema::AddLevitationPackageDeclarationDependency(
@@ -9583,6 +9567,14 @@ void Sema::AddLevitationPackageBodyDependency(
 
 }
 
+bool Sema::isShadowedLevitationDecl(const Decl *D) const {
+  assert(getLangOpts().LevitationMode &&
+         "This method is supposed to be used by levitation mode only");
+  return
+    getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
+    D->isLevitationPackageDependent();
+}
+
 void Sema::markLevitationPackageDeclsAsPackageDependent() {
 
   if (getLangOpts().getLevitationBuildStage() != LangOptions::LBSK_BuildAST)
@@ -9593,14 +9585,6 @@ void Sema::markLevitationPackageDeclsAsPackageDependent() {
   });
 
   Marker.TraverseDecl(Context.getTranslationUnitDecl());
-}
-
-bool Sema::isShadowedLevitationDecl(const Decl *D) const {
-  assert(getLangOpts().LevitationMode &&
-         "This method is supposed to be used by levitation mode only");
-  return
-    getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
-    D->isLevitationPackageDependent();
 }
 
 static bool isLevitationGlobal(const NestedNameSpecifier *NNS) {
@@ -9760,96 +9744,231 @@ bool Sema::HandleLevitationPackageDependency(
   return true;
 }
 
-void Sema::InstantiatePackageClasses() {
-  PackageDependentClassesCollector Collector;
-  Collector.TraverseDecl(Context.getTranslationUnitDecl());
-
-  for (auto *D : Collector.GetPackageDependentDelcs()) {
-    if (auto *RD = dyn_cast<CXXRecordDecl>(D))
-      ActOnPackageClassInstantiation(RD);
-    else
-      llvm_unreachable("Unsupported package dependent declaration");
+Decl *Sema::substLevitationPackageDependentDecl(const Decl *D) {
+  if (getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
+      D->isLevitationPackageDependent()) {
+    if (auto *Found = findLevitationPackageDependentInstantiationFor(D))
+      return cast<NamedDecl>(Found);
   }
+  return nullptr;
 }
 
-DeclResult Sema::ActOnPackageClassInstantiation(clang::CXXRecordDecl *PatternPackageClass) {
+class PackageDeclsInstantiator : public DeclVisitor<PackageDeclsInstantiator, Decl*> {
+private:
+  Sema *SemaObj;
+  ASTContext &Context;
 
-  if (!PatternPackageClass->isLevitationPackageDependent())
-    llvm_unreachable("Pattern expected to be package dependent");
+public:
+  PackageDeclsInstantiator(Sema *semaObj) :
+  SemaObj(semaObj), Context(semaObj->getASTContext()) {}
 
-  SetPackageClassInstantiationStage(true);
-  auto PackageClassInstantiationMode = llvm::make_scope_exit(
-      [this] { this->SetPackageClassInstantiationStage(false); }
-  );
+  Decl *VisitEnumDecl(EnumDecl *PackageDependent) {
+    // TODO levitation: is not implemented.
+    return nullptr;
+  }
 
-  auto *DC = PatternPackageClass->getDeclContext();
+  Decl *VisitClassTemplateSpecializationDecl(ClassTemplateSpecializationDecl *PackageDependent) {
 
-  CXXRecordDecl* LClass = nullptr;
-  bool RemovePatternDecl = false;
+    auto *SemanticDC = PackageDependent->getDeclContext();
 
-  if (auto *Specialization = dyn_cast<ClassTemplateSpecializationDecl>(PatternPackageClass)) {
+    auto &TemplateArgs = PackageDependent->getTemplateArgs();
 
-    ClassTemplateSpecializationDecl *NewSpecialization = nullptr;
+    auto *Template = PackageDependent->getSpecializedTemplate();
+    auto *New = ClassTemplateSpecializationDecl::Create(
+        Context,
+        PackageDependent->getTagKind(),
+        SemanticDC,
+        PackageDependent->getBeginLoc(),
+        PackageDependent->getLocation(),
+        Template,
+        TemplateArgs.asArray(),
+        // Postpone setting previous declaration.
+        // If we set it now, then it will use the same DefinitinoData
+        // and we need it to be different.
+        nullptr
+    );
 
-    auto &TemplateArgs = Specialization->getTemplateArgs();
-
-    if (auto *PartialSpec = dyn_cast<ClassTemplatePartialSpecializationDecl>(Specialization)) {
-
-      ClassTemplateDecl* Template = Specialization->getDescribedClassTemplate();
-
-      TemplateArgumentListInfo ArgsAsWritten;
-      for (auto A : PartialSpec->getTemplateArgsAsWritten()->arguments()) {
-        ArgsAsWritten.addArgument(A);
-      }
-
-      ClassTemplatePartialSpecializationDecl *Partial = ClassTemplatePartialSpecializationDecl::Create(
+    if (Template->getTemplateParameters()->size() > 0) {
+      PackageDependent->setTemplateParameterListsInfo(
           Context,
-          PartialSpec->getTagKind(),
-          DC,
-          PartialSpec->getBeginLoc(),
-          PartialSpec->getLocation(),
-
-          // FIXME: we may probably bump into scope issue.
-          // But probably it will keep scope of previous decl.
-          PartialSpec->getTemplateParameters(),
-          Template,
-          TemplateArgs.asArray(),
-          ArgsAsWritten,
-          QualType(PartialSpec->getTypeForDecl(), 0),
-          // Postpone setting previous declaration.
-          // If we set it now, then it will use the same DefinitinoData
-          // and we need it to be different.
-          nullptr
+          Template->getTemplateParameters()
       );
-
-      NewSpecialization = Partial;
-    } else {
-      auto *Template = Specialization->getSpecializedTemplate();
-      auto *Explicit = ClassTemplateSpecializationDecl::Create(
-          Context,
-          Specialization->getTagKind(),
-          DC,
-          Specialization->getBeginLoc(),
-          Specialization->getLocation(),
-          Template,
-          TemplateArgs.asArray(),
-          // Postpone setting previous declaration.
-          // If we set it now, then it will use the same DefinitinoData
-          // and we need it to be different.
-          nullptr
-
-      );
-
-      if (Template->getTemplateParameters()->size() > 0) {
-        Specialization->setTemplateParameterListsInfo(
-            Context,
-            Template->getTemplateParameters()
-        );
-      }
-
-      NewSpecialization = Explicit;
     }
 
+    setAdditionalSpecializationProperties(New, PackageDependent);
+
+    instantiateClass(New, PackageDependent);
+
+    return New;
+  }
+
+  // FIXME levitation: I think we don't need this, but keep for now, for better
+  // commit diffs.
+  Decl *VisitClassTemplatePartialSpecializationDecl(
+          ClassTemplatePartialSpecializationDecl *PackageDependent
+  ) {
+    auto &Context = SemaObj->getASTContext();
+    auto &TemplateArgs = PackageDependent->getTemplateArgs();
+    ClassTemplateDecl* Template = PackageDependent->getDescribedClassTemplate();
+
+    TemplateArgumentListInfo ArgsAsWritten;
+    for (auto A : PackageDependent->getTemplateArgsAsWritten()->arguments()) {
+      ArgsAsWritten.addArgument(A);
+    }
+
+    ClassTemplatePartialSpecializationDecl *New = ClassTemplatePartialSpecializationDecl::Create(
+        Context,
+        PackageDependent->getTagKind(),
+        PackageDependent->getDeclContext(),
+        PackageDependent->getBeginLoc(),
+        PackageDependent->getLocation(),
+
+        // FIXME: we may probably bump into scope issue.
+        // But probably it will keep scope of previous decl.
+        PackageDependent->getTemplateParameters(),
+        Template,
+        TemplateArgs.asArray(),
+        ArgsAsWritten,
+        QualType(PackageDependent->getTypeForDecl(), 0),
+        // Postpone setting previous declaration.
+        // If we set it now, then it will use the same DefinitinoData
+        // and we need it to be different.
+        nullptr
+    );
+
+    setAdditionalSpecializationProperties(New, PackageDependent);
+
+    instantiateClass(New, PackageDependent);
+
+    return New;
+  }
+
+  Decl *VisitCXXRecordDecl(CXXRecordDecl *PackageDependent) {
+    visitCXXRecordDeclInternal(PackageDependent);
+  }
+
+  Decl *visitCXXRecordDeclInternal(
+      CXXRecordDecl *PackageDependent,
+      bool AffectDeclContext = true,
+      bool DelayTypeCreation = false,
+      bool Instantiate = true
+  ) {
+    // Two cases possible:
+    // 1. We work with regular CXXRecordDecl
+    //    (AffectDeclContext = true, PrevDecl = nullptr).
+    // 2. Or we work with pattern of ClassTemplateDecl, which is represented as
+    //    inner CXXRecordDecl.
+    //    (AffectDeclContext = false, PrevDecl = not null
+    //
+    // And one more. Member class or template case.
+
+    // Process regular class case.
+    auto &Context = SemaObj->getASTContext();
+
+    auto *New = CXXRecordDecl::Create(
+        Context,
+        PackageDependent->getTagKind(),
+        PackageDependent->getDeclContext(),
+        PackageDependent->getBeginLoc(),
+        PackageDependent->getLocation(),
+        PackageDependent->getIdentifier(),
+        // Postpone setting previous declaration.
+        // If we set it now, then it will use the same DefinitinoData
+        // and we need it to be different.
+        nullptr,
+        DelayTypeCreation
+    );
+
+    New->setBraceRange(PackageDependent->getBraceRange());
+
+    New->setLexicalDeclContext(PackageDependent->getLexicalDeclContext());
+
+    // FIXME: this whole branch 99% will never happen, make sure and remove.
+    if (auto *MC = PackageDependent->getInstantiatedFromMemberClass()) {
+      // Member class case.
+      // FIXME: I'm not sure about whether it's correct to provide getMostRecentDecl
+      //        but it seems that when we instantiate ClassTemplateDecl, we instantiate
+      //        its TemplatedDecl, and all member classes, and it seems that it
+      //        should provide a prev decl for that pattern.
+      New->setInstantiationOfMemberClass(MC->getMostRecentDecl(), TSK_ImplicitInstantiation);
+
+      // I'm not sure in this part.
+      Context.setManglingNumber(New, Context.getManglingNumber(PackageDependent));
+
+      if (DeclaratorDecl *DD = Context.getDeclaratorForUnnamedTagDecl(PackageDependent))
+        Context.addDeclaratorForUnnamedTagDecl(New, DD);
+
+      if (TypedefNameDecl *TND = Context.getTypedefNameForUnnamedTagDecl(PackageDependent))
+        Context.addTypedefNameForUnnamedTagDecl(New, TND);
+    }
+
+    if (Instantiate) {
+
+      SemaObj->addLevitationPackageDependentInstatiation(PackageDependent, New);
+
+      instantiateClass(New, PackageDependent, AffectDeclContext);
+
+      // For case of member class out of line explicit instantiation.
+      New->setQualifierInfo(PackageDependent->getQualifierLoc());
+    }
+
+    return New;
+  }
+
+  Decl *VisitDecl(Decl *D) {
+    llvm_unreachable(
+        "Declaration type is not supported. Don't know "
+        "how to instantiate package dependencies."
+    );
+    return nullptr;
+  }
+
+private:
+
+  void instantiateClass(
+      CXXRecordDecl *New,
+      CXXRecordDecl *PackageDependent,
+      bool AffectDeclContext = true
+  ) {
+
+    auto *LexicalDC = PackageDependent->getLexicalDeclContext();
+
+    if (AffectDeclContext) {
+      // If declaration has been loaded from AST,
+      // force DeclContext lazy decls collection to load it.
+      LexicalDC->containsDeclAndLoad(PackageDependent);
+      LexicalDC->removeDecl(PackageDependent);
+      LexicalDC->addDecl(New);
+    }
+
+    auto PointOfInstantiation = PackageDependent->getBeginLoc();
+
+    MultiLevelTemplateArgumentList EmptyArgsList;
+    SemaObj->InstantiateClass(
+        PointOfInstantiation,
+        New,
+        PackageDependent,
+        EmptyArgsList,
+        TSK_ExplicitInstantiationDefinition
+    );
+
+    // Instantiate package references of PackageDependent
+    // into New.
+
+    auto *Def = New->getDefinition();
+
+    SemaObj->InstantiateClassMembers(
+        PointOfInstantiation,
+        Def,
+        EmptyArgsList,
+        TSK_ExplicitInstantiationDefinition
+    );
+  }
+
+  void setAdditionalSpecializationProperties(
+      ClassTemplateSpecializationDecl *NewSpecialization,
+      ClassTemplateSpecializationDecl *Specialization
+  ) {
     NewSpecialization->setSpecializationKind(TSK_ExplicitSpecialization);
 
     // I think we should clone it during instantiation stage
@@ -9883,111 +10002,68 @@ DeclResult Sema::ActOnPackageClassInstantiation(clang::CXXRecordDecl *PatternPac
     // For explicit instantiation
     NewSpecialization->setBraceRange(Specialization->getBraceRange());
 
-    LClass = NewSpecialization;
-
-    // Not sure we need this, but original method does it with next comments:
-    // Add the specialization into its lexical context, so that it can
-    // be seen when iterating through the list of declarations in that
-    // context. However, specializations are not found by name lookup.
-    PatternPackageClass->getDeclContext()->addDecl(LClass);
-
-    // And yeah, get exclude old specialization from DeclContext.
-    // Same reason. Remove it from list of declaration, thus
-    // don't iterate over it anymore.
-    RemovePatternDecl = true;
-  } else {
-    // Two cases possible:
-    // 1. We work with regular CXXRecordDecl
-    // 2. Or we work with pattern of ClassTemplateDecl, which is represented as
-    //    inner CXXRecordDecl.
-    LClass = CXXRecordDecl::Create(
-        Context,
-        PatternPackageClass->getTagKind(),
-        DC,
-        PatternPackageClass->getBeginLoc(),
-        PatternPackageClass->getLocation(),
-        PatternPackageClass->getIdentifier(),
-        // Postpone setting previous declaration.
-        // If we set it now, then it will use the same DefinitinoData
-        // and we need it to be different.
-        nullptr
-    );
-
-    LClass->setBraceRange(PatternPackageClass->getBraceRange());
-
-    // For template pattern we should do a little bit more:
-    if (auto* TD = PatternPackageClass->getDescribedClassTemplate()) {
-
-      // Add info about parent ClassTemplateDecl
-      LClass->setDescribedClassTemplate(TD);
-
-      // Add info about outer template parameter lists
-      // TODO: I think as long as we're dealing with
-      //       top-level decl there should be no outer param lists.
-      SmallVector<TemplateParameterList*, 4> TemplateParamLists;
-      if (PatternPackageClass->getNumTemplateParameterLists() > 1) {
-        for (unsigned i = 0, e = PatternPackageClass->getNumTemplateParameterLists() - 1;
-             i != e; ++i) {
-          TemplateParamLists.push_back(PatternPackageClass->getTemplateParameterList(i));
-        }
-
-        LClass->setTemplateParameterListsInfo(
-            Context,
-            TemplateParamLists
-        );
-      }
-    } else {
-      // Regular non-template class, add it into same declaration context
-      PatternPackageClass->getDeclContext()->addDecl(LClass);
-      RemovePatternDecl = true;
+    // May be it is a member class specialization?
+    if (Specialization->getInstantiatedFromMemberClass()) {
+      NewSpecialization->setInstantiationOfMemberClass(Specialization, TSK_ImplicitInstantiation);
     }
+
+    // We use redeclaration mechanics in order to make it available
+    // in existing ClassTemplateDecl owner
+    // (it will replace package dependent decl).
+    NewSpecialization->setPreviousDecl(Specialization);
+  }
+};
+
+void Sema::InstantiatePackageClasses() {
+
+  // As long as we going to remove some old decls after dependencies instantiation
+  // we can't do it in single delcs visiting, for removal affects decl
+  // iterator.
+  //
+  // So, we should do it in two passes:
+  // 1. Add package dependent declarations into separate collection.
+  // 2. Go through collection, and instantiate its items.
+
+  if (!ExternalSource)
+  return;
+
+  SmallVector<NamedDecl*, 8> LevitationPackageDependentDecls;
+  ExternalSource->ReadLevitationPackageDependentDecls(LevitationPackageDependentDecls);
+
+  SmallVector<NamedDecl*, 8> ToBeInstantiated;
+  SmallVector<NamedDecl*, 8> OutOfScopeMemberDecls;
+
+  for (auto *D : LevitationPackageDependentDecls) {
+    // If it is an out of scope member class definition, skip it,
+    // it should be instantiated as a member, during
+    // InstaniateClassMembers stage.
+    if (D->getDeclContext()->isRecord() &&
+        !D->hasAttr<ExcludeFromExplicitInstantiationAttr>()) {
+      OutOfScopeMemberDecls.push_back(D);
+    }
+
+    if (auto *DC = dyn_cast<DeclContext>(D)) {
+      assert(!DC->getLookupPtr() &&
+      "Package instantiation should be launched before any lookups");
+    }
+
+    // During package instantiation we should consider decls as
+    // package dependent.
+    // TODO: May be move this flag to DeclContext ?
+    D->setLevitationPackageDependent(true);
+
+    ToBeInstantiated.push_back(D);
   }
 
-  auto PointOfInstantiation = PatternPackageClass->getBeginLoc();
+  PackageDeclsInstantiator Instantiator(this);
 
-  MultiLevelTemplateArgumentList EmptyArgsList;
-  InstantiateClass(
-      PointOfInstantiation,
-      LClass,
-      PatternPackageClass,
-      EmptyArgsList,
-      TSK_ExplicitInstantiationDefinition
-  );
+  for (auto *D : ToBeInstantiated) {
+    Instantiator.Visit(D);
+  }
 
-  // Instantiate package references of PatternPackageClass
-  // into LClass.
-
-  auto *Def = LClass->getDefinition();
-
-  InstantiateClassMembers(
-      PointOfInstantiation,
-      Def,
-      EmptyArgsList,
-      TSK_ExplicitInstantiationDefinition
-  );
-
-  // Merge PatterPackageClass with its instantiation.
-  // Several cases possible:
-  // 1. Pattern was a non-template class, we should replace
-  //    old decl with new one.
-  // 2. Pattern is a ClassTemplateDecl's pattern, we modify
-  //    getTemplatedDecl() so it will return mostRecentDecl.
-  //    ...and we remove old decl from decl context.
-  //
-  // 3. Pattern is a partial or explicit specialization,
-  //    then it's ok, for each time when user will request spec,
-  //    it already gets mostRecentDecl.
-  //
-  // TODO levitation: we perhaps could clone ClassTemplateDecl with
-  // updated pattern (TemplatedDecl) and all existing specializations
-  // thus we will avoid changes in getTemplatedDecl methods.
-
-  if (RemovePatternDecl)
-    DC->removeDecl(PatternPackageClass);
-  else
-    LClass->setPreviousDecl(PatternPackageClass);
-
-  return LClass;
+  for (auto *D : OutOfScopeMemberDecls) {
+    D->getLexicalDeclContext()->removeDecl(D);
+  }
 }
 
 TypeResult
