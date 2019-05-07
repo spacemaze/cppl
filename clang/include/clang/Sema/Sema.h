@@ -11108,34 +11108,6 @@ private:
 
   Decl* findLevitationPackageDependentInstantiationFor(const Decl *D);
 
-  /// Adds dependency for declaration DependentDecl.
-  /// E.g. for 'class C { global::A::D d; };' it will add
-  /// dependency A::D, (Loc will be 'global::A', Name will be 'D'.
-  ///
-  /// \param DependentDecl declaration dependency is added for
-  /// \param Loc nested name specifier of dependency
-  /// \param Name dependency identifier.
-  void AddLevitationPackageDeclarationDependency(
-      const Decl* DependentDecl,
-      const NestedNameSpecifier& Loc,
-      const IdentifierInfo *Name
-  );
-
-  /// Adds body-dependency for declaration DependentDecl.
-  /// E.g. for 'class C { void Foo() { global::A::D d; } };' it will add
-  /// dependency A::D, (Loc will be 'global::A', Name will be 'D'.
-  /// Note: "body-dependency" means that only method bodies of DependentDecl
-  /// uses it.
-  ///
-  /// \param DependentDecl declaration dependency is added for
-  /// \param Loc nested name specifier of dependency
-  /// \param Name dependency identifier.
-  void AddLevitationPackageBodyDependency(
-      const Decl* DependentDecl,
-      const NestedNameSpecifier& Loc,
-      const IdentifierInfo *Name
-  );
-
 public:
 
   /// Registers instantiation of package dependent declaration.
