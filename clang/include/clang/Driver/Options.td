@@ -1357,12 +1357,6 @@ def fno_implicit_modules :
   Group<f_Group>, Flags<[DriverOption, CC1Option]>;
 def fretain_comments_from_system_headers : Flag<["-"], "fretain-comments-from-system-headers">, Group<f_Group>, Flags<[CC1Option]>;
 
-def flevitation_mode : Flag <["-"], "flevitation-mode">, Group<f_Group>,
-  Flags<[CC1Option]>, HelpText<"Enables Levitation mode">;
-def flevitation_build_stage : Joined<["-"], "flevitation-build-stage=">,
-  Flags<[CC1Option]>,
-  HelpText<"Specify build stage for Levitation mode">, Values<"ast,obj">;
-
 def fmudflapth : Flag<["-"], "fmudflapth">, Group<f_Group>;
 def fmudflap : Flag<["-"], "fmudflap">, Group<f_Group>;
 def fnested_functions : Flag<["-"], "fnested-functions">, Group<f_Group>;

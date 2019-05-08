@@ -90,6 +90,11 @@ enum ActionKind {
   /// Only execute frontend initialization.
   InitOnly,
 
+  /// Levitation mode: Build AST action.
+  /// * Parses source code
+  /// * creates package dependent declaration and definition AST files.
+  LevitationBuildAST,
+
   /// Dump information about a module file.
   ModuleFileInfo,
 
@@ -436,6 +441,19 @@ public:
 
   /// Filename to write statistics to.
   std::string StatsFile;
+
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+
+  std::string LevitationDependenciesOutputFile;
+  std::string LevitationDependenciesInputFile;
+  std::string LevitationSourcesRootDir;
+  std::string LevitationSourceFileExtension;
+
+  // end of C++ Levitation Mode
+  //
+  //===--------------------------------------------------------------------===//
 
 public:
   FrontendOptions()

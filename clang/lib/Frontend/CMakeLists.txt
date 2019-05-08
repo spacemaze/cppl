@@ -25,6 +25,8 @@ add_clang_library(clangFrontend
   DependencyGraph.cpp
   DiagnosticRenderer.cpp
   FrontendAction.cpp
+  LevitationASTConsumers.cpp
+  LevitationFrontendActions.cpp
   FrontendActions.cpp
   FrontendOptions.cpp
   FrontendTiming.cpp

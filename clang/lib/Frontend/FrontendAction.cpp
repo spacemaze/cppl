@@ -836,7 +836,14 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
         goto failure;
       CI.setModuleManager(static_cast<ASTReader *>(FinalReader.get()));
       CI.getASTContext().setExternalSource(source);
-    } else if (CI.getLangOpts().Modules ||
+    }
+//    // TODO levitation:
+//    else if (!CI.getPreprocessorOpts().LevitationImportASTFiles.empty()) {
+//      LevitationCIExtension::createASTFilesExternalSource(
+//          CI.getPreprocessorOpts().LevitationImportASTFiles
+//      );
+//    }
+    else if (CI.getLangOpts().Modules ||
                !CI.getPreprocessorOpts().ImplicitPCHInclude.empty()) {
       // Use PCM or PCH.
       assert(hasPCHSupport() && "This action does not have PCH support!");

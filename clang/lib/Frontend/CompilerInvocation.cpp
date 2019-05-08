@@ -1594,6 +1594,10 @@ static bool parseTestModuleFileExtensionArg(StringRef Arg,
   return false;
 }
 
+static InputKind parseLevitationFrontend(FrontendOptions &Opts) {
+
+}
+
 static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
                                    DiagnosticsEngine &Diags,
                                    bool &IsHeaderFile) {
@@ -1645,6 +1649,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
       Opts.ProgramAction = frontend::GenerateHeaderModule; break;
     case OPT_emit_pch:
       Opts.ProgramAction = frontend::GeneratePCH; break;
+    case OPT_levitation_build_ast:
+      Opts.ProgramAction = frontend::LevitationBuildAST; break;
     case OPT_init_only:
       Opts.ProgramAction = frontend::InitOnly; break;
     case OPT_fsyntax_only:
@@ -1761,6 +1767,15 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
     = Args.getLastArgValue(OPT_foverride_record_layout_EQ);
   Opts.AuxTriple = Args.getLastArgValue(OPT_aux_triple);
   Opts.StatsFile = Args.getLastArgValue(OPT_stats_file);
+
+  Opts.LevitationDependenciesOutputFile =
+          Args.getLastArgValue(OPT_levitation_dependencies_output_file);
+  Opts.LevitationDependenciesOutputFile =
+          Args.getLastArgValue(OPT_levitation_dependencies_output_file);
+  Opts.LevitationSourcesRootDir =
+          Args.getLastArgValue(OPT_levitation_sources_root_dir);
+  Opts.LevitationSourceFileExtension =
+          Args.getLastArgValue(OPT_levitation_source_file_extension);
 
   if (const Arg *A = Args.getLastArg(OPT_arcmt_check,
                                      OPT_arcmt_modify,
@@ -2615,34 +2630,6 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     Args.hasArg(OPT_fmodules_search_all);
   Opts.ModulesErrorRecovery = !Args.hasArg(OPT_fno_modules_error_recovery);
   Opts.ImplicitModules = !Args.hasArg(OPT_fno_implicit_modules);
-  Opts.LevitationMode = Args.hasArg(OPT_flevitation_mode);
-
-  if (Opts.LevitationMode) {
-
-    // Get Levitation mode build stage
-
-    if (Arg *A = Args.getLastArg(OPT_flevitation_build_stage)) {
-
-    switch (llvm::StringSwitch<unsigned>(A->getValue())
-          .Case("ast", LangOptions::LBSK_BuildAST)
-          .Case("obj", LangOptions::LBSK_BuildObjectFile)
-          .Default(LangOptions::LBSK_None)) {
-        default:
-          Diags.Report(diag::err_fe_error_levitation_invalid_build_stage)
-                  << "-flevitation-build-stage=" << A->getValue();
-          break;
-        case LangOptions::LBSK_BuildAST:
-          Opts.setLevitationBuildStage(LangOptions::LBSK_BuildAST);
-          break;
-        case LangOptions::LBSK_BuildObjectFile:
-          Opts.setLevitationBuildStage(LangOptions::LBSK_BuildObjectFile);
-          break;
-        }
-    } else {
-      Diags.Report(diag::err_fe_error_levitation_missged_build_stage_parameter)
-              << "-flevitation-build-stage=<build-stage>";
-    }
-  }
   Opts.CharIsSigned = Opts.OpenCL || !Args.hasArg(OPT_fno_signed_char);
   Opts.WChar = Opts.CPlusPlus && !Args.hasArg(OPT_fno_wchar);
   Opts.Char8 = Args.hasFlag(OPT_fchar8__t, OPT_fno_char8__t, Opts.CPlusPlus2a);
@@ -3104,6 +3091,7 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::RunAnalysis:
   case frontend::TemplightDump:
   case frontend::MigrateSource:
+  case frontend::LevitationBuildAST:
     return false;
 
   case frontend::DumpCompilerOptions:
@@ -3123,6 +3111,8 @@ static void ParsePreprocessorArgs(PreprocessorOptions &Opts, ArgList &Args,
                                   DiagnosticsEngine &Diags,
                                   frontend::ActionKind Action) {
   Opts.ImplicitPCHInclude = Args.getLastArgValue(OPT_include_pch);
+  // TODO Levitation:
+  // Opts.LevitationImportASTFiles = Args.getAllArgValues(OPT_levitation_import_ast);
   Opts.PCHWithHdrStop = Args.hasArg(OPT_pch_through_hdrstop_create) ||
                         Args.hasArg(OPT_pch_through_hdrstop_use);
   Opts.PCHWithHdrStopCreate = Args.hasArg(OPT_pch_through_hdrstop_create);
@@ -3270,6 +3260,34 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
   }
 }
 
+static void parseLevitationBuildASTArgs(
+  LangOptions LangOpts,
+  const FrontendOptions &FrontendOpts,
+  DiagnosticsEngine &Diags
+) {
+
+  if (FrontendOpts.LevitationDependenciesOutputFile.empty()) {
+    Diags.Report(diag::err_fe_levitation_dependencies_output_file_missed)
+    << "-levitation-deps-output-file=";
+  }
+  if (FrontendOpts.LevitationDependenciesInputFile.empty()) {
+    Diags.Report(diag::err_fe_levitation_dependencies_input_file_no_need)
+    << "-levitation-deps-input-file"
+    << "'Build AST', triggered by -levitation_build_ast";
+  }
+  if (FrontendOpts.LevitationSourcesRootDir.empty()) {
+    Diags.Report(diag::err_fe_levitation_source_root_not_specified)
+    << "-levitation-sources-root-dir";
+  }
+  if (FrontendOpts.LevitationSourceFileExtension.empty()) {
+    Diags.Report(diag::err_fe_levitation_source_file_ext_not_specified)
+    << "-levitation-source-file-extension";
+  }
+
+  LangOpts.LevitationMode = 1;
+  LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildAST);
+}
+
 bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
                                         const char *const *ArgBegin,
                                         const char *const *ArgEnd,
@@ -3341,6 +3359,9 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
                   Res.getPreprocessorOpts(), Diags);
     if (Res.getFrontendOpts().ProgramAction == frontend::RewriteObjC)
       LangOpts.ObjCExceptions = 1;
+    else if (Res.getFrontendOpts().ProgramAction == frontend::LevitationBuildAST) {
+      parseLevitationBuildASTArgs(LangOpts, Res.getFrontendOpts(),  Diags);
+    }
     if (T.isOSDarwin() && DashX.isPreprocessed()) {
       // Supress the darwin-specific 'stdlibcxx-not-found' diagnostic for
       // preprocessed input as we don't expect it to be used with -std=libc++

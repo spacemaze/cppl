@@ -20,6 +20,7 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/FrontendPluginRegistry.h"
+#include "clang/Frontend/LevitationFrontendActions.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/FrontendTool/Utils.h"
 #include "clang/Rewrite/Frontend/FrontendActions.h"
@@ -69,7 +70,7 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
   case ModuleFileInfo:         return llvm::make_unique<DumpModuleInfoAction>();
   case VerifyPCH:              return llvm::make_unique<VerifyPCHAction>();
   case TemplightDump:          return llvm::make_unique<TemplightDumpAction>();
-
+  case LevitationBuildAST:     return llvm::make_unique<LevitationBuildASTAction>();
   case PluginAction: {
     for (FrontendPluginRegistry::iterator it =
            FrontendPluginRegistry::begin(), ie = FrontendPluginRegistry::end();
