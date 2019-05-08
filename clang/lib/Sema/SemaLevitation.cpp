@@ -25,39 +25,50 @@ using namespace clang;
 using namespace sema;
 
 //===--------------------------------------------------------------------===//
+// Helpers
+//
+
+template<typename T>
+using ReversedVectorItems = llvm::iterator_range<typename SmallVectorImpl<T>::reverse_iterator>;
+
+template<typename T>
+ReversedVectorItems<T> reverse(SmallVectorImpl<T>& Vector) {
+  typedef SmallVectorImpl<T> VectorTy;
+  return llvm::iterator_range<typename VectorTy::reverse_iterator>(Vector.rbegin(), Vector.rend());
+}
+
+//===--------------------------------------------------------------------===//
 // Dependency handling
 //
 // Group of methods below implements
 // package dependencies detection and handling.
 //
 
-struct PackageDependencyInfo {
-    const Decl* DependentDecl;
-    const NestedNameSpecifierLoc& Loc;
-    const IdentifierInfo *Name;
-    const StringRef FullFileName;
-};
-
-/// Adds dependency for declaration DependentDecl.
-/// E.g. for 'class C { global::A::D d; };' it will add
-/// dependency A::D, (Loc will be 'global::A', Name will be 'D'.
-///
-/// \param DependentDecl declaration dependency is added for
-/// \param Loc nested name specifier of dependency
-/// \param Name dependency identifier.
-void addLevitationPackageDeclarationDependency(const PackageDependencyInfo &Dep) {
+void Sema::LevitationDepenciesMap::mergeDependency(clang::Sema::LevitationPackageDependency &&Dep) {
+  auto Res = try_emplace(Dep.getComponents(), std::move(Dep));
+  if (!Res.second)
+    // Note: we use Dep after std::move(Dep) only in case it wasn't really moved
+    // by try_emplace
+    Res.first->second.addUse(Dep.getSingleUse());
 }
 
-/// Adds body-dependency for declaration DependentDecl.
-/// E.g. for 'class C { void Foo() { global::A::D d; } };' it will add
-/// dependency A::D, (Loc will be 'global::A', Name will be 'D'.
-/// Note: "body-dependency" means that only method bodies of DependentDecl
-/// uses it.
-///
-/// \param DependentDecl declaration dependency is added for
-/// \param Loc nested name specifier of dependency
-/// \param Name dependency identifier.
-void addLevitationPackageBodyDependency(const PackageDependencyInfo &Dep) {
+void Sema::LevitationPackageDependency::print(llvm::raw_ostream &out) const {
+  size_t numComponents = Components.size();
+
+  if (!numComponents)
+    return;
+
+  if (numComponents == 1) {
+    out << Components[0];
+    return;
+  }
+
+  StringRef Separator = "::";
+
+  for (size_t i = 0, e = numComponents-1; i != e; ++i) {
+    out << Components[i] << Separator;
+  }
+  out << Components[numComponents-1];
 }
 
 static bool isLevitationGlobal(const NestedNameSpecifier *NNS) {
@@ -138,151 +149,102 @@ static LevitationPackageOutermostDecls getOutermostNamespaceAndTopLevelNamedDecl
   return {NS, ND, FD};
 }
 
-StringRef getMostRightComponentName(NestedNameSpecifier *NNS) {
+typedef std::pair<StringRef, SourceRange> ComponentLoc;
+
+StringRef getMostRightComponentName(const NestedNameSpecifier *NNS) {
+
+  // TODO Levitation: check and remove
+  NNS->dump();
 
   switch (NNS->getKind()) {
-  case NestedNameSpecifier::Identifier:
-    return NNS->getAsIdentifier()->getName();
+    case NestedNameSpecifier::Identifier:
+      return NNS->getAsIdentifier()->getName();
 
-  case NestedNameSpecifier::Namespace:
-    if (NNS->getAsNamespace()->isAnonymousNamespace())
-      llvm_unreachable("Anonymous namespace? As a dependency prefix?");
-    return NNS->getAsNamespace()->getName();
+    case NestedNameSpecifier::Namespace:
+      if (NNS->getAsNamespace()->isAnonymousNamespace())
+        llvm_unreachable("Anonymous namespace? As a dependency prefix?");
+      return NNS->getAsNamespace()->getName();
 
-  case NestedNameSpecifier::NamespaceAlias:
-    return NNS->getAsNamespaceAlias()->getName();
+    case NestedNameSpecifier::NamespaceAlias:
+      return NNS->getAsNamespaceAlias()->getName();
 
-  case NestedNameSpecifier::Global:
-  llvm_unreachable("Global NNS can't be a dependency prefix."
-                   " 'global' keyword should be used instead.");
-  break;
+    case NestedNameSpecifier::Global:
+      llvm_unreachable("Global NNS can't be a dependency prefix."
+                       " 'global' keyword should be used instead.");
 
-  case NestedNameSpecifier::Super:
-    llvm_unreachable("__super can't be a dependency prefix");
-    break;
+    case NestedNameSpecifier::Super:
+      llvm_unreachable("__super can't be a dependency prefix");
 
-  case NestedNameSpecifier::TypeSpecWithTemplate:
-    // Fall through to print the type.
-    LLVM_FALLTHROUGH;
+    case NestedNameSpecifier::TypeSpecWithTemplate:
+      // Fall through to print the type.
+      LLVM_FALLTHROUGH;
 
-  case NestedNameSpecifier::TypeSpec: {
-    const auto *Record =
-            dyn_cast_or_null<ClassTemplateSpecializationDecl>(NNS->getAsRecordDecl());
+    case NestedNameSpecifier::TypeSpec: {
+      const auto *Record =
+              dyn_cast_or_null<ClassTemplateSpecializationDecl>(NNS->getAsRecordDecl());
 
-    if (Record)
-        // Print the type trait with resolved template parameters.
-        return Record->getName();
+      if (Record)
+          // Print the type trait with resolved template parameters.
+          return Record->getName();
 
-    // TODO levitation
+      // TODO levitation
 
-    llvm_unreachable("TODO");
-    break;
-//    const Type *T = getAsType();
-//
-//    // Nested-name-specifiers are intended to contain minimally-qualified
-//    // types. An actual ElaboratedType will not occur, since we'll store
-//    // just the type that is referred to in the nested-name-specifier (e.g.,
-//    // a TypedefType, TagType, etc.). However, when we are dealing with
-//    // dependent template-id types (e.g., Outer<T>::template Inner<U>),
-//    // the type requires its own nested-name-specifier for uniqueness, so we
-//    // suppress that nested-name-specifier during printing.
-//    assert(!isa<ElaboratedType>(T) &&
-//           "Elaborated type in nested-name-specifier");
-//    if (const TemplateSpecializationType *SpecType
-//          = dyn_cast<TemplateSpecializationType>(T)) {
-//      // Print the template name without its corresponding
-//      // nested-name-specifier.
-//      SpecType->getTemplateName().print(OS, InnerPolicy, true);
-//
-//      // Print the template argument list.
-//      printTemplateArgumentList(OS, SpecType->template_arguments(),
-//                                InnerPolicy);
-//    } else {
-//      // Print the type normally
-//      QualType(T, 0).print(OS, InnerPolicy);
-//    }
-//    break;
-  }
+      llvm_unreachable("TODO");
+      break;
+  //    const Type *T = getAsType();
+  //
+  //    // Nested-name-specifiers are intended to contain minimally-qualified
+  //    // types. An actual ElaboratedType will not occur, since we'll store
+  //    // just the type that is referred to in the nested-name-specifier (e.g.,
+  //    // a TypedefType, TagType, etc.). However, when we are dealing with
+  //    // dependent template-id types (e.g., Outer<T>::template Inner<U>),
+  //    // the type requires its own nested-name-specifier for uniqueness, so we
+  //    // suppress that nested-name-specifier during printing.
+  //    assert(!isa<ElaboratedType>(T) &&
+  //           "Elaborated type in nested-name-specifier");
+  //    if (const TemplateSpecializationType *SpecType
+  //          = dyn_cast<TemplateSpecializationType>(T)) {
+  //      // Print the template name without its corresponding
+  //      // nested-name-specifier.
+  //      SpecType->getTemplateName().print(OS, InnerPolicy, true);
+  //
+  //      // Print the template argument list.
+  //      printTemplateArgumentList(OS, SpecType->template_arguments(),
+  //                                InnerPolicy);
+  //    } else {
+  //      // Print the type normally
+  //      QualType(T, 0).print(OS, InnerPolicy);
+  //    }
+  //    break;
+    }
   }
 }
 
-bool isDirectory(const SmallVectorImpl<char> &Dir) {
-  // TODO levitation
-  llvm_unreachable("TODO");
-  return true;
-}
-
-void diagMissingDependency(
-    const NestedNameSpecifierLoc &Loc,
-    const IdentifierInfo *Name) {
-  // TODO levitation
-  llvm_unreachable("TODO");
-}
-
-bool isFile(
-    const SmallVectorImpl<char> &BaseDir,
-    StringRef FileName
-) {
-  // TODO levitation
-  llvm_unreachable("TODO");
-  return false;
-}
-
-std::string getFullFileName(
-    const SmallVectorImpl<char> &BaseDir,
-    StringRef FileName
-) {
-  if (!isFile(BaseDir, FileName))
-    return std::string();
-  // TODO levitation
-  llvm_unreachable("TODO");
-  return std::string();
-}
-
-// FIXME: We should move this to stage where we have an access
-//        to FileManager.
-std::string computePath(
+Sema::LevitationPackageDependency computeAutoDependency(
+    const NamedDecl *ND,
     const NestedNameSpecifierLoc &Loc,
     const IdentifierInfo *Name) {
 
   SmallVector<StringRef, 8> NNSComponentsRev;
 
-  for (NestedNameSpecifier *Cur = Loc.getNestedNameSpecifier();
-       Cur; Cur = Cur->getPrefix()) {
-    NNSComponentsRev.push_back(getMostRightComponentName(Cur));
+  for (NestedNameSpecifierLoc Cur = Loc; Cur; Cur = Cur.getPrefix()) {
+    auto *NNS = Cur.getNestedNameSpecifier();
+    NNSComponentsRev.push_back(getMostRightComponentName(NNS));
   }
 
-  SmallVector<char, 256> Base;
-  SmallVector<char, 256> NewBase;
-  StringRef FileName;
+  assert(
+    NNSComponentsRev.size() &&
+    "Dependency components vector should not be empty."
+  );
 
-  for (auto ComponentIt = NNSComponentsRev.rbegin(), e = NNSComponentsRev.rend();
-       ComponentIt != e; ++ComponentIt) {
-
-    auto Component = *ComponentIt;
-
-    auto AppendStart = NewBase.size();
-
-    llvm::sys::path::append(NewBase, Component);
-
-    auto AppendEnd = NewBase.size();
-
-    if (isDirectory(NewBase)) {
-      Base.append(&NewBase[AppendStart], &NewBase[AppendEnd]);
-    } else {
-      FileName = Component;
-      break;
-    }
+  Sema::LevitationPackageDependencyBuilder DependencyBuilder;
+  for (const auto &Component : reverse(NNSComponentsRev)) {
+    DependencyBuilder.addComponent(Component);
   }
 
-  if (Base.empty() || FileName.empty())
-    diagMissingDependency(Loc, Name);
+  DependencyBuilder.addUse(ND, Loc.getSourceRange());
 
-  auto FullFileName = getFullFileName(Base, FileName);
-  if (FullFileName.empty())
-    diagMissingDependency(Loc, Name);
-
-  return FullFileName;
+  return std::move(DependencyBuilder.getDependency());
 }
 
 bool Sema::HandleLevitationPackageDependency(
@@ -329,15 +291,12 @@ bool Sema::HandleLevitationPackageDependency(
           true; // TODO levitation: modify GetGVALinkageForFunction and then use this:
                 //   Context.GetGVALinkageForFunction(OutermostF) == GVA_StrongExternal;
 
-  std::string FilePath = computePath(Loc, Name);
-  if (FilePath.empty())
-    return false;
+  auto Dependency = computeAutoDependency(TD, Loc, Name);
 
-// TODO Levitation
-//  if (IsBodyDependency)
-//    addLevitationPackageBodyDependency({TD, Loc, Name, FilePath});
-//  else
-//    addLevitationPackageDeclarationDependency({TD, Loc, Name, FilePath});
+  if (IsBodyDependency)
+    LevitationDefinitionDependencies.mergeDependency(std::move(Dependency));
+  else
+    LevitationDeclarationDependencies.mergeDependency(std::move(Dependency));
 
   auto &out = llvm::errs();
   TD->printQualifiedName(out);
@@ -589,7 +548,7 @@ public:
   }
 
   Decl *VisitCXXRecordDecl(CXXRecordDecl *PackageDependent) {
-    visitCXXRecordDeclInternal(PackageDependent);
+    return visitCXXRecordDeclInternal(PackageDependent);
   }
 
   Decl *visitCXXRecordDeclInternal(
