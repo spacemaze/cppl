@@ -955,7 +955,7 @@ void DeclPrinter::VisitCXXRecordDecl(CXXRecordDecl *D) {
   if (D->getIdentifier()) {
     Out << ' ';
 
-    if (auto *Q = D->getQualifier())
+    if (const NestedNameSpecifier *Q = D->getQualifier())
       Q->print(Out, Policy);
 
     Out << *D;

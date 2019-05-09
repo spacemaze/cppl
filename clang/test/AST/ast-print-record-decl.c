@@ -287,21 +287,23 @@ KW DeclGroupInMemberList {
   // PRINT-NEXT: };
 };
 
+// A tag decl group in the tag decl's own member list is exercised in
+// defSelfRef above.
+
 #ifdef __cplusplus
 // PRINT-CXX-LABEL: outOfRecordDef
 void outOfRecordDef () {
+
   // PRINT-CXX-NEXT: struct DeclEnclosing {
+  // PRINT-CXX-NEXT: struct DeclMember;
+  // PRINT-CXX-NEXT: };
   struct DeclEnclosing {
-    // PRINT-CXX-NEXT: struct DeclMember;
     struct DeclMember;
-  // PRINT-CXX-NEXT: };
   };
+
   // PRINT-CXX-NEXT: struct DeclEnclosing::DeclMember {
-  struct DeclEnclosing::DeclMember {
   // PRINT-CXX-NEXT: };
+  struct DeclEnclosing::DeclMember {
   };
 }
 #endif
-
-// A tag decl group in the tag decl's own member list is exercised in
-// defSelfRef above.
