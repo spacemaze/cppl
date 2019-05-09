@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/Sema/Ownership.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
@@ -3390,10 +3391,10 @@ bool LocalTypedefNameReferencer::VisitRecordType(const RecordType *RT) {
 }
 
 TypeLoc Sema::getReturnTypeLoc(FunctionDecl *FD) const {
-  TypeLoc TL = FD->getTypeSourceInfo()->getTypeLoc().IgnoreParens();
-  while (auto ATL = TL.getAs<AttributedTypeLoc>())
-    TL = ATL.getModifiedLoc().IgnoreParens();
-  return TL.castAs<FunctionProtoTypeLoc>().getReturnLoc();
+  return FD->getTypeSourceInfo()
+      ->getTypeLoc()
+      .getAsAdjusted<FunctionProtoTypeLoc>()
+      .getReturnLoc();
 }
 
 /// Deduce the return type for a function from a returned expression, per
@@ -3503,7 +3504,12 @@ bool Sema::DeduceFunctionTypeFromReturnExpr(FunctionDecl *FD,
 StmtResult
 Sema::ActOnReturnStmt(SourceLocation ReturnLoc, Expr *RetValExp,
                       Scope *CurScope) {
-  StmtResult R = BuildReturnStmt(ReturnLoc, RetValExp);
+  // Correct typos, in case the containing function returns 'auto' and
+  // RetValExp should determine the deduced type.
+  ExprResult RetVal = CorrectDelayedTyposInExpr(RetValExp);
+  if (RetVal.isInvalid())
+    return StmtError();
+  StmtResult R = BuildReturnStmt(ReturnLoc, RetVal.get());
   if (R.isInvalid() || ExprEvalContexts.back().Context ==
                            ExpressionEvaluationContext::DiscardedStatement)
     return R;
