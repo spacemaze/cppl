@@ -37,6 +37,7 @@
 #include "clang/Basic/Specifiers.h"
 #include "clang/Basic/TemplateKinds.h"
 #include "clang/Basic/TypeTraits.h"
+#include "clang/Levitation/Dependencies.h"
 #include "clang/Sema/AnalysisBasedWarnings.h"
 #include "clang/Sema/CleanupInfo.h"
 #include "clang/Sema/DeclSpec.h"
@@ -11110,112 +11111,9 @@ private:
 
 public:
 
-  // TODO Levitation: Consider moving it into separate file.
-  /// Implements package dependency metadata
-  typedef ArrayRef<StringRef> DependencyComponentsArrRef;
-  typedef SmallVector<StringRef, 16> DependencyComponentsVector;
-  typedef SmallVector<char, 256> DependencyPath;
-
-  struct LevitationPackageDependencyUse {
-      const NamedDecl *DependentNamedDecl;
-      SourceRange Location;
-  };
-  typedef SmallVector<LevitationPackageDependencyUse, 8> DependencyUsesVector;
-
-  // FIXME Levitation: per standard class predeclaration is not necessary
-  //   if you want to friend it.
-  class LevitationPackageDependencyBuilder;
-  class LevitationPackageDependency {
-  protected:
-    DependencyUsesVector Uses;
-    DependencyComponentsVector Components;
-
-    /// If dependency is validated stores path to file
-    DependencyPath Path;
-
-    LevitationPackageDependency() {};
-
-  public:
-    friend class LevitationPackageDependencyBuilder;
-
-    LevitationPackageDependency(DependencyComponentsVector &&components)
-    : Components(components) {}
-
-    LevitationPackageDependency(LevitationPackageDependency &&dying)
-    : Uses(std::move(dying.Uses)), Components(std::move(dying.Components)) {}
-
-    void addUse(const NamedDecl *ND, const SourceRange& Loc) {
-      Uses.push_back({ND, Loc});
-    }
-
-    void addUse(const LevitationPackageDependencyUse &Use) {
-      Uses.push_back(Use);
-    }
-
-    void addUses(const DependencyUsesVector& src) {
-      Uses.append(src.begin(), src.end());
-    }
-
-    const DependencyUsesVector &getUses() const {
-      return Uses;
-    }
-
-    const LevitationPackageDependencyUse& getFirstUse() const {
-      assert (Uses.size() && "Uses collection expected to have at least one use");
-      return Uses.front();
-    }
-
-    const LevitationPackageDependencyUse& getSingleUse() const {
-      if (Uses.size() == 1)
-        return getFirstUse();
-      llvm_unreachable("Uses contains more that one use.");
-    }
-
-    DependencyComponentsArrRef getComponents() const {
-      return Components;
-    }
-
-    void setPath(DependencyPath &&path) {
-      Path.swap(path);
-    }
-
-    StringRef getPath() const {
-      return StringRef(Path.begin(), Path.size());
-    }
-
-    void print(llvm::raw_ostream &out) const;
-  };
-
-  class LevitationPackageDependencyBuilder {
-    LevitationPackageDependency Dependency;
-  public:
-    void addComponent(const StringRef& Component) {
-      Dependency.Components.push_back(Component);
-    }
-
-    void addUse(const NamedDecl *ND, const SourceRange& Loc) {
-      Dependency.addUse(ND, Loc);
-    }
-
-    LevitationPackageDependency& getDependency() {
-      return Dependency;
-    }
-  };
-
-  /// Dependencies map.
-  /// E.g. for 'class C { global::A::D d; };' it will add
-  /// dependency "A::D".
-  class LevitationDepenciesMap : public llvm::DenseMap<
-          DependencyComponentsArrRef, LevitationPackageDependency> {
-  public:
-      // Note: we rely on implicitly defined move constructor here.
-      void mergeDependency(LevitationPackageDependency &&Dep);
-  };
-
 // Levitation Dependencies
 
 // TODO Levitation:
-//  public:
 //
 //    enum LevitationDependenciesModeEnum {
 //        LevitationDepenciesAuto,
@@ -11234,10 +11132,10 @@ private:
   /// If dependency is met only in function body whith external
   /// linkage, then this is not a declaration dependency. It would be
   /// a definition dependency.
-  LevitationDepenciesMap LevitationDeclarationDependencies;
+  levitation::DepenciesMap LevitationDeclarationDependencies;
 
   /// Set of dependencies definition depends on.
-  LevitationDepenciesMap LevitationDefinitionDependencies;
+  levitation::DepenciesMap LevitationDefinitionDependencies;
 
 // TODO Levitation:
 // Don't forget to initialize in constructor.
@@ -11245,11 +11143,11 @@ private:
 
 public:
 
-  const LevitationDepenciesMap &getLevitationDeclarationDependencies() {
+  const levitation::DepenciesMap &getLevitationDeclarationDependencies() {
     return LevitationDeclarationDependencies;
   }
 
-  const LevitationDepenciesMap &getLevitationDefinitionDependencies() {
+  const levitation::DepenciesMap &getLevitationDefinitionDependencies() {
     return LevitationDefinitionDependencies;
   }
 

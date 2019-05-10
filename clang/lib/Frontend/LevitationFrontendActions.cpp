@@ -39,15 +39,22 @@ std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
 ) {
   std::vector<std::unique_ptr<ASTConsumer>> Consumers;
 
-  auto DependenciesProcessor = CreateDependenciesASTProcessor(CI);
-  auto ASTFileCreator = GeneratePCHAction::CreateASTConsumer(CI, InFile);
+  auto DependenciesProcessor = CreateDependenciesASTProcessor(CI, InFile);
+  auto ASTDefinitionCreator = GeneratePCHAction::CreateASTConsumer(CI, InFile);
+
+  // TODO Levitation: to be implemented
+  // auto ASTDeclarationCreator = CreateASTDeclGenerator(CI, InFile);
+
 
   assert(DependenciesProcessor && "Failed to create dependencies processor?");
-  if (!ASTFileCreator)
+  if (!ASTDefinitionCreator)
     return nullptr;
 
   Consumers.push_back(std::move(DependenciesProcessor));
-  Consumers.push_back(std::move(ASTFileCreator));
+  Consumers.push_back(std::move(ASTDefinitionCreator));
+
+  // TODO Levitation: to be implemented
+  // Consumers.push_back(std::move(ASTDeclarationCreator));
 
   return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
 }

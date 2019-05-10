@@ -279,17 +279,11 @@ def warn_profile_data_unprofiled : Warning<
   "no profile data available for file \"%0\"">,
   InGroup<ProfileInstrUnprofiled>;
 
-def err_fe_levitation_dependencies_output_file_missed : Error<
-  "Levitation dependencies output file name was not provided: %0">, DefaultFatal;
+def err_fe_levitation_missed_option : Error<
+  "C++ Levitation misses option '%0' for stage ''%1'">, DefaultFatal;
 
-def err_fe_levitation_dependencies_input_file_no_need : Error<
-  "Wrong levitation option %0 for stage %1">, DefaultFatal;
-
-def err_fe_levitation_source_root_not_specified : Error<
-  "Levitation root source directory was not specified: %0">, DefaultFatal;
-
-def err_fe_levitation_source_file_ext_not_specified : Error<
-  "Levitation source file extension was not specified: %0">, DefaultFatal;
+def err_fe_levitation_wrong_option : Error<
+  "Wrong C++ Levitation option '%0', stage '%1' doesn't require it.">, DefaultFatal;
 
 def err_levitation_dependency_missed : Error<
   "Missed C++ Levitation dependency (source file not found): %0">;

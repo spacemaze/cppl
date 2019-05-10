@@ -18,7 +18,6 @@
 #include "clang/Basic/LangOptions.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
-#include "llvm/Support/Path.h"
 
 #include <iterator>
 using namespace clang;
@@ -35,40 +34,6 @@ template<typename T>
 ReversedVectorItems<T> reverse(SmallVectorImpl<T>& Vector) {
   typedef SmallVectorImpl<T> VectorTy;
   return llvm::iterator_range<typename VectorTy::reverse_iterator>(Vector.rbegin(), Vector.rend());
-}
-
-//===--------------------------------------------------------------------===//
-// Dependency handling
-//
-// Group of methods below implements
-// package dependencies detection and handling.
-//
-
-void Sema::LevitationDepenciesMap::mergeDependency(clang::Sema::LevitationPackageDependency &&Dep) {
-  auto Res = try_emplace(Dep.getComponents(), std::move(Dep));
-  if (!Res.second)
-    // Note: we use Dep after std::move(Dep) only in case it wasn't really moved
-    // by try_emplace
-    Res.first->second.addUse(Dep.getSingleUse());
-}
-
-void Sema::LevitationPackageDependency::print(llvm::raw_ostream &out) const {
-  size_t numComponents = Components.size();
-
-  if (!numComponents)
-    return;
-
-  if (numComponents == 1) {
-    out << Components[0];
-    return;
-  }
-
-  StringRef Separator = "::";
-
-  for (size_t i = 0, e = numComponents-1; i != e; ++i) {
-    out << Components[i] << Separator;
-  }
-  out << Components[numComponents-1];
 }
 
 static bool isLevitationGlobal(const NestedNameSpecifier *NNS) {
@@ -151,22 +116,31 @@ static LevitationPackageOutermostDecls getOutermostNamespaceAndTopLevelNamedDecl
 
 typedef std::pair<StringRef, SourceRange> ComponentLoc;
 
-StringRef getMostRightComponentName(const NestedNameSpecifier *NNS) {
+void getDependencyComponents(
+        SmallVectorImpl<StringRef> &Components,
+        const NestedNameSpecifier *NNS) {
 
-  // TODO Levitation: check and remove
-  NNS->dump();
+  if (auto *PrefixNNS = NNS->getPrefix()) {
+    getDependencyComponents(Components, PrefixNNS);
+  }
 
   switch (NNS->getKind()) {
     case NestedNameSpecifier::Identifier:
-      return NNS->getAsIdentifier()->getName();
+      // Skip 'global' keyword
+      // TODO Levitation: add 'global' keyword.
+      if (NNS->getAsIdentifier()->getName() != "global")
+        Components.push_back(NNS->getAsIdentifier()->getName());
+      return;
 
     case NestedNameSpecifier::Namespace:
       if (NNS->getAsNamespace()->isAnonymousNamespace())
         llvm_unreachable("Anonymous namespace? As a dependency prefix?");
-      return NNS->getAsNamespace()->getName();
+      Components.push_back(NNS->getAsNamespace()->getName());
+      return;
 
     case NestedNameSpecifier::NamespaceAlias:
-      return NNS->getAsNamespaceAlias()->getName();
+      Components.push_back(NNS->getAsNamespaceAlias()->getName());
+      return;
 
     case NestedNameSpecifier::Global:
       llvm_unreachable("Global NNS can't be a dependency prefix."
@@ -180,73 +154,68 @@ StringRef getMostRightComponentName(const NestedNameSpecifier *NNS) {
       LLVM_FALLTHROUGH;
 
     case NestedNameSpecifier::TypeSpec: {
-      const auto *Record =
-              dyn_cast_or_null<ClassTemplateSpecializationDecl>(NNS->getAsRecordDecl());
+      const Type *T = NNS->getAsType();
+      if (const auto *TST = dyn_cast<DependentTemplateSpecializationType>(T)) {
+        Components.push_back(TST->getIdentifier()->getName());
+        return;
+      }
 
-      if (Record)
-          // Print the type trait with resolved template parameters.
-          return Record->getName();
-
-      // TODO levitation
-
-      llvm_unreachable("TODO");
-      break;
-  //    const Type *T = getAsType();
-  //
-  //    // Nested-name-specifiers are intended to contain minimally-qualified
-  //    // types. An actual ElaboratedType will not occur, since we'll store
-  //    // just the type that is referred to in the nested-name-specifier (e.g.,
-  //    // a TypedefType, TagType, etc.). However, when we are dealing with
-  //    // dependent template-id types (e.g., Outer<T>::template Inner<U>),
-  //    // the type requires its own nested-name-specifier for uniqueness, so we
-  //    // suppress that nested-name-specifier during printing.
-  //    assert(!isa<ElaboratedType>(T) &&
-  //           "Elaborated type in nested-name-specifier");
-  //    if (const TemplateSpecializationType *SpecType
-  //          = dyn_cast<TemplateSpecializationType>(T)) {
-  //      // Print the template name without its corresponding
-  //      // nested-name-specifier.
-  //      SpecType->getTemplateName().print(OS, InnerPolicy, true);
-  //
-  //      // Print the template argument list.
-  //      printTemplateArgumentList(OS, SpecType->template_arguments(),
-  //                                InnerPolicy);
-  //    } else {
-  //      // Print the type normally
-  //      QualType(T, 0).print(OS, InnerPolicy);
-  //    }
-  //    break;
+      llvm_unreachable("Rest of types are not supported by dependency components resolver");
     }
   }
 }
 
-Sema::LevitationPackageDependency computeAutoDependency(
-    const NamedDecl *ND,
+levitation::PackageDependency computeAutoDependency(
+    const NamedDecl *DependentDeclaration,
     const NestedNameSpecifierLoc &Loc,
     const IdentifierInfo *Name) {
 
-  SmallVector<StringRef, 8> NNSComponentsRev;
+  SmallVector<StringRef, 8> NNSComponents;
+  getDependencyComponents(NNSComponents, Loc.getNestedNameSpecifier());
+  NNSComponents.push_back(Name->getName());
 
-  for (NestedNameSpecifierLoc Cur = Loc; Cur; Cur = Cur.getPrefix()) {
-    auto *NNS = Cur.getNestedNameSpecifier();
-    NNSComponentsRev.push_back(getMostRightComponentName(NNS));
-  }
-
-  assert(
-    NNSComponentsRev.size() &&
-    "Dependency components vector should not be empty."
-  );
-
-  Sema::LevitationPackageDependencyBuilder DependencyBuilder;
-  for (const auto &Component : reverse(NNSComponentsRev)) {
+  levitation::PackageDependencyBuilder DependencyBuilder;
+  for (const auto &Component : NNSComponents) {
     DependencyBuilder.addComponent(Component);
   }
 
-  DependencyBuilder.addUse(ND, Loc.getSourceRange());
+  DependencyBuilder.addUse(DependentDeclaration, Loc.getSourceRange());
 
   return std::move(DependencyBuilder.getDependency());
 }
 
+void dumpDependency(
+    const SourceManager &SourceMgr,
+    const NamedDecl *DependentDeclaration,
+    const FunctionDecl *DependentFunction,
+    const levitation::PackageDependency &Dependency,
+    bool IsBuildingSpecification
+) {
+  auto &out = llvm::errs();
+  DependentDeclaration->printQualifiedName(out);
+  out << " ";
+  DependentDeclaration->getLocation().print(out, SourceMgr);
+  out << " depends on ";
+  Dependency.print(out);
+  out << ",";
+
+  Dependency.getUses().back().Location.print(out, SourceMgr);
+
+  if (DependentFunction) {
+    out << " [definition only, for ";
+    DependentFunction->printQualifiedName(out);
+    out << "]";
+  }
+
+  if (IsBuildingSpecification)
+    out << " [through its template specification] ";
+
+  out << "\n";
+}
+
+// TODO Levitation: provide this method with SourceRange.
+//   Easy to get it when you have a DeclarationNameInfo,
+//   and didn't manage to get it during template instantiation stage (rebuild).
 bool Sema::HandleLevitationPackageDependency(
       const NestedNameSpecifierLoc &Loc,
       const IdentifierInfo *Name
@@ -293,31 +262,22 @@ bool Sema::HandleLevitationPackageDependency(
 
   auto Dependency = computeAutoDependency(TD, Loc, Name);
 
+  // TODO Levitation: to be implemented as a FrontendOption
+  bool DumpDependency = true;
+  if (DumpDependency) {
+    dumpDependency(
+        getSourceManager(),
+        TD,
+        OutermostF,
+        Dependency,
+        IsBuildingSpecification
+    );
+  }
+
   if (IsBodyDependency)
     LevitationDefinitionDependencies.mergeDependency(std::move(Dependency));
   else
     LevitationDeclarationDependencies.mergeDependency(std::move(Dependency));
-
-  auto &out = llvm::errs();
-  TD->printQualifiedName(out);
-  out << " ";
-  TD->getLocation().print(out, SourceMgr);
-  out << " depends on ";
-  Loc.getNestedNameSpecifier()->dump(out);
-  out << ":";
-  out << Name->getName() << ", ";
-  Loc.getLocalBeginLoc().print(out, SourceMgr);
-
-  if (IsBodyDependency) {
-    out << " [definition only, for ";
-    OutermostF->printQualifiedName(out);
-    out << "]";
-  }
-
-  if (IsBuildingSpecification)
-    out << " [through its template specification] ";
-
-  out << "\n";
 
   return true;
 }

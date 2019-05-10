@@ -23,45 +23,21 @@
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Frontend/CompilerInstance.h"
+#include "clang/Levitation/Dependencies.h"
+#include "clang/Levitation/File.h"
+#include "clang/Levitation/Serialization.h"
 #include "llvm/Bitcode/BitstreamWriter.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
+using namespace clang::levitation;
 
 //===----------------------------------------------------------------------===//
 /// ASTPrinter - Pretty-printer and dumper of ASTs
 
 namespace {
-
-  class ValidatedDependenciesMap : public Sema::LevitationDepenciesMap {
-    bool HasMissingDependencies = false;
-  public:
-    void setHasMissingDependencies() { HasMissingDependencies = true; }
-    bool hasMissingDependencies() { return HasMissingDependencies; }
-  };
-
-  struct ValidatedDependencies {
-    ValidatedDependenciesMap DeclarationDependencies;
-    ValidatedDependenciesMap DefinitinoDependencies;
-    bool hasMissingDependencies() {
-      return DeclarationDependencies.hasMissingDependencies() ||
-             DefinitinoDependencies.hasMissingDependencies();
-    }
-  };
-
-  inline const DiagnosticBuilder &operator<<(
-      const DiagnosticBuilder &DB,
-      const Sema::LevitationPackageDependency &V
-  ) {
-    std::string str;
-    llvm::raw_string_ostream strm(str);
-    V.print(strm);
-    DB.AddString(str);
-    return DB;
-  }
-
 
   class DependenciesValidator {
       StringRef SourcesRoot;
@@ -80,7 +56,7 @@ namespace {
         Diag(diag)
     {}
 
-    ValidatedDependenciesMap validate(const Sema::LevitationDepenciesMap& Dependencies) {
+    ValidatedDependenciesMap validate(const DepenciesMap& Dependencies) {
       ValidatedDependenciesMap ValidatedDependencies;
       for (const auto &Dep : Dependencies) {
         validate(ValidatedDependencies, Dep.second);
@@ -91,13 +67,13 @@ namespace {
 
     void validate(
             ValidatedDependenciesMap &Map,
-            const Sema::LevitationPackageDependency &Dep
+            const PackageDependency &Dep
     ) {
-      Sema::DependencyPath Path;
+      DependencyPath Path;
 
       Path.append(SourcesRoot.begin(), SourcesRoot.end());
 
-      Sema::DependencyComponentsVector ValidatedComponents;
+      DependencyComponentsVector ValidatedComponents;
 
       auto UnvalidatedComponents = Dep.getComponents();
 
@@ -109,7 +85,7 @@ namespace {
         return;
       }
 
-      Sema::LevitationPackageDependency Validated(std::move(ValidatedComponents));
+      PackageDependency Validated(std::move(ValidatedComponents));
       Validated.addUses(Dep.getUses());
       Validated.setPath(std::move(Path));
 
@@ -117,9 +93,9 @@ namespace {
     }
 
     bool buildPath(
-        Sema::DependencyPath &Path,
-        Sema::DependencyComponentsVector &ValidatedComponents,
-        Sema::DependencyComponentsArrRef &UnvalidatedComponents
+        DependencyPath &Path,
+        DependencyComponentsVector &ValidatedComponents,
+        DependencyComponentsArrRef &UnvalidatedComponents
     ) {
       bool Valid = false;
       for (size_t i = 0, e = UnvalidatedComponents.size(); i != e; ++i) {
@@ -150,100 +126,22 @@ namespace {
       return (bool)FileMgr->getFile(StringRef(FName.begin(), FName.size()));
     }
 
-    void diagMissingDependency(const Sema::LevitationPackageDependency &Dep) {
-      Diag.Report(diag::err_levitation_dependency_missed)
-      << Dep << Dep.getFirstUse().Location;
-    }
-  };
-
-  class DependenciesSerializer {
-  public:
-      virtual ~DependenciesSerializer() = default;
-      virtual void serialize(const ValidatedDependencies& Deps) {}
-  };
-
-  class DependenciesBitstreamSerializer : public DependenciesSerializer {
-      // TODO Levitation: may be in future introduce LevitationMetadataWriter.
-      llvm::raw_ostream &OutputStream;
-  public:
-      DependenciesBitstreamSerializer(llvm::raw_ostream &OS)
-      : OutputStream(OS) {}
-
-      void serialize(const ValidatedDependencies &Deps) override {
-        // TODO Levitation
-        DependenciesSerializer::serialize(Deps);
-      }
-  };
-
-  class DependenciesFile {
-  public:
-    enum StatusEnum {
-      Good,
-      HasStreamErrors,
-      FiledToRename
-    };
-
-  private:
-    StringRef TargetFileName;
-    StringRef TempPath;
-    std::unique_ptr<llvm::raw_fd_ostream> OutputStream;
-    StatusEnum Status;
-  public:
-    DependenciesFile(StringRef targetFileName)
-      : TargetFileName(targetFileName), Status(Good) {}
-
-    // TODO Levitation: we could introduce some generic template,
-    //   something like scope_exit, but with ability to convert it to bool.
-    class FileScope {
-        DependenciesFile *File;
-    public:
-        FileScope(DependenciesFile *F) : File(F) {}
-        FileScope(FileScope &&dying) : File(dying.File) { dying.File = nullptr; }
-        ~FileScope() { if (File) File->close(); }
-
-        operator bool() const { return File; }
-        llvm::raw_ostream& getOutputStream() { return *File->OutputStream; }
-    };
-
-    FileScope open() {
-      // Write to a temporary file and later rename it to the actual file, to avoid
-      // possible race conditions.
-      SmallString<128> TempPath;
-      TempPath = TargetFileName;
-      TempPath += "-%%%%%%%%";
-      int fd;
-      if (llvm::sys::fs::createUniqueFile(TempPath, fd, TempPath))
-        return FileScope(nullptr);
-
-      OutputStream.reset(new llvm::raw_fd_ostream(fd, /*shouldClose=*/true));
-
-      return FileScope(this);
-    }
-
-    void close() {
-      OutputStream->close();
-      if (OutputStream->has_error()) {
-        OutputStream->clear_error();
-        Status = HasStreamErrors;
-      }
-
-      if (llvm::sys::fs::rename(TempPath, TargetFileName)) {
-        llvm::sys::fs::remove(TempPath);
-        Status = FiledToRename;
-      }
-    }
-
-    StatusEnum getStatus() const {
-      return Status;
+    void diagMissingDependency(const levitation::PackageDependency &Dep) {
+      // FIXME Levitation: SourceRange is not printed correctly.
+      Diag.Report(
+          Dep.getFirstUse().Location.getBegin(),
+          diag::err_levitation_dependency_missed
+      ) << Dep << Dep.getFirstUse().Location;
     }
   };
 
   class ASTDependenciesProcessor : public SemaConsumer {
     Sema *SemaObj;
     CompilerInstance &CI;
+    std::string CurrentInputFile;
   public:
-    ASTDependenciesProcessor(CompilerInstance &ci)
-      : CI(ci) {}
+    ASTDependenciesProcessor(CompilerInstance &ci, StringRef currentInputFile)
+      : CI(ci), CurrentInputFile(currentInputFile) {}
 
     void HandleTranslationUnit(ASTContext &Context) override {
 
@@ -259,18 +157,21 @@ namespace {
 
       ValidatedDependencies Dependencies {
         Validator.validate(SemaObj->getLevitationDeclarationDependencies()),
-        Validator.validate(SemaObj->getLevitationDefinitionDependencies())
+        Validator.validate(SemaObj->getLevitationDefinitionDependencies()),
+        CurrentInputFile
       };
 
       if (Dependencies.hasMissingDependencies())
         return;
 
-      auto F = createDependenciesFile();
-      if (auto OpenScope = F.open()) {
-        DependenciesBitstreamSerializer Serializer(OpenScope.getOutputStream());
-        Serializer.serialize(Dependencies);
+      auto F = createFile();
+
+      if (auto OpenedFile = F.open()) {
+        auto Writer = CreateBitstreamWriter(OpenedFile.getOutputStream());
+        Writer->writeAndFinalize(Dependencies);
       }
-      if (F.getStatus() != DependenciesFile::Good) {
+
+      if (F.hasErrors()) {
         diagDependencyFileIOIssues(F.getStatus());
       }
     }
@@ -283,18 +184,20 @@ namespace {
       SemaObj = nullptr;
     }
   private:
-    DependenciesFile createDependenciesFile() {
-      return DependenciesFile(CI.getFrontendOpts().LevitationDependenciesOutputFile);
+    File createFile() {
+      return File(CI.getFrontendOpts().LevitationDependenciesOutputFile);
     }
 
-    void diagDependencyFileIOIssues(DependenciesFile::StatusEnum status) {
+    void diagDependencyFileIOIssues(File::StatusEnum status) {
       auto &Diag = CI.getDiagnostics();
       switch (status) {
-        case DependenciesFile::HasStreamErrors:
+        case File::HasStreamErrors:
           Diag.Report(diag::err_fe_levitation_dependency_file_io_troubles);
           break;
-        case DependenciesFile::FiledToRename:
+        case File::FiledToRename:
           Diag.Report(diag::err_fe_levitation_dependency_file_failed_to_create);
+          break;
+        default:
           break;
       }
     }
@@ -304,8 +207,11 @@ namespace {
 
 namespace clang {
 
-std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(CompilerInstance &CI) {
-  return llvm::make_unique<ASTDependenciesProcessor>(CI);
+std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
+    CompilerInstance &CI,
+    StringRef InFile
+) {
+  return llvm::make_unique<ASTDependenciesProcessor>(CI, InFile);
 }
 
 }

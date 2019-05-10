@@ -3261,27 +3261,28 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
 }
 
 static void parseLevitationBuildASTArgs(
-  LangOptions LangOpts,
+  LangOptions &LangOpts,
   const FrontendOptions &FrontendOpts,
   DiagnosticsEngine &Diags
 ) {
 
+  const char* Stage = "-levitation-deps-output-file=";
+
   if (FrontendOpts.LevitationDependenciesOutputFile.empty()) {
-    Diags.Report(diag::err_fe_levitation_dependencies_output_file_missed)
-    << "-levitation-deps-output-file=";
+    Diags.Report(diag::err_fe_levitation_missed_option)
+    << "-levitation-deps-output-file=" << Stage;
   }
-  if (FrontendOpts.LevitationDependenciesInputFile.empty()) {
-    Diags.Report(diag::err_fe_levitation_dependencies_input_file_no_need)
-    << "-levitation-deps-input-file"
-    << "'Build AST', triggered by -levitation_build_ast";
+  if (!FrontendOpts.LevitationDependenciesInputFile.empty()) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-levitation-deps-input-file" << Stage;
   }
   if (FrontendOpts.LevitationSourcesRootDir.empty()) {
-    Diags.Report(diag::err_fe_levitation_source_root_not_specified)
-    << "-levitation-sources-root-dir";
+    Diags.Report(diag::err_fe_levitation_missed_option)
+    << "-levitation-sources-root-dir" << Stage;
   }
   if (FrontendOpts.LevitationSourceFileExtension.empty()) {
-    Diags.Report(diag::err_fe_levitation_source_file_ext_not_specified)
-    << "-levitation-source-file-extension";
+    Diags.Report(diag::err_fe_levitation_missed_option)
+    << "-levitation-source-file-extension" << Stage;
   }
 
   LangOpts.LevitationMode = 1;

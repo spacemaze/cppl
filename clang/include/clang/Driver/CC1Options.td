@@ -582,16 +582,13 @@ def emit_codegen_only : Flag<["-"], "emit-codegen-only">,
 def emit_obj : Flag<["-"], "emit-obj">,
   HelpText<"Emit native object files">;
 
+
+// C++ Levitation actions
+
 def levitation_build_ast : Flag<["-"], "levitation-build-ast">,
    HelpText<"Build C++ Levitation AST files.">;
-def levitation_dependencies_output_file : Flag<["-"], "levitation-deps-output-file">,
-   HelpText<"Levitation dependencies output file.">;
-def levitation_dependencies_input_file : Flag<["-"], "levitation-deps-input-file">,
-   HelpText<"Levitation dependencies file to be used for package instantiation.">;
-def levitation_sources_root_dir : Flag<["-"], "levitation-sources-root-dir">,
-   HelpText<"Levitation sources root directory.">;
-def levitation_source_file_extension : Flag<["-"], "levitation-source-file-extension">,
-   HelpText<"Levitation source file extension.">;
+
+// end of C++ Levitation actions
 
 def rewrite_test : Flag<["-"], "rewrite-test">,
   HelpText<"Rewriter playground">;
@@ -895,3 +892,25 @@ def dwarf_debug_producer : Separate<["-"], "dwarf-debug-producer">,
 def defsym : Separate<["-"], "defsym">,
   HelpText<"Define a value for a symbol">;
 } // let Flags = [CC1AsOption]
+
+//===----------------------------------------------------------------------===//
+// C++ Levitation Options
+// TODO: Add CC1LevitationOption and trigger only it it present
+//===----------------------------------------------------------------------===//
+
+let Flags = [CC1Option] in {
+
+def levitation_dependencies_output_file
+: Joined<["-"], "levitation-deps-output-file=">,
+HelpText<"Levitation dependencies output file.">;
+def levitation_dependencies_input_file
+: Joined<["-"], "levitation-deps-input-file=">,
+HelpText<"Levitation dependencies file to be used for package instantiation.">;
+def levitation_sources_root_dir
+: Joined<["-"], "levitation-sources-root-dir=">,
+HelpText<"Levitation sources root directory.">;
+def levitation_source_file_extension
+: Joined<["-"], "levitation-source-file-extension=">,
+HelpText<"Levitation source file extension with '.' symbol.">;
+
+}
