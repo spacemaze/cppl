@@ -530,6 +530,7 @@ private:
   unsigned CharacterLiteralAbbrev = 0;
   unsigned IntegerLiteralAbbrev = 0;
   unsigned ExprImplicitCastAbbrev = 0;
+  bool WriteDeclarationsOnly = false;
 
   void WriteDeclAbbrevs();
   void WriteDecl(ASTContext &Context, Decl *D);
@@ -544,7 +545,8 @@ public:
   ASTWriter(llvm::BitstreamWriter &Stream, SmallVectorImpl<char> &Buffer,
             InMemoryModuleCache &ModuleCache,
             ArrayRef<std::shared_ptr<ModuleFileExtension>> Extensions,
-            bool IncludeTimestamps = true);
+            bool IncludeTimestamps = true,
+            bool WriteDeclarationsOnly = false);
   ~ASTWriter() override;
 
   const LangOptions &getLangOpts() const;
@@ -988,7 +990,8 @@ public:
                std::shared_ptr<PCHBuffer> Buffer,
                ArrayRef<std::shared_ptr<ModuleFileExtension>> Extensions,
                bool AllowASTWithErrors = false, bool IncludeTimestamps = true,
-               bool ShouldCacheASTInMemory = false);
+               bool ShouldCacheASTInMemory = false,
+               bool EmitDeclarationsOnly = false);
   ~PCHGenerator() override;
 
   void InitializeSema(Sema &S) override { SemaPtr = &S; }

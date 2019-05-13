@@ -1594,10 +1594,6 @@ static bool parseTestModuleFileExtensionArg(StringRef Arg,
   return false;
 }
 
-static InputKind parseLevitationFrontend(FrontendOptions &Opts) {
-
-}
-
 static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
                                    DiagnosticsEngine &Diags,
                                    bool &IsHeaderFile) {
@@ -1768,6 +1764,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   Opts.AuxTriple = Args.getLastArgValue(OPT_aux_triple);
   Opts.StatsFile = Args.getLastArgValue(OPT_stats_file);
 
+  Opts.LevitationDeclASTFileExtension =
+          Args.getLastArgValue(OPT_levitation_decl_ast_file_extension);
   Opts.LevitationDependenciesOutputFile =
           Args.getLastArgValue(OPT_levitation_dependencies_output_file);
   Opts.LevitationDependenciesOutputFile =
@@ -3266,8 +3264,12 @@ static void parseLevitationBuildASTArgs(
   DiagnosticsEngine &Diags
 ) {
 
-  const char* Stage = "-levitation-deps-output-file=";
+  const char* Stage = "Build C++ Levitation AST files";
 
+  if (FrontendOpts.LevitationDeclASTFileExtension.empty()) {
+    Diags.Report(diag::err_fe_levitation_missed_option)
+    << "-levitation-decl-ast-file-extension=" << Stage;
+  }
   if (FrontendOpts.LevitationDependenciesOutputFile.empty()) {
     Diags.Report(diag::err_fe_levitation_missed_option)
     << "-levitation-deps-output-file=" << Stage;

@@ -277,8 +277,26 @@ void ASTDeclWriter::Visit(Decl *D) {
   // retrieving it from the AST, we'll just lazily set the offset.
   if (FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
     Record.push_back(FD->doesThisDeclarationHaveABody());
-    if (FD->doesThisDeclarationHaveABody())
-      Record.AddFunctionDefinition(FD);
+    if (FD->doesThisDeclarationHaveABody()) {
+
+      bool ExternalLinkage = false;
+
+      switch (Context.GetGVALinkageForFunction(FD)) {
+        case GVA_AvailableExternally:
+        case GVA_StrongExternal:
+        case GVA_StrongODR:
+        case GVA_DiscardableODR:
+          ExternalLinkage = true;
+        default:
+          // do nothing
+          break;
+      }
+
+      bool SkipDefinition = Writer.WriteDeclarationsOnly && ExternalLinkage;
+
+      if (!SkipDefinition)
+        Record.AddFunctionDefinition(FD);
+    }
   }
 
   // If this declaration is also a DeclContext, write blocks for the

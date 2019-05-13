@@ -28,10 +28,169 @@
 #include "llvm/Support/YAMLTraits.h"
 #include <memory>
 #include <system_error>
+#include <utility>
 
 using namespace clang;
 
 typedef std::vector<std::unique_ptr<ASTConsumer>> ConsumersVector;
+
+struct OutputFileHandle {
+  std::unique_ptr<llvm::raw_pwrite_stream> OutputStream;
+  std::string Path;
+
+  static OutputFileHandle makeInvalid() {
+    return {nullptr, ""};
+  }
+
+  bool isInvalid() const { return !(bool)OutputStream; };
+};
+
+enum ASTGeneratorKind {
+  DefinitionGenerator,
+  DeclarationGenerator
+};
+
+static OutputFileHandle CreateOutputFile(
+    CompilerInstance &CI,
+    bool Binary,
+    bool RemoveFileOnSignal,
+    StringRef InFile,
+    StringRef Extension,
+    bool UseTemporary,
+    bool CreateMissingDirectories
+) {
+
+  StringRef OutputPath = CI.getFrontendOpts().OutputFile;
+
+  std::string OutputPathName, TempPathName;
+  std::error_code EC;
+
+  std::unique_ptr<raw_pwrite_stream> OS = CI.createOutputFile(
+      OutputPath,
+      EC,
+      Binary,
+      RemoveFileOnSignal,
+      InFile,
+      Extension,
+      UseTemporary,
+      CreateMissingDirectories,
+      &OutputPathName,
+      &TempPathName
+  );
+
+  if (!OS) {
+    CI.getDiagnostics().Report(diag::err_fe_unable_to_open_output)
+    << OutputPath
+    << EC.message();
+    return OutputFileHandle::makeInvalid();
+  }
+
+  // FIXME Levitaton: addOutputFile is public method,
+  // but CompilerInstance::OutputFile is private type.
+  //  addOutputFile(
+  //      CompilerInstance::OutputFile((OutputPathName != "-") ? OutputPathName : "", TempPathName));
+
+  return { std::move(OS), std::move(OutputPathName) };
+}
+
+// Cloned with some alterations from GeneratePCHAction.
+OutputFileHandle CreateOutputFile(
+    ASTGeneratorKind GeneratorKind,
+    CompilerInstance &CI,
+    StringRef InFile
+) {
+  // Comment from original method:
+  // We use createOutputFile here because this is exposed via libclang, and we
+  // must disable the RemoveFileOnSignal behavior.
+  // We use a temporary to avoid race conditions.
+
+  StringRef Extension = "";
+  SmallString<256> OutputPath(CI.getFrontendOpts().OutputFile);
+
+  if (GeneratorKind == DeclarationGenerator) {
+    Extension = CI.getFrontendOpts().LevitationDeclASTFileExtension;
+    if (!OutputPath.empty())
+      llvm::sys::path::replace_extension(OutputPath, Extension);
+  }
+
+  std::string OutputPathName, TempPathName;
+  std::error_code EC;
+
+  std::unique_ptr<raw_pwrite_stream> OS = CI.createOutputFile(
+      OutputPath,
+      EC,
+      true,
+      false,
+      InFile,
+      Extension,
+      true,
+      false,
+      &OutputPathName,
+      &TempPathName
+  );
+
+  if (!OS) {
+    CI.getDiagnostics().Report(diag::err_fe_unable_to_open_output)
+    << OutputPath
+    << EC.message();
+    return OutputFileHandle::makeInvalid();
+  }
+
+  // FIXME Levitaton: addOutputFile is public method,
+  // but CompilerInstance::OutputFile is private type.
+  //  addOutputFile(
+  //      CompilerInstance::OutputFile((OutputPathName != "-") ? OutputPathName : "", TempPathName));
+
+  return { std::move(OS), std::move(OutputPathName) };
+}
+
+
+// Cloned with some alterations from GeneratePCHAction::CreateASTConsumer.
+// We don't consider RelocatablePCH as an option for Build AST stage.
+static std::unique_ptr<ASTConsumer>
+CreateGeneratePCHConsumer(
+    ASTGeneratorKind GeneratorKind,
+    CompilerInstance &CI,
+    StringRef InFile
+) {
+  OutputFileHandle OutputFile = CreateOutputFile(
+      GeneratorKind,
+      CI,
+      InFile
+  );
+
+  if (OutputFile.isInvalid())
+    return nullptr;
+
+  const auto &FrontendOpts = CI.getFrontendOpts();
+  auto Buffer = std::make_shared<PCHBuffer>();
+  std::vector<std::unique_ptr<ASTConsumer>> Consumers;
+
+  bool EmitDeclarationOnly = GeneratorKind == DeclarationGenerator;
+
+  Consumers.push_back(llvm::make_unique<PCHGenerator>(
+      CI.getPreprocessor(),
+      CI.getModuleCache(),
+      OutputFile.Path,
+      "",
+      Buffer,
+      FrontendOpts.ModuleFileExtensions,
+      CI.getPreprocessorOpts().AllowPCHWithCompilerErrors,
+      FrontendOpts.IncludeTimestamps,
+      +CI.getLangOpts().CacheGeneratedPCH,
+      EmitDeclarationOnly
+  ));
+
+  Consumers.push_back(CI.getPCHContainerWriter().CreatePCHContainerGenerator(
+      CI,
+      InFile,
+      OutputFile.Path,
+      std::move(OutputFile.OutputStream),
+      Buffer
+  ));
+
+  return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
+}
 
 std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
     clang::CompilerInstance &CI,
@@ -40,21 +199,17 @@ std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
   std::vector<std::unique_ptr<ASTConsumer>> Consumers;
 
   auto DependenciesProcessor = CreateDependenciesASTProcessor(CI, InFile);
-  auto ASTDefinitionCreator = GeneratePCHAction::CreateASTConsumer(CI, InFile);
-
-  // TODO Levitation: to be implemented
-  // auto ASTDeclarationCreator = CreateASTDeclGenerator(CI, InFile);
-
+  auto DeclCreator = CreateGeneratePCHConsumer(DeclarationGenerator, CI, InFile);
+  auto DefCreator = CreateGeneratePCHConsumer(DefinitionGenerator, CI, InFile);
 
   assert(DependenciesProcessor && "Failed to create dependencies processor?");
-  if (!ASTDefinitionCreator)
+
+  if (!DefCreator)
     return nullptr;
 
   Consumers.push_back(std::move(DependenciesProcessor));
-  Consumers.push_back(std::move(ASTDefinitionCreator));
-
-  // TODO Levitation: to be implemented
-  // Consumers.push_back(std::move(ASTDeclarationCreator));
+  Consumers.push_back(std::move(DeclCreator));
+  Consumers.push_back(std::move(DefCreator));
 
   return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
 }

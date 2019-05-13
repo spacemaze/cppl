@@ -895,11 +895,15 @@ def defsym : Separate<["-"], "defsym">,
 
 //===----------------------------------------------------------------------===//
 // C++ Levitation Options
-// TODO: Add CC1LevitationOption and trigger only it it present
+// TODO Levitaton: Add CC1LevitationOption and trigger only it it present
+// TODO Levitation: -ast-print, dump and view require -flevitation-xxxx mode flags.
 //===----------------------------------------------------------------------===//
 
 let Flags = [CC1Option] in {
 
+def levitation_decl_ast_file_extension
+: Joined<["-"], "levitation-decl-ast-file-extension=">,
+HelpText<"Levitation declaration AST output file.">;
 def levitation_dependencies_output_file
 : Joined<["-"], "levitation-deps-output-file=">,
 HelpText<"Levitation dependencies output file.">;

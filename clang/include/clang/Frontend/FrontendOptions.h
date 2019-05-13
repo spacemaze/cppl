@@ -446,6 +446,7 @@ public:
   // C++ Levitation Mode
   //
 
+  std::string LevitationDeclASTFileExtension;
   std::string LevitationDependenciesOutputFile;
   std::string LevitationDependenciesInputFile;
   std::string LevitationSourcesRootDir;
