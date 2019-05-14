@@ -136,10 +136,10 @@ OutputFileHandle CreateOutputFile(
     return OutputFileHandle::makeInvalid();
   }
 
-  // FIXME Levitaton: addOutputFile is public method,
-  // but CompilerInstance::OutputFile is private type.
-  //  addOutputFile(
-  //      CompilerInstance::OutputFile((OutputPathName != "-") ? OutputPathName : "", TempPathName));
+  CI.addOutputFile({
+      (OutputPathName != "-") ? OutputPathName : "",
+      TempPathName
+  });
 
   return { std::move(OS), std::move(OutputPathName) };
 }
