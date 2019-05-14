@@ -50,49 +50,6 @@ enum ASTGeneratorKind {
   DeclarationGenerator
 };
 
-static OutputFileHandle CreateOutputFile(
-    CompilerInstance &CI,
-    bool Binary,
-    bool RemoveFileOnSignal,
-    StringRef InFile,
-    StringRef Extension,
-    bool UseTemporary,
-    bool CreateMissingDirectories
-) {
-
-  StringRef OutputPath = CI.getFrontendOpts().OutputFile;
-
-  std::string OutputPathName, TempPathName;
-  std::error_code EC;
-
-  std::unique_ptr<raw_pwrite_stream> OS = CI.createOutputFile(
-      OutputPath,
-      EC,
-      Binary,
-      RemoveFileOnSignal,
-      InFile,
-      Extension,
-      UseTemporary,
-      CreateMissingDirectories,
-      &OutputPathName,
-      &TempPathName
-  );
-
-  if (!OS) {
-    CI.getDiagnostics().Report(diag::err_fe_unable_to_open_output)
-    << OutputPath
-    << EC.message();
-    return OutputFileHandle::makeInvalid();
-  }
-
-  // FIXME Levitaton: addOutputFile is public method,
-  // but CompilerInstance::OutputFile is private type.
-  //  addOutputFile(
-  //      CompilerInstance::OutputFile((OutputPathName != "-") ? OutputPathName : "", TempPathName));
-
-  return { std::move(OS), std::move(OutputPathName) };
-}
-
 // Cloned with some alterations from GeneratePCHAction.
 OutputFileHandle CreateOutputFile(
     ASTGeneratorKind GeneratorKind,

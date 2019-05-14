@@ -147,6 +147,18 @@ public:
   /// with support for lifetime-qualified pointers.
   ObjCXXARCStandardLibraryKind ObjCXXARCStandardLibrary = ARCXX_nolib;
 
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+
+  /// During Instantiate and Build stage provides compiler with
+  /// Declaration AST files current translation unit depends on.
+  std::vector<std::string> LevitationDependencyDeclASTs;
+
+  //
+  // end of C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
+
   /// Records the set of modules
   class FailedModulesSet {
     llvm::StringSet<> Failed;

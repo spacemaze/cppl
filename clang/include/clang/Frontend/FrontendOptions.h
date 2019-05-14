@@ -173,7 +173,8 @@ public:
   enum Format {
     Source,
     ModuleMap,
-    Precompiled
+    Precompiled,
+    LevitationAST
   };
 
   constexpr InputKind(Language L = Unknown, Format F = Source,
@@ -447,10 +448,11 @@ public:
   //
 
   std::string LevitationDeclASTFileExtension;
+  std::string LevitationDefASTFileExtension;
   std::string LevitationDependenciesOutputFile;
-  std::string LevitationDependenciesInputFile;
   std::string LevitationSourcesRootDir;
   std::string LevitationSourceFileExtension;
+  bool LevitationBuildObject;
 
   // end of C++ Levitation Mode
   //

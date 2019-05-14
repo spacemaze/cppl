@@ -50,6 +50,18 @@ public:
   ///
   MultiplexExternalSemaSource(ExternalSemaSource& s1, ExternalSemaSource& s2);
 
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+
+  /// Constructs a new multiplexing external sema sources
+  /// with empty source collection.
+  MultiplexExternalSemaSource() = default;
+
+  //
+  // end of C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
+
   ~MultiplexExternalSemaSource() override;
 
   ///Appends new source to the source list.

@@ -11143,6 +11143,8 @@ private:
 
 public:
 
+  void setLevitationPackageDependentDecls(llvm::SmallVectorImpl<NamedDecl*> Decls);
+
   const levitation::DepenciesMap &getLevitationDeclarationDependencies() {
     return LevitationDeclarationDependencies;
   }

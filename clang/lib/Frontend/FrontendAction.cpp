@@ -17,6 +17,7 @@
 #include "clang/Frontend/LayoutOverrideSource.h"
 #include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/Levitation/CompileAST.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/LiteralSupport.h"
 #include "clang/Lex/Preprocessor.h"
@@ -837,12 +838,15 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
       CI.setModuleManager(static_cast<ASTReader *>(FinalReader.get()));
       CI.getASTContext().setExternalSource(source);
     }
-//    // TODO levitation:
-//    else if (!CI.getPreprocessorOpts().LevitationImportASTFiles.empty()) {
-//      LevitationCIExtension::createASTFilesExternalSource(
-//          CI.getPreprocessorOpts().LevitationImportASTFiles
-//      );
-//    }
+    else if (!CI.getPreprocessorOpts().LevitationDependencyDeclASTs.empty()) {
+      bool Created =
+        levitation::CompilerInvocationLevitation::createDependenciesSemaSource(
+            CI, CI.getPreprocessorOpts().LevitationDependencyDeclASTs
+        );
+
+      if (!Created)
+        goto failure;
+    }
     else if (CI.getLangOpts().Modules ||
                !CI.getPreprocessorOpts().ImplicitPCHInclude.empty()) {
       // Use PCM or PCH.
@@ -1038,6 +1042,16 @@ void ASTFrontendAction::ExecuteAction() {
 
   if (!CI.hasSema())
     CI.createSema(getTranslationUnitKind(), CompletionConsumer);
+
+  // TODO Levitation: Move into special hook.
+  if (CI.getLangOpts().LevitationMode &&
+      CI.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
+      getCurrentInput().getKind().getFormat() == InputKind::LevitationAST) {
+
+    levitation::CompileAST(CI.getSema(), getCurrentInput().getFile());
+
+    return;
+  }
 
   ParseAST(CI.getSema(), CI.getFrontendOpts().ShowStats,
            CI.getFrontendOpts().SkipFunctionBodies);
