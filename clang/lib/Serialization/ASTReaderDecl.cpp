@@ -513,20 +513,23 @@ void ASTDeclReader::ReadFunctionDefinition(FunctionDecl *FD) {
       CD->CtorInitializers = ReadGlobalOffset();
   }
 
-  bool ExternalLinkage = false;
+  bool SkipDefinition = false;
 
-  switch (Reader.ContextObj->GetGVALinkageForFunction(FD)) {
-    case GVA_AvailableExternally:
-    case GVA_StrongExternal:
-    case GVA_StrongODR:
-    case GVA_DiscardableODR:
-      ExternalLinkage = true;
-    default:
-      // do nothing
-      break;
+  if (Reader.ReadDeclarationsOnly) {
+    // Skip definition if function has external linkage, and thus
+    // can be detached from declaration
+    switch (Reader.ContextObj->GetGVALinkageForFunction(FD)) {
+      case GVA_AvailableExternally:
+      case GVA_StrongExternal:
+      case GVA_StrongODR:
+      case GVA_DiscardableODR:
+        SkipDefinition = true;
+        break;
+      default:
+        // do nothing
+        break;
+    }
   }
-
-  bool SkipDefinition = Reader.ReadDeclarationsOnly && ExternalLinkage;
 
   if (!SkipDefinition) {
     // Store the offset of the body so we can lazily load it later.
