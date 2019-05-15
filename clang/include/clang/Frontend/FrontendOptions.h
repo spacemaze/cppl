@@ -173,8 +173,7 @@ public:
   enum Format {
     Source,
     ModuleMap,
-    Precompiled,
-    LevitationAST
+    Precompiled
   };
 
   constexpr InputKind(Language L = Unknown, Format F = Source,

@@ -2,8 +2,9 @@ set(LLVM_LINK_COMPONENTS
   Support
   )
 
-add_clang_library(clangLevitation
-  CompileAST.cpp
+add_clang_library(
+  clangLevitation
+
   Dependencies.cpp
   FileExtensions.cpp
   Serialization.cpp
@@ -13,4 +14,4 @@ add_clang_library(clangLevitation
   clangBasic
   clangLex
   clangSema
-  )
+)
