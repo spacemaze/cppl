@@ -4,8 +4,10 @@ set(LLVM_LINK_COMPONENTS
 
 add_clang_library(clangLevitation
   CompileAST.cpp
-  CompilerInstanceLevitation.cpp
+  CompilerInstanceExts.cpp
   Dependencies.cpp
+  FileExtensions.cpp
+  FrontendActionExts.cpp
   Serialization.cpp
 
   LINK_LIBS

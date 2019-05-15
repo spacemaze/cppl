@@ -90,7 +90,7 @@
 #include <tuple>
 #include <utility>
 #include <vector>
-#include <clang/Levitation/CompilerInstanceLevitation.h>
+#include <clang/Levitation/CompilerInstanceExts.h>
 
 using namespace clang;
 using namespace driver;
@@ -1910,7 +1910,7 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
       if (i == 0)
         DashX = IK;
     } else if (Opts.LevitationBuildObject) {
-      IK = levitation::CompilerInvocationLevitation::detectInputKind(
+      IK = levitation::CompilerInvocationExts::detectInputKind(
           Opts,
           Inputs[i],
           IK
@@ -3317,12 +3317,12 @@ static void parseLevitationBuildObjectArgs(
 
   const char* Stage = "Build C++ Levitation Object files";
 
-  if (!FrontendOpts.LevitationDeclASTFileExtension.empty()) {
-    Diags.Report(diag::err_fe_levitation_missing_option)
+  if (FrontendOpts.LevitationDeclASTFileExtension.empty()) {
+    Diags.Report(diag::err_fe_levitation_missed_option)
     << "-levitation-decl-ast-file-extension=" << Stage;
   }
-  if (!FrontendOpts.LevitationDefASTFileExtension.empty()) {
-    Diags.Report(diag::err_fe_levitation_missing_option)
+  if (FrontendOpts.LevitationDefASTFileExtension.empty()) {
+    Diags.Report(diag::err_fe_levitation_missed_option)
     << "-levitation-def-ast-file-extension=" << Stage;
   }
   if (!FrontendOpts.LevitationDependenciesOutputFile.empty()) {

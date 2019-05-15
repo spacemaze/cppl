@@ -17,7 +17,7 @@
 #include "clang/Frontend/LayoutOverrideSource.h"
 #include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/Utils.h"
-#include "clang/Levitation/CompileAST.h"
+#include "clang/Levitation/FrontendActionExts.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/LiteralSupport.h"
 #include "clang/Lex/Preprocessor.h"
@@ -33,6 +33,8 @@
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
 #include <system_error>
+#include <clang/Levitation/CompilerInstanceExts.h>
+
 using namespace clang;
 
 LLVM_INSTANTIATE_REGISTRY(FrontendPluginRegistry)
@@ -663,6 +665,12 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
     return true;
   }
 
+  if (Input.getKind().getFormat() == InputKind::LevitationAST) {
+    if (!levitation::FrontendActionExts::loadFromAST(CI, *this, Input))
+      goto failure;
+    return true;
+  }
+
   // Set up the file and source managers, if needed.
   if (!CI.hasFileManager()) {
     if (!CI.createFileManager()) {
@@ -839,12 +847,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
       CI.getASTContext().setExternalSource(source);
     }
     else if (!CI.getPreprocessorOpts().LevitationDependencyDeclASTs.empty()) {
-      bool Created =
-        levitation::CompilerInvocationLevitation::createDependenciesSemaSource(
-            CI, CI.getPreprocessorOpts().LevitationDependencyDeclASTs
-        );
-
-      if (!Created)
+      if (!levitation::FrontendActionExts::createDepsSource(CI))
         goto failure;
     }
     else if (CI.getLangOpts().Modules ||
@@ -1042,16 +1045,6 @@ void ASTFrontendAction::ExecuteAction() {
 
   if (!CI.hasSema())
     CI.createSema(getTranslationUnitKind(), CompletionConsumer);
-
-  // TODO Levitation: Move into special hook.
-  if (CI.getLangOpts().LevitationMode &&
-      CI.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
-      getCurrentInput().getKind().getFormat() == InputKind::LevitationAST) {
-
-    levitation::CompileAST(CI.getSema(), getCurrentInput().getFile());
-
-    return;
-  }
 
   ParseAST(CI.getSema(), CI.getFrontendOpts().ShowStats,
            CI.getFrontendOpts().SkipFunctionBodies);
