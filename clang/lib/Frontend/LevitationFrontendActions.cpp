@@ -49,17 +49,8 @@ struct OutputFileHandle {
   bool isInvalid() const { return !(bool)OutputStream; };
 };
 
-enum ASTGeneratorKind {
-  DefinitionGenerator,
-  DeclarationGenerator
-};
-
 // Cloned with some alterations from GeneratePCHAction.
-OutputFileHandle CreateOutputFile(
-    ASTGeneratorKind GeneratorKind,
-    CompilerInstance &CI,
-    StringRef InFile
-) {
+OutputFileHandle CreateOutputFile(CompilerInstance &CI, StringRef InFile) {
   // Comment from original method:
   // We use createOutputFile here because this is exposed via libclang, and we
   // must disable the RemoveFileOnSignal behavior.
@@ -67,12 +58,6 @@ OutputFileHandle CreateOutputFile(
 
   StringRef Extension = "";
   SmallString<256> OutputPath(CI.getFrontendOpts().OutputFile);
-
-  if (GeneratorKind == DeclarationGenerator) {
-    Extension = levitation::FileExtensions::DeclarationAST;
-    if (!OutputPath.empty())
-      llvm::sys::path::replace_extension(OutputPath, Extension);
-  }
 
   std::string OutputPathName, TempPathName;
   std::error_code EC;
@@ -110,15 +95,10 @@ OutputFileHandle CreateOutputFile(
 // We don't consider RelocatablePCH as an option for Build AST stage.
 static std::unique_ptr<ASTConsumer>
 CreateGeneratePCHConsumer(
-    ASTGeneratorKind GeneratorKind,
     CompilerInstance &CI,
     StringRef InFile
 ) {
-  OutputFileHandle OutputFile = CreateOutputFile(
-      GeneratorKind,
-      CI,
-      InFile
-  );
+  OutputFileHandle OutputFile = CreateOutputFile(CI, InFile);
 
   if (OutputFile.isInvalid())
     return nullptr;
@@ -126,8 +106,6 @@ CreateGeneratePCHConsumer(
   const auto &FrontendOpts = CI.getFrontendOpts();
   auto Buffer = std::make_shared<PCHBuffer>();
   std::vector<std::unique_ptr<ASTConsumer>> Consumers;
-
-  bool EmitDeclarationOnly = GeneratorKind == DeclarationGenerator;
 
   Consumers.push_back(llvm::make_unique<PCHGenerator>(
       CI.getPreprocessor(),
@@ -138,8 +116,7 @@ CreateGeneratePCHConsumer(
       FrontendOpts.ModuleFileExtensions,
       CI.getPreprocessorOpts().AllowPCHWithCompilerErrors,
       FrontendOpts.IncludeTimestamps,
-      +CI.getLangOpts().CacheGeneratedPCH,
-      EmitDeclarationOnly
+      +CI.getLangOpts().CacheGeneratedPCH
   ));
 
   Consumers.push_back(CI.getPCHContainerWriter().CreatePCHContainerGenerator(
@@ -160,17 +137,15 @@ std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
   std::vector<std::unique_ptr<ASTConsumer>> Consumers;
 
   auto DependenciesProcessor = CreateDependenciesASTProcessor(CI, InFile);
-  auto DeclCreator = CreateGeneratePCHConsumer(DeclarationGenerator, CI, InFile);
-  auto DefCreator = CreateGeneratePCHConsumer(DefinitionGenerator, CI, InFile);
+  auto AstFileCreator = CreateGeneratePCHConsumer(CI, InFile);
 
   assert(DependenciesProcessor && "Failed to create dependencies processor?");
 
-  if (!DefCreator)
+  if (!AstFileCreator)
     return nullptr;
 
   Consumers.push_back(std::move(DependenciesProcessor));
-  Consumers.push_back(std::move(DeclCreator));
-  Consumers.push_back(std::move(DefCreator));
+  Consumers.push_back(std::move(AstFileCreator));
 
   return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
 }
