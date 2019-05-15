@@ -90,7 +90,6 @@
 #include <tuple>
 #include <utility>
 #include <vector>
-#include <clang/Levitation/CompilerInstanceExts.h>
 
 using namespace clang;
 using namespace driver;
@@ -1767,6 +1766,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   Opts.AuxTriple = Args.getLastArgValue(OPT_aux_triple);
   Opts.StatsFile = Args.getLastArgValue(OPT_stats_file);
 
+  Opts.LevitationDependencyDeclASTs =
+          Args.getAllArgValues(OPT_levitation_dependency);
   Opts.LevitationDeclASTFileExtension =
           Args.getLastArgValue(OPT_levitation_decl_ast_file_extension);
   Opts.LevitationDefASTFileExtension =
@@ -1909,12 +1910,6 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
       // FIXME: Remove this hack.
       if (i == 0)
         DashX = IK;
-    } else if (Opts.LevitationBuildObject) {
-      IK = levitation::CompilerInvocationExts::detectInputKind(
-          Opts,
-          Inputs[i],
-          IK
-      );
     }
 
     // The -emit-module action implicitly takes a module map.
@@ -3120,7 +3115,6 @@ static void ParsePreprocessorArgs(PreprocessorOptions &Opts, ArgList &Args,
                                   DiagnosticsEngine &Diags,
                                   frontend::ActionKind Action) {
   Opts.ImplicitPCHInclude = Args.getLastArgValue(OPT_include_pch);
-  Opts.LevitationDependencyDeclASTs = Args.getAllArgValues(OPT_levitation_dependency);
   Opts.PCHWithHdrStop = Args.hasArg(OPT_pch_through_hdrstop_create) ||
                         Args.hasArg(OPT_pch_through_hdrstop_use);
   Opts.PCHWithHdrStopCreate = Args.hasArg(OPT_pch_through_hdrstop_create);
@@ -3288,7 +3282,7 @@ static void parseLevitationBuildASTArgs(
 //    Diags.Report(diag::err_fe_levitation_wrong_option)
 //    << "-levitation-deps-input-file" << Stage;
 //  }
-  if (!PreprocessorOpts.LevitationDependencyDeclASTs.empty()) {
+  if (!FrontendOpts.LevitationDependencyDeclASTs.empty()) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-dependency" << Stage;
   }
@@ -3336,6 +3330,10 @@ static void parseLevitationBuildObjectArgs(
   if (!FrontendOpts.LevitationSourceFileExtension.empty()) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-source-file-extension" << Stage;
+  }
+  if (!FrontendOpts.ASTMergeFiles.empty()) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-ast-merge" << Stage;
   }
 
   LangOpts.LevitationMode = 1;

@@ -176,6 +176,13 @@ CreateFrontendAction(CompilerInstance &CI) {
     Act = llvm::make_unique<ASTMergeAction>(std::move(Act),
                                             FEOpts.ASTMergeFiles);
 
+  if (!FEOpts.LevitationDependencyDeclASTs.empty()) {
+    Act = llvm::make_unique<MergeASTDependenciesAction>(
+            std::move(Act),
+            FEOpts.LevitationDependencyDeclASTs
+    );
+  }
+
   return Act;
 }
 

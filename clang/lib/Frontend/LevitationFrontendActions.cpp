@@ -8,6 +8,9 @@
 
 #include "clang/Frontend/LevitationFrontendActions.h"
 #include "clang/AST/ASTConsumer.h"
+#include "clang/AST/ASTDiagnostic.h"
+#include "clang/AST/ASTImporter.h"
+#include "clang/AST/ASTImporterLookupTable.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -169,4 +172,56 @@ std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
   Consumers.push_back(std::move(DefCreator));
 
   return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
+}
+
+void MergeASTDependenciesAction::ExecuteAction() {
+  // Clone everything from ASTMergeAction::ExecuteAction
+
+  CompilerInstance &CI = getCompilerInstance();
+  CI.getDiagnostics().getClient()->BeginSourceFile(
+                                             CI.getASTContext().getLangOpts());
+  CI.getDiagnostics().SetArgToStringFn(&FormatASTNodeDiagnosticArgument,
+                                       &CI.getASTContext());
+  IntrusiveRefCntPtr<DiagnosticIDs>
+      DiagIDs(CI.getDiagnostics().getDiagnosticIDs());
+  ASTImporterLookupTable LookupTable(
+      *CI.getASTContext().getTranslationUnitDecl());
+  for (unsigned I = 0, N = ASTFiles.size(); I != N; ++I) {
+    IntrusiveRefCntPtr<DiagnosticsEngine>
+        Diags(new DiagnosticsEngine(DiagIDs, &CI.getDiagnosticOpts(),
+                                    new ForwardingDiagnosticConsumer(
+                                          *CI.getDiagnostics().getClient()),
+                                    /*ShouldOwnClient=*/true));
+    std::unique_ptr<ASTUnit> Unit = ASTUnit::LoadFromASTFile(
+        ASTFiles[I], CI.getPCHContainerReader(), ASTUnit::LoadEverything, Diags,
+        CI.getFileSystemOpts(), false);
+
+    if (!Unit)
+      continue;
+
+    ASTImporter Importer(CI.getASTContext(), CI.getFileManager(),
+                         Unit->getASTContext(), Unit->getFileManager(),
+                         /*MinimalImport=*/false, &LookupTable);
+
+    TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
+    for (auto *D : TU->decls()) {
+      // Don't re-import __va_list_tag, __builtin_va_list.
+      if (const auto *ND = dyn_cast<NamedDecl>(D))
+        if (IdentifierInfo *II = ND->getIdentifier())
+          if (II->isStr("__va_list_tag") || II->isStr("__builtin_va_list"))
+            continue;
+
+      llvm::Expected<Decl *> ToDOrError = Importer.Import_New(D);
+
+      if (ToDOrError) {
+        DeclGroupRef DGR(*ToDOrError);
+        CI.getASTConsumer().HandleTopLevelDecl(DGR);
+      } else {
+        llvm::consumeError(ToDOrError.takeError());
+      }
+    }
+  }
+
+  AdaptedAction->ExecuteAction();
+  CI.getDiagnostics().getClient()->EndSourceFile();
 }

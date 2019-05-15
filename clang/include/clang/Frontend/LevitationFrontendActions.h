@@ -15,6 +15,8 @@
 #include <vector>
 
 namespace clang {
+// FIXME Levitation: move into levitation namespace
+// FIXME Levitation: move into Levitation directory
 
 class LevitationBuildASTAction : public GeneratePCHAction {
 public:
@@ -22,6 +24,26 @@ public:
       CompilerInstance &CI,
       StringRef InFile
   ) override;
+};
+
+/**
+ * Frontend action adaptor that merges ASTs together.
+ *
+ * This action takes an existing AST file and "merges" it into the AST
+ * context, producing a merged context. This action is an action
+ * adaptor, which forwards most of its calls to another action that
+ * will consume the merged context.
+ */
+class MergeASTDependenciesAction : public ASTMergeAction {
+protected:
+  void ExecuteAction() override;
+public:
+    MergeASTDependenciesAction(
+        std::unique_ptr<FrontendAction> AdaptedAction,
+        ArrayRef<std::string> ASTFiles
+    ) :
+    ASTMergeAction(std::move(AdaptedAction), ASTFiles)
+    {}
 };
 
 }  // end namespace clang

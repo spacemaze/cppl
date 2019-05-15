@@ -31,10 +31,6 @@ namespace clang {
 class ASTMergeAction;
 class CompilerInstance;
 
-namespace levitation {
-    class FrontendActionExts;
-}
-
 /// Abstract base class for actions which can be performed by the frontend.
 class FrontendAction {
   FrontendInputFile CurrentInput;
@@ -42,7 +38,7 @@ class FrontendAction {
   CompilerInstance *Instance;
   friend class ASTMergeAction;
   friend class WrapperFrontendAction;
-  friend class clang::levitation::FrontendActionExts;
+  friend class MergeASTDependenciesAction;
 
 private:
   std::unique_ptr<ASTConsumer> CreateWrappedASTConsumer(CompilerInstance &CI,

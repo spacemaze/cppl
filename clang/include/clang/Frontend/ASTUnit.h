@@ -59,10 +59,6 @@ class FileSystem;
 
 namespace clang {
 
-namespace levitation {
-class ASTUnitExts;
-}
-
 class ASTContext;
 class ASTDeserializationListener;
 class ASTMutationListener;
@@ -88,7 +84,6 @@ enum class SkipFunctionBodiesScope { None, Preamble, PreambleAndMainFile };
 
 /// Utility class for loading a ASTContext from an AST file.
 class ASTUnit {
-  friend class levitation::ASTUnitExts;
 public:
   struct StandaloneFixIt {
     std::pair<unsigned, unsigned> RemoveRange;

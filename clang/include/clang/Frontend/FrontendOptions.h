@@ -452,6 +452,11 @@ public:
   std::string LevitationDependenciesOutputFile;
   std::string LevitationSourcesRootDir;
   std::string LevitationSourceFileExtension;
+
+  /// During Instantiate and Build stage provides compiler with
+  /// Declaration AST files current translation unit depends on.
+  std::vector<std::string> LevitationDependencyDeclASTs;
+
   bool LevitationBuildObject;
 
   // end of C++ Levitation Mode

@@ -17,7 +17,6 @@
 #include "clang/Frontend/LayoutOverrideSource.h"
 #include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/Utils.h"
-#include "clang/Levitation/FrontendActionExts.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/LiteralSupport.h"
 #include "clang/Lex/Preprocessor.h"
@@ -33,7 +32,6 @@
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
 #include <system_error>
-#include <clang/Levitation/CompilerInstanceExts.h>
 
 using namespace clang;
 
@@ -665,12 +663,6 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
     return true;
   }
 
-  if (Input.getKind().getFormat() == InputKind::LevitationAST) {
-    if (!levitation::FrontendActionExts::loadFromAST(CI, *this, Input))
-      goto failure;
-    return true;
-  }
-
   // Set up the file and source managers, if needed.
   if (!CI.hasFileManager()) {
     if (!CI.createFileManager()) {
@@ -845,12 +837,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
         goto failure;
       CI.setModuleManager(static_cast<ASTReader *>(FinalReader.get()));
       CI.getASTContext().setExternalSource(source);
-    }
-    else if (!CI.getPreprocessorOpts().LevitationDependencyDeclASTs.empty()) {
-      if (!levitation::FrontendActionExts::createDepsSource(CI))
-        goto failure;
-    }
-    else if (CI.getLangOpts().Modules ||
+    } else if (CI.getLangOpts().Modules ||
                !CI.getPreprocessorOpts().ImplicitPCHInclude.empty()) {
       // Use PCM or PCH.
       assert(hasPCHSupport() && "This action does not have PCH support!");
