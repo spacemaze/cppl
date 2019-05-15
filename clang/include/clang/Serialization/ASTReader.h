@@ -897,8 +897,23 @@ private:
   // A list of late parsed template function data.
   SmallVector<uint64_t, 1> LateParsedTemplates;
 
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+
   /// List of levitation package dependent declarations
   SmallVector<uint64_t, 8> LevitationPackageDependentDecls;
+
+  /// This flag alters reader behaviour so it reads only declarations.
+  bool ReadDeclarationsOnly = false;
+
+public:
+  void setReadDeclarationsOnly() { ReadDeclarationsOnly = true; }
+private:
+
+  //
+  // end of C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
 
 public:
   struct ImportedSubmodule {

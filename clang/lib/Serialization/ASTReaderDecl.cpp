@@ -512,9 +512,27 @@ void ASTDeclReader::ReadFunctionDefinition(FunctionDecl *FD) {
     if (CD->getNumCtorInitializers())
       CD->CtorInitializers = ReadGlobalOffset();
   }
-  // Store the offset of the body so we can lazily load it later.
-  Reader.PendingBodies[FD] = GetCurrentCursorOffset();
-  HasPendingBody = true;
+
+  bool ExternalLinkage = false;
+
+  switch (Reader.ContextObj->GetGVALinkageForFunction(FD)) {
+    case GVA_AvailableExternally:
+    case GVA_StrongExternal:
+    case GVA_StrongODR:
+    case GVA_DiscardableODR:
+      ExternalLinkage = true;
+    default:
+      // do nothing
+      break;
+  }
+
+  bool SkipDefinition = Reader.ReadDeclarationsOnly && ExternalLinkage;
+
+  if (!SkipDefinition) {
+    // Store the offset of the body so we can lazily load it later.
+    Reader.PendingBodies[FD] = GetCurrentCursorOffset();
+    HasPendingBody = true;
+  }
 }
 
 void ASTDeclReader::Visit(Decl *D) {

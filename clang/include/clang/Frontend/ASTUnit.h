@@ -686,7 +686,8 @@ public:
       const FileSystemOptions &FileSystemOpts, bool UseDebugInfo = false,
       bool OnlyLocalDecls = false, ArrayRef<RemappedFile> RemappedFiles = None,
       bool CaptureDiagnostics = false, bool AllowPCHWithCompilerErrors = false,
-      bool UserFilesAreVolatile = false);
+      bool UserFilesAreVolatile = false,
+      bool ReadDeclarationsOnly = false);
 
 private:
   /// Helper function for \c LoadFromCompilerInvocation() and

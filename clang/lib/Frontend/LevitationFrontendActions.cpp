@@ -168,9 +168,21 @@ void MergeASTDependenciesAction::ExecuteAction() {
                                     new ForwardingDiagnosticConsumer(
                                           *CI.getDiagnostics().getClient()),
                                     /*ShouldOwnClient=*/true));
+
     std::unique_ptr<ASTUnit> Unit = ASTUnit::LoadFromASTFile(
-        ASTFiles[I], CI.getPCHContainerReader(), ASTUnit::LoadEverything, Diags,
-        CI.getFileSystemOpts(), false);
+        ASTFiles[I],
+        CI.getPCHContainerReader(),
+        ASTUnit::LoadEverything,
+        Diags,
+        CI.getFileSystemOpts(),
+        /*UseDebugInfo=*/false,
+        /*OnlyLocalDecls=*/false,
+        /*RemappedFiles=*/None,
+        /*CaptureDiagnostics=*/false,
+        /*AllowPCHWithCompilerErrors=*/false,
+        /*UserFilesAreVolatile=*/false,
+        /*ReadDeclarationsOnly=*/true
+    );
 
     if (!Unit)
       continue;
