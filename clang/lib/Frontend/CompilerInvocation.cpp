@@ -1768,18 +1768,12 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
 
   Opts.LevitationDependencyDeclASTs =
           Args.getAllArgValues(OPT_levitation_dependency);
-  Opts.LevitationDeclASTFileExtension =
-          Args.getLastArgValue(OPT_levitation_decl_ast_file_extension);
-  Opts.LevitationDefASTFileExtension =
-          Args.getLastArgValue(OPT_levitation_def_ast_file_extension);
   Opts.LevitationDependenciesOutputFile =
           Args.getLastArgValue(OPT_levitation_dependencies_output_file);
   Opts.LevitationDependenciesOutputFile =
           Args.getLastArgValue(OPT_levitation_dependencies_output_file);
   Opts.LevitationSourcesRootDir =
           Args.getLastArgValue(OPT_levitation_sources_root_dir);
-  Opts.LevitationSourceFileExtension =
-          Args.getLastArgValue(OPT_levitation_source_file_extension);
 
   if (const Arg *A = Args.getLastArg(OPT_arcmt_check,
                                      OPT_arcmt_modify,
@@ -3270,10 +3264,6 @@ static void parseLevitationBuildASTArgs(
 ) {
   const char* Stage = "Build C++ Levitation AST files";
 
-  if (FrontendOpts.LevitationDeclASTFileExtension.empty()) {
-    Diags.Report(diag::err_fe_levitation_missed_option)
-    << "-levitation-decl-ast-file-extension=" << Stage;
-  }
   if (FrontendOpts.LevitationDependenciesOutputFile.empty()) {
     Diags.Report(diag::err_fe_levitation_missed_option)
     << "-levitation-deps-output-file=" << Stage;
@@ -3289,10 +3279,6 @@ static void parseLevitationBuildASTArgs(
   if (FrontendOpts.LevitationSourcesRootDir.empty()) {
     Diags.Report(diag::err_fe_levitation_missed_option)
     << "-levitation-sources-root-dir" << Stage;
-  }
-  if (FrontendOpts.LevitationSourceFileExtension.empty()) {
-    Diags.Report(diag::err_fe_levitation_missed_option)
-    << "-levitation-source-file-extension" << Stage;
   }
   if (FrontendOpts.LevitationBuildObject) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
@@ -3311,14 +3297,6 @@ static void parseLevitationBuildObjectArgs(
 
   const char* Stage = "Build C++ Levitation Object files";
 
-  if (FrontendOpts.LevitationDeclASTFileExtension.empty()) {
-    Diags.Report(diag::err_fe_levitation_missed_option)
-    << "-levitation-decl-ast-file-extension=" << Stage;
-  }
-  if (FrontendOpts.LevitationDefASTFileExtension.empty()) {
-    Diags.Report(diag::err_fe_levitation_missed_option)
-    << "-levitation-def-ast-file-extension=" << Stage;
-  }
   if (!FrontendOpts.LevitationDependenciesOutputFile.empty()) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-deps-output-file=" << Stage;
@@ -3326,10 +3304,6 @@ static void parseLevitationBuildObjectArgs(
   if (!FrontendOpts.LevitationSourcesRootDir.empty()) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-sources-root-dir" << Stage;
-  }
-  if (!FrontendOpts.LevitationSourceFileExtension.empty()) {
-    Diags.Report(diag::err_fe_levitation_wrong_option)
-    << "-levitation-source-file-extension" << Stage;
   }
   if (!FrontendOpts.ASTMergeFiles.empty()) {
     Diags.Report(diag::err_fe_levitation_wrong_option)

@@ -25,6 +25,7 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/File.h"
+#include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/Serialization.h"
 #include "llvm/Bitcode/BitstreamWriter.h"
 #include "llvm/Support/Path.h"
@@ -108,6 +109,9 @@ namespace {
         if (isDirectory(Path))
           continue;
 
+        if (FileExtension[0] != '.')
+          Path.push_back('.');
+
         Path.append(FileExtension.begin(), FileExtension.end());
 
         if (isFile(Path))
@@ -150,7 +154,7 @@ namespace {
 
       DependenciesValidator Validator(
           CI.getFrontendOpts().LevitationSourcesRootDir,
-          CI.getFrontendOpts().LevitationSourceFileExtension,
+          levitation::FileExtensions::SourceCode,
           &CI.getFileManager(),
           CI.getDiagnostics()
       );

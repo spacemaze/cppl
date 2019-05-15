@@ -18,6 +18,7 @@
 #include "clang/Frontend/LevitationASTConsumers.h"
 #include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/Levitation/FileExtensions.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"
@@ -68,7 +69,7 @@ OutputFileHandle CreateOutputFile(
   SmallString<256> OutputPath(CI.getFrontendOpts().OutputFile);
 
   if (GeneratorKind == DeclarationGenerator) {
-    Extension = CI.getFrontendOpts().LevitationDeclASTFileExtension;
+    Extension = levitation::FileExtensions::DeclarationAST;
     if (!OutputPath.empty())
       llvm::sys::path::replace_extension(OutputPath, Extension);
   }
