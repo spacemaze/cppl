@@ -15,9 +15,13 @@
 #include <vector>
 
 namespace clang {
+
+class ASTImporter;
+class ASTImporterLookupTable;
+class TranslationUnitDecl;
+
 // FIXME Levitation: move into levitation namespace
 // FIXME Levitation: move into Levitation directory
-
 class LevitationBuildASTAction : public GeneratePCHAction {
 public:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(
@@ -26,24 +30,53 @@ public:
   ) override;
 };
 
-/**
- * Frontend action adaptor that merges ASTs together.
- *
- * This action takes an existing AST file and "merges" it into the AST
- * context, producing a merged context. This action is an action
- * adaptor, which forwards most of its calls to another action that
- * will consume the merged context.
- */
-class MergeASTDependenciesAction : public ASTMergeAction {
-protected:
-  void ExecuteAction() override;
+class LevitationBuildObjectAction : public ASTMergeAction {
+
 public:
-    MergeASTDependenciesAction(
-        std::unique_ptr<FrontendAction> AdaptedAction,
-        ArrayRef<std::string> ASTFiles
-    ) :
-    ASTMergeAction(std::move(AdaptedAction), ASTFiles)
-    {}
+
+  LevitationBuildObjectAction(
+      std::unique_ptr<FrontendAction> &&AdaptedAction,
+      ArrayRef<std::string> DependencyASTs
+  ) : ASTMergeAction(std::move(AdaptedAction), DependencyASTs)
+  {}
+
+  /// 1. Completes infrastructure for final AST, at this stage we should get created:
+  ///
+  /// Created during FrontendAction::BeginSourceFile:
+  /// * FileManager
+  /// * SourceManager (initialized)
+  /// * Preprocessor (with initialized builtins?)
+  /// * ASTContext
+  /// Created by ExecuteAction itself:
+  /// * CodeCompletion consumer (if any)
+  /// * Sema
+  ///
+  /// 2. Imports C++ Levitation dependencies (if any) by means of ASTImporter
+  /// 3. Adds main AST contents:
+  /// * If input file is AST, it is also to be loaded
+  ///   (directly into main context)
+  ///
+  /// * If input file is code, parse it.
+  void ExecuteAction() override;
+
+  bool usesPreprocessorOnly() const override { return false; }
+
+protected:
+    std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef InFile) override;
+
+protected:
+
+  void importASTFiles();
+
+  void importAST(
+      StringRef ASTFile,
+      ASTImporterLookupTable &LookupTable,
+      IntrusiveRefCntPtr<DiagnosticIDs> DiagIDs
+  );
+
+  void importTU(ASTImporter& Importer, TranslationUnitDecl *TU);
+
+  void loadMainFile(StringRef MainFile);
 };
 
 }  // end namespace clang

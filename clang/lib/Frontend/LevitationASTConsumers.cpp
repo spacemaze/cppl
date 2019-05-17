@@ -207,6 +207,16 @@ namespace {
     }
   };
 
+  class PackageInstantiator : public SemaConsumer {
+      Sema *SemaObj;
+  public:
+      PackageInstantiator(Sema *SemaObj) : SemaObj(SemaObj) {}
+
+      void HandleTranslationUnit(ASTContext &Context) override {
+        SemaObj->InstantiatePackageClasses();
+      }
+  };
+
 } // end anonymous namespace
 
 namespace clang {
@@ -216,6 +226,10 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
     StringRef InFile
 ) {
   return llvm::make_unique<ASTDependenciesProcessor>(CI, InFile);
+}
+
+std::unique_ptr<ASTConsumer> CreatePackageInstantiator(CompilerInstance &CI) {
+  return llvm::make_unique<ASTDependenciesProcessor>(&CI.getSema());
 }
 
 }

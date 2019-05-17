@@ -839,6 +839,9 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
   if (ToLoad >= LoadEverything) {
     AST->TheSema.reset(new Sema(PP, *AST->Ctx, *AST->Consumer));
     AST->TheSema->Initialize();
+
+    // FIXME Levitation: fire bug, this call is superflous and wrong,
+    //   while TheSema->Initialize we call it already
     AST->Reader->InitializeSema(*AST->TheSema);
   }
 

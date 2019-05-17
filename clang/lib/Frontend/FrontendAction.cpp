@@ -545,6 +545,14 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   bool HasBegunSourceFile = false;
   bool ReplayASTFile = Input.getKind().getFormat() == InputKind::Precompiled &&
                        usesPreprocessorOnly();
+
+  // TODO Levitation: once you get solid with this solution
+  //   move and strip whole BeginSourceFile implementation
+  //   into LevitationBuildObjectAction.
+  bool SkipSourceManagerInitialization =
+      CI.getFrontendOpts().LevitationBuildObject &&
+      Input.getKind().getFormat() == InputKind::Precompiled;
+
   if (!BeginInvocation(CI))
     goto failure;
 
@@ -618,7 +626,12 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
   // AST files follow a very different path, since they share objects via the
   // AST unit.
-  if (Input.getKind().getFormat() == InputKind::Precompiled) {
+  if (Input.getKind().getFormat() == InputKind::Precompiled &&
+  // TODO Levitation: once you get solid with this solution
+  //   move and strip whole BeginSourceFile implementation
+  //   into LevitationBuildObjectAction.
+      !CI.getFrontendOpts().LevitationBuildObject
+  ) {
     assert(!usesPreprocessorOnly() && "this case was handled above");
     assert(hasASTFileSupport() &&
            "This action does not have AST file support!");
@@ -748,7 +761,11 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   HasBegunSourceFile = true;
 
   // Initialize the main file entry.
-  if (!CI.InitializeSourceManager(Input))
+  if (
+    // FIXME Levitation: git rid of this, by introducing own BeginSourceFile impl.
+    !SkipSourceManagerInitialization &&
+    !CI.InitializeSourceManager(Input)
+  )
     goto failure;
 
   // For module map files, we first parse the module map and synthesize a

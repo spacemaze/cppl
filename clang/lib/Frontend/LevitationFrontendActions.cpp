@@ -150,66 +150,195 @@ std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
   return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
 }
 
-void MergeASTDependenciesAction::ExecuteAction() {
-  // Clone everything from ASTMergeAction::ExecuteAction
+void LevitationBuildObjectAction::ExecuteAction() {
+  // ASTFrontendAction is used as source
 
   CompilerInstance &CI = getCompilerInstance();
-  CI.getDiagnostics().getClient()->BeginSourceFile(
-                                             CI.getASTContext().getLangOpts());
-  CI.getDiagnostics().SetArgToStringFn(&FormatASTNodeDiagnosticArgument,
-                                       &CI.getASTContext());
-  IntrusiveRefCntPtr<DiagnosticIDs>
-      DiagIDs(CI.getDiagnostics().getDiagnosticIDs());
-  ASTImporterLookupTable LookupTable(
-      *CI.getASTContext().getTranslationUnitDecl());
-  for (unsigned I = 0, N = ASTFiles.size(); I != N; ++I) {
-    IntrusiveRefCntPtr<DiagnosticsEngine>
-        Diags(new DiagnosticsEngine(DiagIDs, &CI.getDiagnosticOpts(),
-                                    new ForwardingDiagnosticConsumer(
-                                          *CI.getDiagnostics().getClient()),
-                                    /*ShouldOwnClient=*/true));
+  if (!CI.hasPreprocessor())
+    llvm_unreachable("Only actions with preprocessor are supported.");
 
-    std::unique_ptr<ASTUnit> Unit = ASTUnit::LoadFromASTFile(
-        ASTFiles[I],
-        CI.getPCHContainerReader(),
-        ASTUnit::LoadEverything,
-        Diags,
-        CI.getFileSystemOpts(),
-        /*UseDebugInfo=*/false,
-        /*OnlyLocalDecls=*/false,
-        /*RemappedFiles=*/None,
-        /*CaptureDiagnostics=*/false,
-        /*AllowPCHWithCompilerErrors=*/false,
-        /*UserFilesAreVolatile=*/false,
-        /*ReadDeclarationsOnly=*/true
-    );
+  // FIXME: Move the truncation aspect of this into Sema, we delayed this till
+  // here so the source manager would be initialized.
+  if (hasCodeCompletionSupport() &&
+      !CI.getFrontendOpts().CodeCompletionAt.FileName.empty())
+    CI.createCodeCompletionConsumer();
 
-    if (!Unit)
-      continue;
+  // Use a code completion consumer?
+  CodeCompleteConsumer *CompletionConsumer = nullptr;
+  if (CI.hasCodeCompletionConsumer())
+    CompletionConsumer = &CI.getCodeCompletionConsumer();
 
-    ASTImporter Importer(CI.getASTContext(), CI.getFileManager(),
-                         Unit->getASTContext(), Unit->getFileManager(),
-                         /*MinimalImport=*/false, &LookupTable);
+  if (!CI.hasSema())
+    CI.createSema(getTranslationUnitKind(), CompletionConsumer);
 
-    TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
-    for (auto *D : TU->decls()) {
-      // Don't re-import __va_list_tag, __builtin_va_list.
-      if (const auto *ND = dyn_cast<NamedDecl>(D))
-        if (IdentifierInfo *II = ND->getIdentifier())
-          if (II->isStr("__va_list_tag") || II->isStr("__builtin_va_list"))
-            continue;
+  importASTFiles();
 
-      llvm::Expected<Decl *> ToDOrError = Importer.Import_New(D);
-
-      if (ToDOrError) {
-        DeclGroupRef DGR(*ToDOrError);
-        CI.getASTConsumer().HandleTopLevelDecl(DGR);
-      } else {
-        llvm::consumeError(ToDOrError.takeError());
-      }
-    }
+  if (getCurrentFileKind().getFormat() == InputKind::Precompiled) {
+    loadMainFile(getCurrentFile());
   }
 
   AdaptedAction->ExecuteAction();
   CI.getDiagnostics().getClient()->EndSourceFile();
+}
+
+void LevitationBuildObjectAction::importASTFiles() {
+
+  CompilerInstance &CI = getCompilerInstance();
+
+  CI.getDiagnostics().getClient()->BeginSourceFile(
+      CI.getASTContext().getLangOpts()
+  );
+
+  CI.getDiagnostics().SetArgToStringFn(
+      &FormatASTNodeDiagnosticArgument,
+      &CI.getASTContext()
+  );
+
+  IntrusiveRefCntPtr<DiagnosticIDs> DiagIDs(
+      CI.getDiagnostics().getDiagnosticIDs()
+  );
+
+  ASTImporterLookupTable LookupTable(
+      *CI.getASTContext().getTranslationUnitDecl()
+  );
+
+  // Import dependencies
+  for (const auto &Dep : ASTFiles) {
+    importAST(Dep, LookupTable, DiagIDs);
+  }
+}
+
+void LevitationBuildObjectAction::importAST(
+    StringRef ASTFile,
+    ASTImporterLookupTable &LookupTable,
+    IntrusiveRefCntPtr<DiagnosticIDs> DiagIDs
+) {
+  // ASTMerge::ExecuteAction has been used as a source,
+  // a bit refactored though...
+
+  CompilerInstance &CI = getCompilerInstance();
+
+  IntrusiveRefCntPtr<DiagnosticsEngine> Diags(new DiagnosticsEngine(
+      DiagIDs,
+      &CI.getDiagnosticOpts(),
+      new ForwardingDiagnosticConsumer(*CI.getDiagnostics().getClient()),
+      /*ShouldOwnClient=*/true
+  ));
+
+  std::unique_ptr<ASTUnit> Unit = ASTUnit::LoadFromASTFile(
+      ASTFile,
+      CI.getPCHContainerReader(),
+      ASTUnit::LoadEverything,
+      Diags,
+      CI.getFileSystemOpts(),
+      /*UseDebugInfo=*/false,
+      /*OnlyLocalDecls=*/false,
+      /*RemappedFiles=*/None,
+      /*CaptureDiagnostics=*/false,
+      /*AllowPCHWithCompilerErrors=*/false,
+      /*UserFilesAreVolatile=*/false,
+      /*ReadDeclarationsOnly=*/true
+  );
+
+  if (!Unit)
+    return;
+
+  ASTImporter Importer(
+      CI.getASTContext(),
+      CI.getFileManager(),
+      Unit->getASTContext(),
+      Unit->getFileManager(),
+      /*MinimalImport=*/false,
+      &LookupTable
+  );
+
+  TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
+
+  importTU(Importer, TU);
+}
+
+void LevitationBuildObjectAction::importTU(
+    ASTImporter& Importer, TranslationUnitDecl *TU
+) {
+
+  CompilerInstance &CI = getCompilerInstance();
+
+  for (auto *D : TU->decls()) {
+    // Don't re-import __va_list_tag, __builtin_va_list.
+    if (const auto *ND = dyn_cast<NamedDecl>(D))
+      if (IdentifierInfo *II = ND->getIdentifier())
+        if (II->isStr("__va_list_tag") || II->isStr("__builtin_va_list"))
+          continue;
+
+    llvm::Expected<Decl *> ToDOrError = Importer.Import_New(D);
+
+    if (ToDOrError) {
+      DeclGroupRef DGR(*ToDOrError);
+      CI.getASTConsumer().HandleTopLevelDecl(DGR);
+    } else {
+      llvm::consumeError(ToDOrError.takeError());
+    }
+  }
+}
+
+void LevitationBuildObjectAction::loadMainFile(llvm::StringRef MainFile) {
+
+  CompilerInstance &CI = getCompilerInstance();
+
+  IntrusiveRefCntPtr<ASTReader> Reader(new ASTReader(
+      CI.getPreprocessor(),
+      CI.getModuleCache(),
+      &CI.getASTContext(),
+      CI.getPCHContainerReader(),
+      {}
+  ));
+
+  // Attach the AST reader to the AST context as an external AST
+  // source, so that declarations will be deserialized from the
+  // AST file as needed.
+  // We need the external source to be set up before we read the AST, because
+  // eagerly-deserialized declarations may use it.
+  CI.getASTContext().setExternalSource(Reader);
+
+  switch (Reader->ReadAST(
+      MainFile,
+      serialization::MK_MainFile,
+      SourceLocation(),
+      ASTReader::ARR_None
+  )) {
+  case ASTReader::Success:
+    CI.getPreprocessor().setPredefines(Reader->getSuggestedPredefines());
+    return;
+
+  case ASTReader::Failure:
+  case ASTReader::Missing:
+  case ASTReader::OutOfDate:
+  case ASTReader::VersionMismatch:
+  case ASTReader::ConfigurationMismatch:
+  case ASTReader::HadErrors:
+    CI.getDiagnostics().Report(diag::err_fe_unable_to_load_pch);
+    CI.setExternalSemaSource(nullptr);
+  }
+}
+
+std::unique_ptr<ASTConsumer> LevitationBuildObjectAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
+
+  auto AdoptedConsumer = ASTMergeAction::CreateASTConsumer(CI, InFile);
+
+  if (getCurrentFileKind().getFormat() != InputKind::Precompiled)
+    return AdoptedConsumer;
+
+  if (!AdoptedConsumer)
+    return nullptr;
+
+  std::vector<std::unique_ptr<ASTConsumer>> Consumers;
+
+  auto PackageInstantiator = CreatePackageInstantiator(CI);
+
+  assert(PackageInstantiator && "Failed to package instantiator?");
+
+  Consumers.push_back(std::move(PackageInstantiator));
+  Consumers.push_back(std::move(AdoptedConsumer));
+
+  return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
 }

@@ -38,7 +38,7 @@ class FrontendAction {
   CompilerInstance *Instance;
   friend class ASTMergeAction;
   friend class WrapperFrontendAction;
-  friend class MergeASTDependenciesAction;
+  friend class LevitationBuildObjectAction;
 
 private:
   std::unique_ptr<ASTConsumer> CreateWrappedASTConsumer(CompilerInstance &CI,

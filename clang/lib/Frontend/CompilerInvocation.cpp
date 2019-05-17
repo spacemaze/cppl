@@ -3394,6 +3394,10 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
     }
   }
 
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+
   if (Res.getFrontendOpts().ProgramAction == frontend::LevitationBuildAST) {
     parseLevitationBuildASTArgs(
         LangOpts,
@@ -3404,8 +3408,32 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
   }
 
   if (Res.getFrontendOpts().LevitationBuildObject) {
+
+    // If we working with precompiled C++ Levitation AST files,
+    // we still need -std option to be parsed.
+    if (DashX.getFormat() == InputKind::Precompiled) {
+
+      DashX = InputKind(
+          InputKind::CXX,
+          InputKind::Precompiled,
+          DashX.isPreprocessed()
+      );
+
+      ParseLangArgs(
+          LangOpts,
+          Args,
+          DashX,
+          Res.getTargetOpts(),
+          Res.getPreprocessorOpts(),
+          Diags
+      );
+    }
       parseLevitationBuildObjectArgs(LangOpts, Res.getFrontendOpts(), Diags);
   }
+
+  //
+  // end of C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
 
   LangOpts.FunctionAlignment =
       getLastArgIntValue(Args, OPT_function_alignment, 0, Diags);

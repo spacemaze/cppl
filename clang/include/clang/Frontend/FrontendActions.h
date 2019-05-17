@@ -202,13 +202,14 @@ protected:
  * will consume the merged context.
  */
 class ASTMergeAction : public FrontendAction {
+  friend class LevitationBuildObjectAction;
+
   /// The action that the merge action adapts.
   std::unique_ptr<FrontendAction> AdaptedAction;
 
   /// The set of AST files to merge.
   std::vector<std::string> ASTFiles;
 
-  friend class MergeASTDependenciesAction;
 
 protected:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,

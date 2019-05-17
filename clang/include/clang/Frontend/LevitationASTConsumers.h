@@ -22,6 +22,8 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
     StringRef InFile
 );
 
+std::unique_ptr<ASTConsumer> CreatePackageInstantiator(CompilerInstance &CI);
+
 }
 
 #endif
