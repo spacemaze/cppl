@@ -132,26 +132,47 @@ CreateGeneratePCHConsumer(
   return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
 }
 
+class MultiplexConsumerBuilder {
+
+  bool Successful = true;
+  std::vector<std::unique_ptr<ASTConsumer>> Consumers;
+
+public:
+
+  using BuilderTy = MultiplexConsumerBuilder;
+
+  BuilderTy &addRequired(std::unique_ptr<ASTConsumer> &&Consumer) {
+    if (Successful && Consumer)
+      Consumers.push_back(std::move(Consumer));
+    else
+      Successful = false;
+    return *this;
+  }
+
+  BuilderTy &addNotNull(std::unique_ptr<ASTConsumer> &&Consumer) {
+    assert(Consumer && "Consumer must be non-null pointer");
+    return addRequired(std::move(Consumer));
+  }
+
+  std::unique_ptr<MultiplexConsumer> done() {
+    return Successful ?
+        llvm::make_unique<MultiplexConsumer>(std::move(Consumers)) :
+        nullptr;
+  }
+};
+
 } // end of anonymous namespace
 
 std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
     clang::CompilerInstance &CI,
     llvm::StringRef InFile
 ) {
-  std::vector<std::unique_ptr<ASTConsumer>> Consumers;
 
-  auto ParserPostProcessor = CreateParserPostProcessor();
-  auto DependenciesProcessor = CreateDependenciesASTProcessor(CI, InFile);
-  auto AstFileCreator = CreateGeneratePCHConsumer(CI, InFile);
-
-  if (!AstFileCreator)
-    return nullptr;
-
-  Consumers.push_back(std::move(ParserPostProcessor));
-  Consumers.push_back(std::move(DependenciesProcessor));
-  Consumers.push_back(std::move(AstFileCreator));
-
-  return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
+  return MultiplexConsumerBuilder()
+      .addNotNull(CreateParserPostProcessor())
+      .addNotNull(CreateDependenciesASTProcessor(CI, InFile))
+      .addRequired(CreateGeneratePCHConsumer(CI, InFile))
+  .done();
 }
 
 void LevitationBuildObjectAction::ExecuteAction() {
@@ -332,17 +353,8 @@ std::unique_ptr<ASTConsumer> LevitationBuildObjectAction::CreateASTConsumer(Comp
   if (getCurrentFileKind().getFormat() != InputKind::Precompiled)
     return AdoptedConsumer;
 
-  if (!AdoptedConsumer)
-    return nullptr;
-
-  std::vector<std::unique_ptr<ASTConsumer>> Consumers;
-
-  auto PackageInstantiator = CreatePackageInstantiator();
-
-  assert(PackageInstantiator && "Failed to package instantiator?");
-
-  Consumers.push_back(std::move(PackageInstantiator));
-  Consumers.push_back(std::move(AdoptedConsumer));
-
-  return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
+  return MultiplexConsumerBuilder()
+      .addNotNull(CreatePackageInstantiator())
+      .addRequired(std::move(AdoptedConsumer))
+  .done();
 }
