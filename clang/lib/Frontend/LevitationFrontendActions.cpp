@@ -36,6 +36,8 @@
 
 using namespace clang;
 
+namespace {
+
 typedef std::vector<std::unique_ptr<ASTConsumer>> ConsumersVector;
 
 struct OutputFileHandle {
@@ -130,20 +132,22 @@ CreateGeneratePCHConsumer(
   return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
 }
 
+} // end of anonymous namespace
+
 std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
     clang::CompilerInstance &CI,
     llvm::StringRef InFile
 ) {
   std::vector<std::unique_ptr<ASTConsumer>> Consumers;
 
+  auto ParserPostProcessor = CreateParserPostProcessor();
   auto DependenciesProcessor = CreateDependenciesASTProcessor(CI, InFile);
   auto AstFileCreator = CreateGeneratePCHConsumer(CI, InFile);
-
-  assert(DependenciesProcessor && "Failed to create dependencies processor?");
 
   if (!AstFileCreator)
     return nullptr;
 
+  Consumers.push_back(std::move(ParserPostProcessor));
   Consumers.push_back(std::move(DependenciesProcessor));
   Consumers.push_back(std::move(AstFileCreator));
 
@@ -333,7 +337,7 @@ std::unique_ptr<ASTConsumer> LevitationBuildObjectAction::CreateASTConsumer(Comp
 
   std::vector<std::unique_ptr<ASTConsumer>> Consumers;
 
-  auto PackageInstantiator = CreatePackageInstantiator(CI);
+  auto PackageInstantiator = CreatePackageInstantiator();
 
   assert(PackageInstantiator && "Failed to package instantiator?");
 

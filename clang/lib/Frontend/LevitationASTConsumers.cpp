@@ -35,10 +35,33 @@
 using namespace clang;
 using namespace clang::levitation;
 
-//===----------------------------------------------------------------------===//
-/// ASTPrinter - Pretty-printer and dumper of ASTs
-
 namespace {
+
+  class SemaObjHolderConsumer : public SemaConsumer {
+  protected:
+    Sema *SemaObj;
+  public:
+    void InitializeSema(Sema &S) override {
+      SemaObj = &S;
+    }
+
+    void ForgetSema() override {
+      SemaObj = nullptr;
+    }
+  };
+
+  class ParserPostProcessor : public SemaObjHolderConsumer {
+  public:
+    void HandleTranslationUnit(ASTContext &Context) override {
+      assert(SemaObj && "Sema must be initialized");
+      assert(
+        SemaObj->getLangOpts().getLevitationBuildStage() ==
+        LangOptions::LBSK_BuildAST &&
+        "Package dependent marking allowed on AST build stage only."
+      );
+      SemaObj->markLevitationPackageDeclsAsPackageDependent();
+    }
+  };
 
   class DependenciesValidator {
       StringRef SourcesRoot;
@@ -139,8 +162,7 @@ namespace {
     }
   };
 
-  class ASTDependenciesProcessor : public SemaConsumer {
-    Sema *SemaObj;
+  class ASTDependenciesProcessor : public SemaObjHolderConsumer {
     CompilerInstance &CI;
     std::string CurrentInputFile;
   public:
@@ -179,14 +201,6 @@ namespace {
         diagDependencyFileIOIssues(F.getStatus());
       }
     }
-
-    void InitializeSema(Sema &S) override {
-      SemaObj = &S;
-    }
-
-    void ForgetSema() override {
-      SemaObj = nullptr;
-    }
   private:
     File createFile() {
       return File(CI.getFrontendOpts().LevitationDependenciesOutputFile);
@@ -207,11 +221,8 @@ namespace {
     }
   };
 
-  class PackageInstantiator : public SemaConsumer {
-      Sema *SemaObj;
+  class PackageInstantiator : public SemaObjHolderConsumer {
   public:
-      PackageInstantiator(Sema *SemaObj) : SemaObj(SemaObj) {}
-
       void HandleTranslationUnit(ASTContext &Context) override {
         SemaObj->InstantiatePackageClasses();
       }
@@ -221,6 +232,10 @@ namespace {
 
 namespace clang {
 
+std::unique_ptr<ASTConsumer> CreateParserPostProcessor() {
+  return llvm::make_unique<ParserPostProcessor>();
+}
+
 std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
     CompilerInstance &CI,
     StringRef InFile
@@ -228,8 +243,8 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
   return llvm::make_unique<ASTDependenciesProcessor>(CI, InFile);
 }
 
-std::unique_ptr<ASTConsumer> CreatePackageInstantiator(CompilerInstance &CI) {
-  return llvm::make_unique<ASTDependenciesProcessor>(&CI.getSema());
+std::unique_ptr<ASTConsumer> CreatePackageInstantiator() {
+  return llvm::make_unique<PackageInstantiator>();
 }
 
 }
