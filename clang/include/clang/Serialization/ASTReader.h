@@ -371,6 +371,7 @@ public:
   friend class serialization::reader::ASTIdentifierLookupTrait;
   friend class serialization::ReadMethodPoolVisitor;
   friend class TypeLocReader;
+  friend class LevitationModulesReader;
 
   using RecordData = SmallVector<uint64_t, 64>;
   using RecordDataImpl = SmallVectorImpl<uint64_t>;
@@ -1559,6 +1560,40 @@ public:
                         SourceLocation ImportLoc,
                         unsigned ClientLoadCapabilities,
                         SmallVectorImpl<ImportedSubmodule> *Imported = nullptr);
+
+  class OpenedReaderContext {
+      std::function<void()> OnClose;
+  public:
+      OpenedReaderContext(OpenedReaderContext &&Src) :
+        OnClose(std::move(Src.OnClose))
+      {}
+
+      OpenedReaderContext(std::function<void()> &&onExitClose) :
+        OnClose(std::move(onExitClose))
+      {}
+
+      std::function<void()>&& takeOnClose() {
+        return std::move(OnClose);
+      }
+  };
+
+  OpenedReaderContext BeginRead(
+      unsigned &PreviousGeneration,
+      unsigned &NumModules,
+      SourceLocation ImportLoc,
+      unsigned ClientLoadCapabilities
+  );
+
+  ASTReadResult EndRead(
+      OpenedReaderContext&& OpenedContext,
+      SmallVectorImpl<ImportedModule> &&Loaded,
+      ModuleKind Type,
+      SourceLocation ImportLoc,
+      unsigned ClientLoadCapabilities,
+      unsigned PreviousGeneration,
+      unsigned NumModules,
+      SmallVectorImpl<ImportedSubmodule> *Imported = nullptr
+  );
 
   /// Make the entities in the given module and any of its (non-explicit)
   /// submodules visible to name lookup.

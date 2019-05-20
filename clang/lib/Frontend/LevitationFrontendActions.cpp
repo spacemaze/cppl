@@ -24,12 +24,16 @@
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Sema/TemplateInstCallback.h"
+#include "clang/Serialization/ASTBitCodes.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/ASTWriter.h"
+#include "clang/Serialization/GlobalModuleIndex.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/YAMLTraits.h"
 #include <memory>
 #include <system_error>
@@ -162,326 +166,186 @@ public:
   }
 };
 
+} // end of anonymous namespace
+
+namespace clang {
+
 class LevitationModulesReader : public ASTReader {
-  LevitationModulesReader(CompilerInstance &CompilerInst) :
+  StringRef MainFile;
+  DiagnosticsEngine &Diags;
+  serialization::ModuleKind LastReadModuleKind;
+public:
+
+  LevitationModulesReader(
+      CompilerInstance &CompilerInst,
+      StringRef mainFile
+  ) :
     ASTReader(
       CompilerInst.getPreprocessor(),
       CompilerInst.getModuleCache(),
       &CompilerInst.getASTContext(),
       CompilerInst.getPCHContainerReader(),
       {}
-    )
+    ),
+    MainFile(mainFile),
+    Diags(CompilerInst.getDiagnostics())
   {}
-
-public:
 
   class LevitationModulesOpenedReader : public levitation::WithOperand {
 
     bool Moved = false;
     LevitationModulesReader &Reader;
-
+    OpenedReaderContext OpenedContext;
   public:
 
-    LevitationModulesOpenedReader(LevitationModulesReader &Reader) :
-      Reader(Reader)
+    LevitationModulesOpenedReader(
+        LevitationModulesReader &Reader,
+        OpenedReaderContext &&openedContext
+    ) :
+      Reader(Reader),
+      OpenedContext(std::move(openedContext))
     {}
 
-    LevitationModulesOpenedReader(LevitationModulesOpenedReader &&Src)
-    : Reader(Src.Reader)
+    LevitationModulesOpenedReader(LevitationModulesOpenedReader &&Src) :
+      Reader(Src.Reader),
+      OpenedContext(std::move(Src.OpenedContext))
     {
       Src.Moved = true;
     }
 
     ~LevitationModulesOpenedReader() {
       if (!Moved)
-        Reader.close();
-    }
-
-    void readDependency(StringRef Dependency) {
-      Reader.readDependency(Dependency);
-    }
-    void readMainFile(StringRef MainFile) {
-      Reader.readMainFile(MainFile);
+        Reader.close(std::move(OpenedContext));
     }
   };
 
-  static LevitationModulesOpenedReader open(CompilerInstance &CI) {
-    auto *Reader = new LevitationModulesReader(CI);
+  LevitationModulesOpenedReader open() {
+    return LevitationModulesOpenedReader(*this, beginRead());
+  }
 
-    IntrusiveRefCntPtr<ASTReader> ThisReader(Reader);
-    CI.setExternalSemaSource(ThisReader);
+  bool hasErrors() const {
+    return ReadResult != Success;
+  }
 
-    Reader->open();
+  ASTReadResult getStatus() const {
+    return ReadResult;
+  }
 
-    return LevitationModulesOpenedReader(*Reader);
+  using OnFailFn = std::function<void(
+      DiagnosticsEngine &,
+      StringRef,
+      ASTReader::ASTReadResult
+  )>;
+
+  void readDependency(
+      StringRef Dependency,
+      OnFailFn &&OnFail
+  ) {
+
+    auto Res = read(
+        Dependency,
+        serialization::MK_PCH,
+        /*ReadDeclarationsOnly=*/true
+    );
+
+    if (Res != ASTReader::Success)
+      OnFail(Diags, Dependency, Res);
   }
 
 private:
 
-  void open() {
-    beginRead();
+  unsigned NumModules = 0;
+  unsigned PreviousGeneration;
+  SmallVector<ImportedModule, 16> Loaded;
+  ASTReadResult ReadResult;
+
+  void close(OpenedReaderContext &&OpenedContext) {
+    return endRead(std::move(OpenedContext));
   }
 
-  void close() {
-    endRead();
+  OpenedReaderContext beginRead() {
+    return BeginRead(
+        PreviousGeneration,
+        NumModules,
+        SourceLocation(),
+        ARR_None
+    );
   }
 
-  void beginRead() {
-    // Beginning part of ASTReader::ReadAST, before ReadASTCore
-    llvm_unreachable("TODO Levitation");
+  void endRead(OpenedReaderContext &&OpenedContext) {
 
-    //  llvm::SaveAndRestore<SourceLocation>
-    //    SetCurImportLocRAII(CurrentImportLoc, ImportLoc);
-    //
-    //  // Defer any pending actions until we get to the end of reading the AST file.
-    //  Deserializing AnASTFile(this);
-    //
-    //  // Bump the generation number.
-    //  unsigned PreviousGeneration = 0;
-    //  if (ContextObj)
-    //    PreviousGeneration = incrementGeneration(*ContextObj);
-    //
-    //  unsigned NumModules = ModuleMgr.size();
-    //  SmallVector<ImportedModule, 4> Loaded;
+    // Read main file after all dependencies.
+    if (MainFile.size()) {
+      ReadResult = read(
+          MainFile,
+          serialization::MK_MainFile,
+          /*ReadDeclarationsOnly =*/false
+      );
+    }
+
+    if (ReadResult == Success) {
+      ReadResult = EndRead(
+          std::move(OpenedContext),
+          std::move(Loaded),
+          LastReadModuleKind,
+          SourceLocation(),
+          ARR_None,
+          PreviousGeneration,
+          NumModules
+      );
+    }
   }
 
-  void endRead() {
-    // Beginning part of ASTReader::ReadAST, after ReadASTCore
-    llvm_unreachable("TODO Levitation");
+  ASTReadResult read(
+      StringRef FileName,
+      serialization::ModuleKind Type,
+      bool DeclarationsOnly
+  ) {
+    LastReadModuleKind = Type;
 
-    //
-    //  // Here comes stuff that we only do once the entire chain is loaded.
-    //
-    //  // Load the AST blocks of all of the modules that we loaded.
-    //  for (SmallVectorImpl<ImportedModule>::iterator M = Loaded.begin(),
-    //                                              MEnd = Loaded.end();
-    //       M != MEnd; ++M) {
-    //    ModuleFile &F = *M->Mod;
-    //
-    //    // Read the AST block.
-    //    if (ASTReadResult Result = ReadASTBlock(F, ClientLoadCapabilities))
-    //      return Result;
-    //
-    //    // Read the extension blocks.
-    //    while (!SkipCursorToBlock(F.Stream, EXTENSION_BLOCK_ID)) {
-    //      if (ASTReadResult Result = ReadExtensionBlock(F))
-    //        return Result;
-    //    }
-    //
-    //    // Once read, set the ModuleFile bit base offset and update the size in
-    //    // bits of all files we've seen.
-    //    F.GlobalBitOffset = TotalModulesSizeInBits;
-    //    TotalModulesSizeInBits += F.SizeInBits;
-    //    GlobalBitOffsetsMap.insert(std::make_pair(F.GlobalBitOffset, &F));
-    //
-    //    // Preload SLocEntries.
-    //    for (unsigned I = 0, N = F.PreloadSLocEntries.size(); I != N; ++I) {
-    //      int Index = int(F.PreloadSLocEntries[I] - 1) + F.SLocEntryBaseID;
-    //      // Load it through the SourceManager and don't call ReadSLocEntry()
-    //      // directly because the entry may have already been loaded in which case
-    //      // calling ReadSLocEntry() directly would trigger an assertion in
-    //      // SourceManager.
-    //      SourceMgr.getLoadedSLocEntryByID(Index);
-    //    }
-    //
-    //    // Map the original source file ID into the ID space of the current
-    //    // compilation.
-    //    if (F.OriginalSourceFileID.isValid()) {
-    //      F.OriginalSourceFileID = FileID::get(
-    //          F.SLocEntryBaseID + F.OriginalSourceFileID.getOpaqueValue() - 1);
-    //    }
-    //
-    //    // Preload all the pending interesting identifiers by marking them out of
-    //    // date.
-    //    for (auto Offset : F.PreloadIdentifierOffsets) {
-    //      const unsigned char *Data = reinterpret_cast<const unsigned char *>(
-    //          F.IdentifierTableData + Offset);
-    //
-    //      ASTIdentifierLookupTrait Trait(*this, F);
-    //      auto KeyDataLen = Trait.ReadKeyDataLength(Data);
-    //      auto Key = Trait.ReadKey(Data, KeyDataLen.first);
-    //      auto &II = PP.getIdentifierTable().getOwn(Key);
-    //      II.setOutOfDate(true);
-    //
-    //      // Mark this identifier as being from an AST file so that we can track
-    //      // whether we need to serialize it.
-    //      markIdentifierFromAST(*this, II);
-    //
-    //      // Associate the ID with the identifier so that the writer can reuse it.
-    //      auto ID = Trait.ReadIdentifierID(Data + KeyDataLen.first);
-    //      SetIdentifierInfo(ID, &II);
-    //    }
-    //  }
-    //
-    //  // Setup the import locations and notify the module manager that we've
-    //  // committed to these module files.
-    //  for (SmallVectorImpl<ImportedModule>::iterator M = Loaded.begin(),
-    //                                              MEnd = Loaded.end();
-    //       M != MEnd; ++M) {
-    //    ModuleFile &F = *M->Mod;
-    //
-    //    ModuleMgr.moduleFileAccepted(&F);
-    //
-    //    // Set the import location.
-    //    F.DirectImportLoc = ImportLoc;
-    //    // FIXME: We assume that locations from PCH / preamble do not need
-    //    // any translation.
-    //    if (!M->ImportedBy)
-    //      F.ImportLoc = M->ImportLoc;
-    //    else
-    //      F.ImportLoc = TranslateSourceLocation(*M->ImportedBy, M->ImportLoc);
-    //  }
-    //
-    //  if (!PP.getLangOpts().CPlusPlus ||
-    //      (Type != MK_ImplicitModule && Type != MK_ExplicitModule &&
-    //       Type != MK_PrebuiltModule)) {
-    //    // Mark all of the identifiers in the identifier table as being out of date,
-    //    // so that various accessors know to check the loaded modules when the
-    //    // identifier is used.
-    //    //
-    //    // For C++ modules, we don't need information on many identifiers (just
-    //    // those that provide macros or are poisoned), so we mark all of
-    //    // the interesting ones via PreloadIdentifierOffsets.
-    //    for (IdentifierTable::iterator Id = PP.getIdentifierTable().begin(),
-    //                                IdEnd = PP.getIdentifierTable().end();
-    //         Id != IdEnd; ++Id)
-    //      Id->second->setOutOfDate(true);
-    //  }
-    //  // Mark selectors as out of date.
-    //  for (auto Sel : SelectorGeneration)
-    //    SelectorOutOfDate[Sel.first] = true;
-    //
-    //  // Resolve any unresolved module exports.
-    //  for (unsigned I = 0, N = UnresolvedModuleRefs.size(); I != N; ++I) {
-    //    UnresolvedModuleRef &Unresolved = UnresolvedModuleRefs[I];
-    //    SubmoduleID GlobalID = getGlobalSubmoduleID(*Unresolved.File,Unresolved.ID);
-    //    Module *ResolvedMod = getSubmodule(GlobalID);
-    //
-    //    switch (Unresolved.Kind) {
-    //    case UnresolvedModuleRef::Conflict:
-    //      if (ResolvedMod) {
-    //        Module::Conflict Conflict;
-    //        Conflict.Other = ResolvedMod;
-    //        Conflict.Message = Unresolved.String.str();
-    //        Unresolved.Mod->Conflicts.push_back(Conflict);
-    //      }
-    //      continue;
-    //
-    //    case UnresolvedModuleRef::Import:
-    //      if (ResolvedMod)
-    //        Unresolved.Mod->Imports.insert(ResolvedMod);
-    //      continue;
-    //
-    //    case UnresolvedModuleRef::Export:
-    //      if (ResolvedMod || Unresolved.IsWildcard)
-    //        Unresolved.Mod->Exports.push_back(
-    //          Module::ExportDecl(ResolvedMod, Unresolved.IsWildcard));
-    //      continue;
-    //    }
-    //  }
-    //  UnresolvedModuleRefs.clear();
-    //
-    //  if (Imported)
-    //    Imported->append(ImportedModules.begin(),
-    //                     ImportedModules.end());
-    //
-    //  // FIXME: How do we load the 'use'd modules? They may not be submodules.
-    //  // Might be unnecessary as use declarations are only used to build the
-    //  // module itself.
-    //
-    //  if (ContextObj)
-    //    InitializeContext();
-    //
-    //  if (SemaObj)
-    //    UpdateSema();
-    //
-    //  if (DeserializationListener)
-    //    DeserializationListener->ReaderInitialized(this);
-    //
-    //  ModuleFile &PrimaryModule = ModuleMgr.getPrimaryModule();
-    //  if (PrimaryModule.OriginalSourceFileID.isValid()) {
-    //    // If this AST file is a precompiled preamble, then set the
-    //    // preamble file ID of the source manager to the file source file
-    //    // from which the preamble was built.
-    //    if (Type == MK_Preamble) {
-    //      SourceMgr.setPreambleFileID(PrimaryModule.OriginalSourceFileID);
-    //    } else if (Type == MK_MainFile) {
-    //      SourceMgr.setMainFileID(PrimaryModule.OriginalSourceFileID);
-    //    }
-    //  }
-    //
-    //  // For any Objective-C class definitions we have already loaded, make sure
-    //  // that we load any additional categories.
-    //  if (ContextObj) {
-    //    for (unsigned I = 0, N = ObjCClassesLoaded.size(); I != N; ++I) {
-    //      loadObjCCategories(ObjCClassesLoaded[I]->getGlobalID(),
-    //                         ObjCClassesLoaded[I],
-    //                         PreviousGeneration);
-    //    }
-    //  }
-    //
-    //  if (PP.getHeaderSearchInfo()
-    //          .getHeaderSearchOpts()
-    //          .ModulesValidateOncePerBuildSession) {
-    //    // Now we are certain that the module and all modules it depends on are
-    //    // up to date.  Create or update timestamp files for modules that are
-    //    // located in the module cache (not for PCH files that could be anywhere
-    //    // in the filesystem).
-    //    for (unsigned I = 0, N = Loaded.size(); I != N; ++I) {
-    //      ImportedModule &M = Loaded[I];
-    //      if (M.Mod->Kind == MK_ImplicitModule) {
-    //        updateModuleTimestamp(*M.Mod);
-    //      }
-    //    }
-    //  }
-    //
-    //  return Success;
-  }
+    // FIXME Levitation: should pass as additional parameter?
+    llvm::SaveAndRestore<bool>
+    ReadDeclarationsOnlyFlagScope(ReadDeclarationsOnly, DeclarationsOnly);
 
-  void readDependency(StringRef Dependency) {
-    llvm_unreachable("TODO Levitation");
+    switch (ASTReadResult ReadResult = ReadASTCore(
+        FileName,
+        Type,
+        SourceLocation(),
+        /*ImportedBy=*/nullptr,
+        Loaded,
+        /*ExpectedSize=*/0,
+        /*ExpectedModTime=*/0,
+        ASTFileSignature(),
+        ARR_None
+    )) {
+    case Failure:
+    case Missing:
+    case OutOfDate:
+    case VersionMismatch:
+    case ConfigurationMismatch:
+    case HadErrors: {
+      llvm::SmallPtrSet<ModuleFile *, 4> LoadedSet;
+      for (const ImportedModule &IM : Loaded)
+        LoadedSet.insert(IM.Mod);
 
-    // below should be part of commond readFile(...):
-    //
-    //  switch (ASTReadResult ReadResult =
-    //              ReadASTCore(FileName, Type, ImportLoc,
-    //                          /*ImportedBy=*/nullptr, Loaded, 0, 0,
-    //                          ASTFileSignature(), ClientLoadCapabilities)) {
-    //  case Failure:
-    //  case Missing:
-    //  case OutOfDate:
-    //  case VersionMismatch:
-    //  case ConfigurationMismatch:
-    //  case HadErrors: {
-    //    llvm::SmallPtrSet<ModuleFile *, 4> LoadedSet;
-    //    for (const ImportedModule &IM : Loaded)
-    //      LoadedSet.insert(IM.Mod);
-    //
-    //    ModuleMgr.removeModules(ModuleMgr.begin() + NumModules, LoadedSet,
-    //                            PP.getLangOpts().Modules
-    //                                ? &PP.getHeaderSearchInfo().getModuleMap()
-    //                                : nullptr);
-    //
-    //    // If we find that any modules are unusable, the global index is going
-    //    // to be out-of-date. Just remove it.
-    //    GlobalIndex.reset();
-    //    ModuleMgr.setGlobalIndex(nullptr);
-    //    return ReadResult;
-    //  }
-    //  case Success:
-    //    break;
-    //  }
+      ModuleMgr.removeModules(ModuleMgr.begin() + NumModules, LoadedSet,
+                              PP.getLangOpts().Modules
+                                  ? &PP.getHeaderSearchInfo().getModuleMap()
+                                  : nullptr);
 
-  }
-
-  void readMainFile(StringRef MainFile) {
-    llvm_unreachable("TODO Levitation");
-
-    // readFile(...)
+      // If we find that any modules are unusable, the global index is going
+      // to be out-of-date. Just remove it.
+      GlobalIndex.reset();
+      ModuleMgr.setGlobalIndex(nullptr);
+      return ReadResult;
+    }
+    case Success:
+      return Success;
+    }
   }
 };
 
-} // end of anonymous namespace
+} // end of namespace clang
 
 std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
     clang::CompilerInstance &CI,
@@ -522,6 +386,43 @@ void LevitationBuildObjectAction::ExecuteAction() {
   CI.getDiagnostics().getClient()->EndSourceFile();
 }
 
+const char *readerStatusToString(ASTReader::ASTReadResult Res) {
+  switch (Res) {
+    case ASTReader::Success:
+      return "Successfull??";
+
+    case ASTReader::Failure:
+      return "File seems to be currupted.";
+
+    case ASTReader::Missing:
+      return "File is missing.";
+
+    case ASTReader::OutOfDate:
+      return "File is out of date.";
+
+    case ASTReader::VersionMismatch:
+      return "The AST file was written by a different version of Clang";
+
+    case ASTReader::ConfigurationMismatch:
+      return "The AST file was writtten with a different language/target "
+             " configuration.";
+
+    case ASTReader::HadErrors:
+      return "AST file has errors.";
+  }
+}
+
+static void diagFailedToRead(
+    DiagnosticsEngine &Diag,
+    StringRef File,
+    ASTReader::ASTReadResult Res
+) {
+  Diag.Report(diag::err_levitation_failed_to_read_pch)
+  << File
+  << readerStatusToString(Res);
+  llvm_unreachable("TODO Levitation");
+}
+
 void LevitationBuildObjectAction::importASTFiles() {
 
   CompilerInstance &CI = getCompilerInstance();
@@ -543,18 +444,26 @@ void LevitationBuildObjectAction::importASTFiles() {
       *CI.getASTContext().getTranslationUnitDecl()
   );
 
-  with (auto ReaderScope = LevitationModulesReader::open(CI)) {
+  StringRef MainFile =
+      getCurrentFileKind().getFormat() == InputKind::Precompiled ?
+      getCurrentFile() :
+      StringRef();
 
-    // Import dependencies
+  IntrusiveRefCntPtr<LevitationModulesReader>
+      Reader(new LevitationModulesReader(CI, MainFile));
+  CI.getASTContext().setExternalSource(Reader);
+
+  with(auto Opened = Reader->open()) {
     for (const auto &Dep : ASTFiles) {
-      ReaderScope.readDependency(Dep);
-    }
-
-    // Read precompiled main file if any.
-    if (getCurrentFileKind().getFormat() == InputKind::Precompiled) {
-      ReaderScope.readMainFile(getCurrentFile());
+      Reader->readDependency(
+          Dep,
+          /*On Fail do*/ diagFailedToRead
+      );
     }
   }
+
+  if (Reader->hasErrors())
+    diagFailedToRead(CI.getDiagnostics(), MainFile, Reader->getStatus());
 }
 
 void LevitationBuildObjectAction::importAST(

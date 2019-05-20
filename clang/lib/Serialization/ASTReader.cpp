@@ -1434,7 +1434,12 @@ bool ASTReader::ReadSLocEntry(int ID) {
       return true;
 
     SourceLocation IncludeLoc = ReadSourceLocation(*F, Record[1]);
-    if (IncludeLoc.isInvalid() && F->Kind != MK_MainFile) {
+
+    // FIXME Levitation:
+    // fixed:
+    // - if (IncludeLoc.isInvalid() && F->Kind != MK_MainFile) {
+    // + if (IncludeLoc.isInvalid() && F->isModule()) {
+    if (IncludeLoc.isInvalid() && F->isModule()) {
       // This is the module's main file.
       IncludeLoc = getImportLocation(F);
     }
@@ -2029,7 +2034,8 @@ void ASTReader::resolvePendingMacro(IdentifierInfo *II,
 
   // Don't read the directive history for a module; we don't have anywhere
   // to put it.
-  if (M.isModule())
+  // FIXME Levitation: introduce special flag for C++ Levitation mode.
+  if (M.isModule() || M.Kind != MK_MainFile)
     return;
 
   // Deserialize the macro directives history in reverse source-order.
@@ -3923,6 +3929,237 @@ ASTReader::ASTReadResult ASTReader::ReadAST(StringRef FileName,
   case Success:
     break;
   }
+
+  // Here comes stuff that we only do once the entire chain is loaded.
+
+  // Load the AST blocks of all of the modules that we loaded.
+  for (SmallVectorImpl<ImportedModule>::iterator M = Loaded.begin(),
+                                              MEnd = Loaded.end();
+       M != MEnd; ++M) {
+    ModuleFile &F = *M->Mod;
+
+    // Read the AST block.
+    if (ASTReadResult Result = ReadASTBlock(F, ClientLoadCapabilities))
+      return Result;
+
+    // Read the extension blocks.
+    while (!SkipCursorToBlock(F.Stream, EXTENSION_BLOCK_ID)) {
+      if (ASTReadResult Result = ReadExtensionBlock(F))
+        return Result;
+    }
+
+    // Once read, set the ModuleFile bit base offset and update the size in
+    // bits of all files we've seen.
+    F.GlobalBitOffset = TotalModulesSizeInBits;
+    TotalModulesSizeInBits += F.SizeInBits;
+    GlobalBitOffsetsMap.insert(std::make_pair(F.GlobalBitOffset, &F));
+
+    // Preload SLocEntries.
+    for (unsigned I = 0, N = F.PreloadSLocEntries.size(); I != N; ++I) {
+      int Index = int(F.PreloadSLocEntries[I] - 1) + F.SLocEntryBaseID;
+      // Load it through the SourceManager and don't call ReadSLocEntry()
+      // directly because the entry may have already been loaded in which case
+      // calling ReadSLocEntry() directly would trigger an assertion in
+      // SourceManager.
+      SourceMgr.getLoadedSLocEntryByID(Index);
+    }
+
+    // Map the original source file ID into the ID space of the current
+    // compilation.
+    if (F.OriginalSourceFileID.isValid()) {
+      F.OriginalSourceFileID = FileID::get(
+          F.SLocEntryBaseID + F.OriginalSourceFileID.getOpaqueValue() - 1);
+    }
+
+    // Preload all the pending interesting identifiers by marking them out of
+    // date.
+    for (auto Offset : F.PreloadIdentifierOffsets) {
+      const unsigned char *Data = reinterpret_cast<const unsigned char *>(
+          F.IdentifierTableData + Offset);
+
+      ASTIdentifierLookupTrait Trait(*this, F);
+      auto KeyDataLen = Trait.ReadKeyDataLength(Data);
+      auto Key = Trait.ReadKey(Data, KeyDataLen.first);
+      auto &II = PP.getIdentifierTable().getOwn(Key);
+      II.setOutOfDate(true);
+
+      // Mark this identifier as being from an AST file so that we can track
+      // whether we need to serialize it.
+      markIdentifierFromAST(*this, II);
+
+      // Associate the ID with the identifier so that the writer can reuse it.
+      auto ID = Trait.ReadIdentifierID(Data + KeyDataLen.first);
+      SetIdentifierInfo(ID, &II);
+    }
+  }
+
+  // Setup the import locations and notify the module manager that we've
+  // committed to these module files.
+  for (SmallVectorImpl<ImportedModule>::iterator M = Loaded.begin(),
+                                              MEnd = Loaded.end();
+       M != MEnd; ++M) {
+    ModuleFile &F = *M->Mod;
+
+    ModuleMgr.moduleFileAccepted(&F);
+
+    // Set the import location.
+    F.DirectImportLoc = ImportLoc;
+    // FIXME: We assume that locations from PCH / preamble do not need
+    // any translation.
+    if (!M->ImportedBy)
+      F.ImportLoc = M->ImportLoc;
+    else
+      F.ImportLoc = TranslateSourceLocation(*M->ImportedBy, M->ImportLoc);
+  }
+
+  if (!PP.getLangOpts().CPlusPlus ||
+      (Type != MK_ImplicitModule && Type != MK_ExplicitModule &&
+       Type != MK_PrebuiltModule)) {
+    // Mark all of the identifiers in the identifier table as being out of date,
+    // so that various accessors know to check the loaded modules when the
+    // identifier is used.
+    //
+    // For C++ modules, we don't need information on many identifiers (just
+    // those that provide macros or are poisoned), so we mark all of
+    // the interesting ones via PreloadIdentifierOffsets.
+    for (IdentifierTable::iterator Id = PP.getIdentifierTable().begin(),
+                                IdEnd = PP.getIdentifierTable().end();
+         Id != IdEnd; ++Id)
+      Id->second->setOutOfDate(true);
+  }
+  // Mark selectors as out of date.
+  for (auto Sel : SelectorGeneration)
+    SelectorOutOfDate[Sel.first] = true;
+
+  // Resolve any unresolved module exports.
+  for (unsigned I = 0, N = UnresolvedModuleRefs.size(); I != N; ++I) {
+    UnresolvedModuleRef &Unresolved = UnresolvedModuleRefs[I];
+    SubmoduleID GlobalID = getGlobalSubmoduleID(*Unresolved.File,Unresolved.ID);
+    Module *ResolvedMod = getSubmodule(GlobalID);
+
+    switch (Unresolved.Kind) {
+    case UnresolvedModuleRef::Conflict:
+      if (ResolvedMod) {
+        Module::Conflict Conflict;
+        Conflict.Other = ResolvedMod;
+        Conflict.Message = Unresolved.String.str();
+        Unresolved.Mod->Conflicts.push_back(Conflict);
+      }
+      continue;
+
+    case UnresolvedModuleRef::Import:
+      if (ResolvedMod)
+        Unresolved.Mod->Imports.insert(ResolvedMod);
+      continue;
+
+    case UnresolvedModuleRef::Export:
+      if (ResolvedMod || Unresolved.IsWildcard)
+        Unresolved.Mod->Exports.push_back(
+          Module::ExportDecl(ResolvedMod, Unresolved.IsWildcard));
+      continue;
+    }
+  }
+  UnresolvedModuleRefs.clear();
+
+  if (Imported)
+    Imported->append(ImportedModules.begin(),
+                     ImportedModules.end());
+
+  // FIXME: How do we load the 'use'd modules? They may not be submodules.
+  // Might be unnecessary as use declarations are only used to build the
+  // module itself.
+
+  if (ContextObj)
+    InitializeContext();
+
+  if (SemaObj)
+    UpdateSema();
+
+  if (DeserializationListener)
+    DeserializationListener->ReaderInitialized(this);
+
+  ModuleFile &PrimaryModule = ModuleMgr.getPrimaryModule();
+  if (PrimaryModule.OriginalSourceFileID.isValid()) {
+    // If this AST file is a precompiled preamble, then set the
+    // preamble file ID of the source manager to the file source file
+    // from which the preamble was built.
+    if (Type == MK_Preamble) {
+      SourceMgr.setPreambleFileID(PrimaryModule.OriginalSourceFileID);
+    } else if (Type == MK_MainFile) {
+      SourceMgr.setMainFileID(PrimaryModule.OriginalSourceFileID);
+    }
+  }
+
+  // For any Objective-C class definitions we have already loaded, make sure
+  // that we load any additional categories.
+  if (ContextObj) {
+    for (unsigned I = 0, N = ObjCClassesLoaded.size(); I != N; ++I) {
+      loadObjCCategories(ObjCClassesLoaded[I]->getGlobalID(),
+                         ObjCClassesLoaded[I],
+                         PreviousGeneration);
+    }
+  }
+
+  if (PP.getHeaderSearchInfo()
+          .getHeaderSearchOpts()
+          .ModulesValidateOncePerBuildSession) {
+    // Now we are certain that the module and all modules it depends on are
+    // up to date.  Create or update timestamp files for modules that are
+    // located in the module cache (not for PCH files that could be anywhere
+    // in the filesystem).
+    for (unsigned I = 0, N = Loaded.size(); I != N; ++I) {
+      ImportedModule &M = Loaded[I];
+      if (M.Mod->Kind == MK_ImplicitModule) {
+        updateModuleTimestamp(*M.Mod);
+      }
+    }
+  }
+
+  return Success;
+}
+
+ASTReader::OpenedReaderContext ASTReader::BeginRead(
+    unsigned &PreviousGeneration,
+    unsigned &NumModules,
+    SourceLocation ImportLoc,
+    unsigned ClientLoadCapabilities
+) {
+
+  SourceLocation OldImportLoc = CurrentImportLoc;
+  CurrentImportLoc = ImportLoc;
+
+  // Defer any pending actions until we get to the end of reading the AST file.
+  StartedDeserializing();
+
+  auto OnClose = [=] {
+    FinishedDeserializing();
+    CurrentImportLoc = OldImportLoc;
+  };
+
+  auto EmergencyExit = llvm::make_scope_exit(OnClose);
+
+  // Bump the generation number.
+  PreviousGeneration = 0;
+  if (ContextObj)
+    PreviousGeneration = incrementGeneration(*ContextObj);
+
+  NumModules = ModuleMgr.size();
+
+  EmergencyExit.release();
+  return OpenedReaderContext(std::move(OnClose));
+}
+
+ASTReader::ASTReadResult ASTReader::EndRead(
+    OpenedReaderContext&& OpenedContext,
+    SmallVectorImpl<ImportedModule> &&Loaded,
+    ModuleKind Type,
+    SourceLocation ImportLoc,
+    unsigned ClientLoadCapabilities,
+    unsigned PreviousGeneration,
+    unsigned NumModules,
+    SmallVectorImpl<ImportedSubmodule> *Imported
+) {
+  auto ScopeExit = llvm::make_scope_exit(OpenedContext.takeOnClose());
 
   // Here comes stuff that we only do once the entire chain is loaded.
 
