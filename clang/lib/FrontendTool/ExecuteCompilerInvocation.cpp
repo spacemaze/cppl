@@ -71,6 +71,7 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
   case VerifyPCH:              return llvm::make_unique<VerifyPCHAction>();
   case TemplightDump:          return llvm::make_unique<TemplightDumpAction>();
   case LevitationBuildAST:     return llvm::make_unique<LevitationBuildASTAction>();
+  case LevitationBuildPreamble:  return llvm::make_unique<LevitationBuildPreambleAction>();
   case PluginAction: {
     for (FrontendPluginRegistry::iterator it =
            FrontendPluginRegistry::begin(), ie = FrontendPluginRegistry::end();
@@ -179,6 +180,7 @@ CreateFrontendAction(CompilerInstance &CI) {
   if (FEOpts.LevitationBuildObject) {
     Act = llvm::make_unique<LevitationBuildObjectAction>(
         std::move(Act),
+        FEOpts.LevitationPreambleFileName,
         FEOpts.LevitationDependencyDeclASTs
     );
   }

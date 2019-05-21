@@ -1647,6 +1647,9 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
       Opts.ProgramAction = frontend::GeneratePCH; break;
     case OPT_levitation_build_ast:
       Opts.ProgramAction = frontend::LevitationBuildAST; break;
+    case OPT_levitation_build_preamble:
+      Opts.ProgramAction = frontend::LevitationBuildPreamble; break;
+
     case OPT_init_only:
       Opts.ProgramAction = frontend::InitOnly; break;
     case OPT_fsyntax_only:
@@ -1766,6 +1769,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   Opts.AuxTriple = Args.getLastArgValue(OPT_aux_triple);
   Opts.StatsFile = Args.getLastArgValue(OPT_stats_file);
 
+  Opts.LevitationPreambleFileName =
+          Args.getLastArgValue(OPT_levitation_preamble);
   Opts.LevitationDependencyDeclASTs =
           Args.getAllArgValues(OPT_levitation_dependency);
   Opts.LevitationDependenciesOutputFile =
@@ -3090,6 +3095,7 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::TemplightDump:
   case frontend::MigrateSource:
   case frontend::LevitationBuildAST:
+  case frontend::LevitationBuildPreamble:
     return false;
 
   case frontend::DumpCompilerOptions:
@@ -3276,6 +3282,10 @@ static void parseLevitationBuildASTArgs(
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-dependency" << Stage;
   }
+  if (!FrontendOpts.LevitationPreambleFileName.empty()) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-levitation-preamble" << Stage;
+  }
   if (FrontendOpts.LevitationSourcesRootDir.empty()) {
     Diags.Report(diag::err_fe_levitation_missed_option)
     << "-levitation-sources-root-dir" << Stage;
@@ -3287,6 +3297,40 @@ static void parseLevitationBuildASTArgs(
 
   LangOpts.LevitationMode = 1;
   LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildAST);
+}
+
+static void parseLevitationBuildPreambleArgs(
+  LangOptions &LangOpts,
+  FrontendOptions &FrontendOpts,
+  const PreprocessorOptions &PreprocessorOpts,
+  DiagnosticsEngine &Diags
+) {
+  const char* Stage = "Build C++ Levitation Preamble AST files";
+
+  if (!FrontendOpts.LevitationDependenciesOutputFile.empty()) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-levitation-deps-output-file=" << Stage;
+  }
+  if (!FrontendOpts.LevitationDependencyDeclASTs.empty()) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-levitation-dependency" << Stage;
+  }
+  if (!FrontendOpts.LevitationSourcesRootDir.empty()) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-levitation-sources-root-dir" << Stage;
+  }
+  if (FrontendOpts.LevitationBuildObject) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-flevitation-build-object" << Stage;
+  }
+  if (!FrontendOpts.LevitationPreambleFileName.empty()) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-levitation-preamble" << Stage;
+  }
+
+  LangOpts.LevitationMode = 1;
+  FrontendOpts.SkipFunctionBodies = 1;
+  LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildPreamble);
 }
 
 static void parseLevitationBuildObjectArgs(
@@ -3407,6 +3451,15 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
     );
   }
 
+  if (Res.getFrontendOpts().ProgramAction == frontend::LevitationBuildPreamble) {
+    parseLevitationBuildPreambleArgs(
+        LangOpts,
+        Res.getFrontendOpts(),
+        Res.getPreprocessorOpts(),
+        Diags
+    );
+  }
+
   if (Res.getFrontendOpts().LevitationBuildObject) {
 
     // If we working with precompiled C++ Levitation AST files,
@@ -3428,7 +3481,7 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
           Diags
       );
     }
-      parseLevitationBuildObjectArgs(LangOpts, Res.getFrontendOpts(), Diags);
+    parseLevitationBuildObjectArgs(LangOpts, Res.getFrontendOpts(), Diags);
   }
 
   //

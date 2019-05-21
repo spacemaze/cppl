@@ -2512,8 +2512,17 @@ template<typename T>
 void ASTDeclReader::mergeRedeclarable(Redeclarable<T> *DBase,
                                       RedeclarableResult &Redecl,
                                       DeclID TemplatePatternID) {
-  // If modules are not available, there is no reason to perform this merge.
-  if (!Reader.getContext().getLangOpts().Modules)
+  // C++ Levitation:
+  // We need merge if we're dealing with modules.
+  // Modules are triggered by LangOptions::Modules,
+  // We also require merging if we're loading
+  // C++ Levitation dependencies (which is very similar to modules case).
+  bool MergeIsRequired =
+      Reader.getContext().getLangOpts().Modules ||
+      Reader.getContext().getLangOpts().getLevitationBuildStage() ==
+          LangOptions::LBSK_BuildObjectFile;
+
+  if (!MergeIsRequired)
     return;
 
   // If we're not the canonical declaration, we don't need to merge.

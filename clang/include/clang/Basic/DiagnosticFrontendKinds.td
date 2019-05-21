@@ -280,7 +280,7 @@ def warn_profile_data_unprofiled : Warning<
   InGroup<ProfileInstrUnprofiled>;
 
 def err_fe_levitation_missed_option : Error<
-  "C++ Levitation misses option '%0' for stage ''%1'">, DefaultFatal;
+  "C++ Levitation misses option '%0' for stage '%1'">, DefaultFatal;
 
 def err_fe_levitation_wrong_option : Error<
   "Wrong C++ Levitation option '%0', stage '%1' doesn't require it.">, DefaultFatal;

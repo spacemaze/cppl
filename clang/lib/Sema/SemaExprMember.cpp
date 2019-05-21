@@ -679,7 +679,28 @@ static bool LookupMemberExprInRecord(Sema &SemaRef, LookupResult &R,
 
     assert(DC && "Cannot handle non-computable dependent contexts in lookup");
 
-    if (!isa<TypeDecl>(DC)) {
+    // C++ Levitation extension.
+    // We may be here because we're dealing with implicit access.
+    // E.g. x.c, where x is base and it is unknown (so base exression is NULL).
+    // That might happen bacause during parse stage
+    // we were unable to parse base expression.
+    // So we try to compute declaration context out of scope specicifier,
+    // and for regular cases it should be some type decl,
+    // it can't be a namespace bacause otherwise during parse stage we
+    // would proceed through namespace specifiers and reach the type decl,
+    // and marked it as a base type.
+    // For regular cases it is an error.
+    // But if we're working with dependent namespaces and 'global' keyword,
+    // this is quite a possible case. Then we should just deal with
+    // whatever we find after 'global' (which may be a namespace for example).
+    // FIXME levitation: This scenario is obviously
+    //   outside of LookupMemberExprInRecord responsiblity,
+    //   and should be placed into separate method.
+    bool CanBeNonclassMember =
+      SemaRef.getLangOpts().LevitationMode &&
+      SemaRef.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile;
+
+    if (!CanBeNonclassMember && !isa<TypeDecl>(DC)) {
       SemaRef.Diag(R.getNameLoc(), diag::err_qualified_member_nonclass)
           << DC << SS.getRange();
       return true;

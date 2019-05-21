@@ -104,7 +104,6 @@ namespace {
       bool validated = buildPath(Path, ValidatedComponents, UnvalidatedComponents);
 
       if (!validated) {
-        diagMissingDependency(Dep);
         Map.setHasMissingDependencies();
         return;
       }
@@ -153,6 +152,8 @@ namespace {
       return (bool)FileMgr->getFile(StringRef(FName.begin(), FName.size()));
     }
 
+    // TODO Levitation: will be used when we introduce manual
+    //  dependency import.
     void diagMissingDependency(const levitation::PackageDependency &Dep) {
       // FIXME Levitation: SourceRange is not printed correctly.
       Diag.Report(
@@ -186,9 +187,6 @@ namespace {
         Validator.validate(SemaObj->getLevitationDefinitionDependencies()),
         CurrentInputFile
       };
-
-      if (Dependencies.hasMissingDependencies())
-        return;
 
       auto F = createFile();
 

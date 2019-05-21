@@ -173,11 +173,20 @@ namespace clang {
 class LevitationModulesReader : public ASTReader {
   StringRef MainFile;
   DiagnosticsEngine &Diags;
+
+  using OnFailFn = std::function<void(
+      DiagnosticsEngine &,
+      StringRef,
+      ASTReader::ASTReadResult
+  )>;
+  OnFailFn OnFail;
+
 public:
 
   LevitationModulesReader(
       CompilerInstance &CompilerInst,
-      StringRef mainFile
+      StringRef mainFile,
+      OnFailFn &&onFail
   ) :
     ASTReader(
       CompilerInst.getPreprocessor(),
@@ -187,7 +196,8 @@ public:
       {}
     ),
     MainFile(mainFile),
-    Diags(CompilerInst.getDiagnostics())
+    Diags(CompilerInst.getDiagnostics()),
+    OnFail(std::move(onFail))
   {}
 
   using OpenedScope = levitation::ScopeExit<std::function<void()>>;
@@ -209,16 +219,19 @@ public:
     return ReadResult;
   }
 
-  using OnFailFn = std::function<void(
-      DiagnosticsEngine &,
-      StringRef,
-      ASTReader::ASTReadResult
-  )>;
+  void readPreamble(StringRef Preamble) {
 
-  void readDependency(
-      StringRef Dependency,
-      OnFailFn &&OnFail
-  ) {
+    auto Res = read(
+        Preamble,
+        serialization::MK_LevitationDependency,
+        /*ReadDeclarationsOnly=*/false
+    );
+
+    if (Res != ASTReader::Success)
+      OnFail(Diags, Preamble, Res);
+  }
+
+  void readDependency(StringRef Dependency) {
 
     auto Res = read(
         Dependency,
@@ -273,6 +286,9 @@ private:
           NumModules
       );
     }
+
+    if (hasErrors())
+      OnFail(Diags, MainFile, getStatus());
   }
 
   ASTReadResult read(
@@ -429,15 +445,19 @@ void LevitationBuildObjectAction::loadASTFiles() {
       StringRef();
 
   IntrusiveRefCntPtr<LevitationModulesReader>
-      Reader(new LevitationModulesReader(CI, MainFile));
+      Reader(new LevitationModulesReader(
+          CI, MainFile, /*On Fail do*/ diagFailedToRead
+      ));
+
   CI.getASTContext().setExternalSource(Reader);
 
   with(auto Opened = Reader->open()) {
+
+    if (PreambleFileName.size())
+      Reader->readPreamble(PreambleFileName);
+
     for (const auto &Dep : ASTFiles) {
-      Reader->readDependency(
-          Dep,
-          /*On Fail do*/ diagFailedToRead
-      );
+      Reader->readDependency(Dep);
     }
   }
 

@@ -30,14 +30,21 @@ public:
   ) override;
 };
 
-class LevitationBuildObjectAction : public ASTMergeAction {
+class LevitationBuildPreambleAction : public GeneratePCHAction {
+  // same same
+};
 
+class LevitationBuildObjectAction : public ASTMergeAction {
+  StringRef PreambleFileName;
 public:
 
   LevitationBuildObjectAction(
       std::unique_ptr<FrontendAction> &&AdaptedAction,
+      StringRef preambleFileName,
       ArrayRef<std::string> DependencyASTs
-  ) : ASTMergeAction(std::move(AdaptedAction), DependencyASTs)
+  ) :
+    ASTMergeAction(std::move(AdaptedAction), DependencyASTs),
+    PreambleFileName(preambleFileName)
   {}
 
   /// 1. Completes infrastructure for final AST, at this stage we should get created:

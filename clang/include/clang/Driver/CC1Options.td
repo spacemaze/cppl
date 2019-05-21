@@ -588,6 +588,14 @@ def emit_obj : Flag<["-"], "emit-obj">,
 def levitation_build_ast : Flag<["-"], "levitation-build-ast">,
    HelpText<"Build C++ Levitation AST files.">;
 
+def levitation_build_preamble : Flag<["-"], "levitation-build-preamble">,
+   HelpText<"Build C++ Levitation Preamble AST files.">;
+
+// Few words about "Build Object" stage.
+// This action should be considered as virtual, in fact
+// we use special flag "levitation-build-object" which alters existing
+// actions and injects dependency loading and package instantiation stage.
+
 // end of C++ Levitation actions
 
 def rewrite_test : Flag<["-"], "rewrite-test">,
@@ -921,6 +929,10 @@ HelpText<"Levitation source file extension with '.' symbol.">;
 def flevitation_build_object
 : Flag<["-"], "flevitation-build-object">,
 HelpText<"Sets up C++ Levitation 'Build Object File' stage.">;
+
+def levitation_preamble
+: Joined<["-"], "levitation-preamble=">,
+HelpText<"Path to C++ Levitation precompiled preamble.">;
 
 def levitation_dependency
 : Joined<["-"], "levitation-dependency=">,

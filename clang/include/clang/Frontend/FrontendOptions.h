@@ -95,6 +95,11 @@ enum ActionKind {
   /// * creates package dependent declaration and definition AST files.
   LevitationBuildAST,
 
+  /// Levitation mode: Build Preamble AST action.
+  /// * Parses source code
+  /// * precompiled preamble file.
+  LevitationBuildPreamble,
+
   /// Dump information about a module file.
   ModuleFileInfo,
 
@@ -448,6 +453,8 @@ public:
 
   std::string LevitationDependenciesOutputFile;
   std::string LevitationSourcesRootDir;
+
+  std::string LevitationPreambleFileName;
 
   /// During Instantiate and Build stage provides compiler with
   /// Declaration AST files current translation unit depends on.
