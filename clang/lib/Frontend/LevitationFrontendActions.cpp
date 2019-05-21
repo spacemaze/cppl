@@ -244,7 +244,7 @@ public:
 
     auto Res = read(
         Dependency,
-        serialization::MK_PCH,
+        serialization::MK_LevitationDependency,
         /*ReadDeclarationsOnly=*/true
     );
 
@@ -387,6 +387,7 @@ void LevitationBuildObjectAction::ExecuteAction() {
 }
 
 const char *readerStatusToString(ASTReader::ASTReadResult Res) {
+  // TODO Levitation: introduce string constants in .td file
   switch (Res) {
     case ASTReader::Success:
       return "Successfull??";
@@ -404,7 +405,7 @@ const char *readerStatusToString(ASTReader::ASTReadResult Res) {
       return "The AST file was written by a different version of Clang";
 
     case ASTReader::ConfigurationMismatch:
-      return "The AST file was writtten with a different language/target "
+      return "The AST file was written with a different language/target "
              " configuration.";
 
     case ASTReader::HadErrors:
@@ -464,119 +465,6 @@ void LevitationBuildObjectAction::importASTFiles() {
 
   if (Reader->hasErrors())
     diagFailedToRead(CI.getDiagnostics(), MainFile, Reader->getStatus());
-}
-
-void LevitationBuildObjectAction::importAST(
-    StringRef ASTFile,
-    ASTImporterLookupTable &LookupTable,
-    IntrusiveRefCntPtr<DiagnosticIDs> DiagIDs
-) {
-  // ASTMerge::ExecuteAction has been used as a source,
-  // a bit refactored though...
-
-  CompilerInstance &CI = getCompilerInstance();
-
-  IntrusiveRefCntPtr<DiagnosticsEngine> Diags(new DiagnosticsEngine(
-      DiagIDs,
-      &CI.getDiagnosticOpts(),
-      new ForwardingDiagnosticConsumer(*CI.getDiagnostics().getClient()),
-      /*ShouldOwnClient=*/true
-  ));
-
-  std::unique_ptr<ASTUnit> Unit = ASTUnit::LoadFromASTFile(
-      ASTFile,
-      CI.getPCHContainerReader(),
-      ASTUnit::LoadEverything,
-      Diags,
-      CI.getFileSystemOpts(),
-      /*UseDebugInfo=*/false,
-      /*OnlyLocalDecls=*/false,
-      /*RemappedFiles=*/None,
-      /*CaptureDiagnostics=*/false,
-      /*AllowPCHWithCompilerErrors=*/false,
-      /*UserFilesAreVolatile=*/false,
-      /*ReadDeclarationsOnly=*/true
-  );
-
-  if (!Unit)
-    return;
-
-  ASTImporter Importer(
-      CI.getASTContext(),
-      CI.getFileManager(),
-      Unit->getASTContext(),
-      Unit->getFileManager(),
-      /*MinimalImport=*/false,
-      &LookupTable
-  );
-
-  TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
-
-  importTU(Importer, TU);
-}
-
-void LevitationBuildObjectAction::importTU(
-    ASTImporter& Importer, TranslationUnitDecl *TU
-) {
-
-  CompilerInstance &CI = getCompilerInstance();
-
-  for (auto *D : TU->decls()) {
-    // Don't re-import __va_list_tag, __builtin_va_list.
-    if (const auto *ND = dyn_cast<NamedDecl>(D))
-      if (IdentifierInfo *II = ND->getIdentifier())
-        if (II->isStr("__va_list_tag") || II->isStr("__builtin_va_list"))
-          continue;
-
-    llvm::Expected<Decl *> ToDOrError = Importer.Import_New(D);
-
-    if (ToDOrError) {
-      DeclGroupRef DGR(*ToDOrError);
-      CI.getASTConsumer().HandleTopLevelDecl(DGR);
-    } else {
-      llvm::consumeError(ToDOrError.takeError());
-    }
-  }
-}
-
-void LevitationBuildObjectAction::loadMainFile(llvm::StringRef MainFile) {
-
-  CompilerInstance &CI = getCompilerInstance();
-
-  IntrusiveRefCntPtr<ASTReader> Reader(new ASTReader(
-      CI.getPreprocessor(),
-      CI.getModuleCache(),
-      &CI.getASTContext(),
-      CI.getPCHContainerReader(),
-      {}
-  ));
-
-  // Attach the AST reader to the AST context as an external AST
-  // source, so that declarations will be deserialized from the
-  // AST file as needed.
-  // We need the external source to be set up before we read the AST, because
-  // eagerly-deserialized declarations may use it.
-  CI.getASTContext().setExternalSource(Reader);
-
-  switch (Reader->ReadAST(
-      MainFile,
-      serialization::MK_MainFile,
-      SourceLocation(),
-      ASTReader::ARR_None
-  )) {
-  case ASTReader::Success:
-    CI.getPreprocessor().setPredefines(Reader->getSuggestedPredefines());
-    return;
-
-  case ASTReader::Failure:
-  case ASTReader::Missing:
-  case ASTReader::OutOfDate:
-  case ASTReader::VersionMismatch:
-  case ASTReader::ConfigurationMismatch:
-  case ASTReader::HadErrors:
-    CI.getDiagnostics().Report(diag::err_fe_unable_to_load_pch);
-    CI.setExternalSemaSource(nullptr);
-  }
 }
 
 std::unique_ptr<ASTConsumer> LevitationBuildObjectAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {

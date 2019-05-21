@@ -735,8 +735,7 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
     const FileSystemOptions &FileSystemOpts, bool UseDebugInfo,
     bool OnlyLocalDecls, ArrayRef<RemappedFile> RemappedFiles,
     bool CaptureDiagnostics, bool AllowPCHWithCompilerErrors,
-    bool UserFilesAreVolatile,
-    bool ReadDeclarationsOnly) {
+    bool UserFilesAreVolatile) {
   std::unique_ptr<ASTUnit> AST(new ASTUnit(true));
 
   // Recover resources if we crash before exiting this method.
@@ -796,9 +795,6 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
       PP, *AST->ModuleCache, AST->Ctx.get(), PCHContainerRdr, {},
       /*isysroot=*/"",
       /*DisableValidation=*/disableValid, AllowPCHWithCompilerErrors);
-
-  if (ReadDeclarationsOnly)
-    AST->Reader->setReadDeclarationsOnly();
 
   AST->Reader->setListener(llvm::make_unique<ASTInfoCollector>(
       *AST->PP, AST->Ctx.get(), *AST->HSOpts, *AST->PPOpts, *AST->LangOpts,
@@ -2624,6 +2620,7 @@ const FileEntry *ASTUnit::getPCHFile() {
       return true; // found it.
     case serialization::MK_Preamble:
       return false; // look in dependencies.
+    case serialization::MK_LevitationDependency:
     case serialization::MK_MainFile:
       return false; // look in dependencies.
     }

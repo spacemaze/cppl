@@ -2035,7 +2035,7 @@ void ASTReader::resolvePendingMacro(IdentifierInfo *II,
   // Don't read the directive history for a module; we don't have anywhere
   // to put it.
   // FIXME Levitation: introduce special flag for C++ Levitation mode.
-  if (M.isModule() || M.Kind != MK_MainFile)
+  if (M.isModule() || M.Kind == MK_LevitationDependency)
     return;
 
   // Deserialize the macro directives history in reverse source-order.
@@ -4370,6 +4370,7 @@ static unsigned moduleKindForDiagnostic(ModuleKind Kind) {
     return 1; // module
   case MK_MainFile:
   case MK_Preamble:
+  case MK_LevitationDependency:
     return 2; // main source file
   }
   llvm_unreachable("unknown module kind");

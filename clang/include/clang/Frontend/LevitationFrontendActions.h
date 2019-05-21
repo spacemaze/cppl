@@ -64,19 +64,7 @@ public:
 protected:
     std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef InFile) override;
 
-protected:
-
   void importASTFiles();
-
-  void importAST(
-      StringRef ASTFile,
-      ASTImporterLookupTable &LookupTable,
-      IntrusiveRefCntPtr<DiagnosticIDs> DiagIDs
-  );
-
-  void importTU(ASTImporter& Importer, TranslationUnitDecl *TU);
-
-  void loadMainFile(StringRef MainFile);
 };
 
 }  // end namespace clang

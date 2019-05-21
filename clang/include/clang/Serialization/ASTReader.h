@@ -1561,6 +1561,17 @@ public:
                         unsigned ClientLoadCapabilities,
                         SmallVectorImpl<ImportedSubmodule> *Imported = nullptr);
 
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+  // Staged read process.
+  // Methods below is the is another ReadAST representation
+  // which splits original method on 3 parts:
+  // * Begin read process
+  // * Read process (not present, achievable by ReadASTCore call.
+  // * End read process
+  //
+
   class OpenedReaderContext {
       std::function<void()> OnClose;
   public:
@@ -1577,6 +1588,9 @@ public:
       }
   };
 
+  /// Begin load the AST file designated by the given file name.
+  /// \return Data associated with started read process, it is required
+  ///         to call OnClose
   OpenedReaderContext BeginRead(
       unsigned &PreviousGeneration,
       unsigned &NumModules,
@@ -1594,6 +1608,10 @@ public:
       unsigned NumModules,
       SmallVectorImpl<ImportedSubmodule> *Imported = nullptr
   );
+
+  //
+  // C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
 
   /// Make the entities in the given module and any of its (non-explicit)
   /// submodules visible to name lookup.

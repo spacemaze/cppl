@@ -56,7 +56,10 @@ enum ModuleKind {
   MK_MainFile,
 
   /// File is from a prebuilt module path.
-  MK_PrebuiltModule
+  MK_PrebuiltModule,
+
+  /// File is a prebuilt C++ Levitation dependency
+  MK_LevitationDependency
 };
 
 /// The input file that has been loaded from this AST file, along with
