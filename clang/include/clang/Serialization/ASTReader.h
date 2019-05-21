@@ -1573,18 +1573,14 @@ public:
   //
 
   class OpenedReaderContext {
-      std::function<void()> OnClose;
+      SourceLocation OldImportLoc;
   public:
-      OpenedReaderContext(OpenedReaderContext &&Src) :
-        OnClose(std::move(Src.OnClose))
+      OpenedReaderContext(const SourceLocation &oldImportLoc) :
+        OldImportLoc(oldImportLoc)
       {}
 
-      OpenedReaderContext(std::function<void()> &&onExitClose) :
-        OnClose(std::move(onExitClose))
-      {}
-
-      std::function<void()>&& takeOnClose() {
-        return std::move(OnClose);
+      const SourceLocation &getOldImportLoc() const {
+        return OldImportLoc;
       }
   };
 
@@ -1599,7 +1595,7 @@ public:
   );
 
   ASTReadResult EndRead(
-      OpenedReaderContext&& OpenedContext,
+      const OpenedReaderContext& OpenedContext,
       SmallVectorImpl<ImportedModule> &&Loaded,
       ModuleKind Type,
       SourceLocation ImportLoc,

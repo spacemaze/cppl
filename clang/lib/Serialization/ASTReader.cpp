@@ -4124,7 +4124,6 @@ ASTReader::OpenedReaderContext ASTReader::BeginRead(
     SourceLocation ImportLoc,
     unsigned ClientLoadCapabilities
 ) {
-
   SourceLocation OldImportLoc = CurrentImportLoc;
   CurrentImportLoc = ImportLoc;
 
@@ -4146,11 +4145,11 @@ ASTReader::OpenedReaderContext ASTReader::BeginRead(
   NumModules = ModuleMgr.size();
 
   EmergencyExit.release();
-  return OpenedReaderContext(std::move(OnClose));
+  return OpenedReaderContext(OldImportLoc);
 }
 
 ASTReader::ASTReadResult ASTReader::EndRead(
-    OpenedReaderContext&& OpenedContext,
+    const OpenedReaderContext& OpenedContext,
     SmallVectorImpl<ImportedModule> &&Loaded,
     ModuleKind Type,
     SourceLocation ImportLoc,
@@ -4159,7 +4158,10 @@ ASTReader::ASTReadResult ASTReader::EndRead(
     unsigned NumModules,
     SmallVectorImpl<ImportedSubmodule> *Imported
 ) {
-  auto ScopeExit = llvm::make_scope_exit(OpenedContext.takeOnClose());
+  auto ScopeExit = llvm::make_scope_exit([this, &OpenedContext]{
+    FinishedDeserializing();
+    CurrentImportLoc = OpenedContext.getOldImportLoc();
+  });
 
   // Here comes stuff that we only do once the entire chain is loaded.
 

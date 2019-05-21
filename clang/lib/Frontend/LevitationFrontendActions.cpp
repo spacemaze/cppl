@@ -173,7 +173,6 @@ namespace clang {
 class LevitationModulesReader : public ASTReader {
   StringRef MainFile;
   DiagnosticsEngine &Diags;
-  serialization::ModuleKind LastReadModuleKind;
 public:
 
   LevitationModulesReader(
@@ -191,37 +190,16 @@ public:
     Diags(CompilerInst.getDiagnostics())
   {}
 
-  class LevitationModulesOpenedReader : public levitation::WithOperand {
+  using OpenedScope = levitation::ScopeExit<std::function<void()>>;
 
-    bool Moved = false;
-    LevitationModulesReader &Reader;
-    OpenedReaderContext OpenedContext;
-  public:
-
-    LevitationModulesOpenedReader(
-        LevitationModulesReader &Reader,
-        OpenedReaderContext &&openedContext
-    ) :
-      Reader(Reader),
-      OpenedContext(std::move(openedContext))
-    {}
-
-    LevitationModulesOpenedReader(LevitationModulesOpenedReader &&Src) :
-      Reader(Src.Reader),
-      OpenedContext(std::move(Src.OpenedContext))
-    {
-      Src.Moved = true;
-    }
-
-    ~LevitationModulesOpenedReader() {
-      if (!Moved)
-        Reader.close(std::move(OpenedContext));
-    }
-  };
-
-  LevitationModulesOpenedReader open() {
-    return LevitationModulesOpenedReader(*this, beginRead());
+  OpenedScope open() {
+    auto Context = beginRead();
+    return OpenedScope([this, Context] {
+        close(Context);
+    });
   }
+
+  // close() method is private, see below
 
   bool hasErrors() const {
     return ReadResult != Success;
@@ -258,9 +236,10 @@ private:
   unsigned PreviousGeneration;
   SmallVector<ImportedModule, 16> Loaded;
   ASTReadResult ReadResult;
+  serialization::ModuleKind LastReadModuleKind = serialization::MK_MainFile;
 
-  void close(OpenedReaderContext &&OpenedContext) {
-    return endRead(std::move(OpenedContext));
+  void close(const OpenedReaderContext &OpenedContext) {
+    return endRead(OpenedContext);
   }
 
   OpenedReaderContext beginRead() {
@@ -272,7 +251,7 @@ private:
     );
   }
 
-  void endRead(OpenedReaderContext &&OpenedContext) {
+  void endRead(const OpenedReaderContext &OpenedContext) {
 
     // Read main file after all dependencies.
     if (MainFile.size()) {
@@ -285,7 +264,7 @@ private:
 
     if (ReadResult == Success) {
       ReadResult = EndRead(
-          std::move(OpenedContext),
+          OpenedContext,
           std::move(Loaded),
           LastReadModuleKind,
           SourceLocation(),
@@ -380,7 +359,7 @@ void LevitationBuildObjectAction::ExecuteAction() {
   if (!CI.hasSema())
     CI.createSema(getTranslationUnitKind(), CompletionConsumer);
 
-  importASTFiles();
+  loadASTFiles();
 
   AdaptedAction->ExecuteAction();
   CI.getDiagnostics().getClient()->EndSourceFile();
@@ -419,12 +398,11 @@ static void diagFailedToRead(
     ASTReader::ASTReadResult Res
 ) {
   Diag.Report(diag::err_levitation_failed_to_read_pch)
-  << File
-  << readerStatusToString(Res);
-  llvm_unreachable("TODO Levitation");
+  << File;
+  (void)Res;
 }
 
-void LevitationBuildObjectAction::importASTFiles() {
+void LevitationBuildObjectAction::loadASTFiles() {
 
   CompilerInstance &CI = getCompilerInstance();
 

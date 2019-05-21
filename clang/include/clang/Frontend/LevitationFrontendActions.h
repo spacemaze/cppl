@@ -64,7 +64,7 @@ public:
 protected:
     std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef InFile) override;
 
-  void importASTFiles();
+  void loadASTFiles();
 };
 
 }  // end namespace clang

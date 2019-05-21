@@ -289,7 +289,7 @@ def err_levitation_dependency_missed : Error<
   "Missed C++ Levitation dependency (source file not found): %0">;
 
 def err_levitation_failed_to_read_pch : Error<
-  "Failed to read C++ Levitation precompiled file '%0', reason: %1">;
+  "Failed to read C++ Levitation precompiled file '%0'">;
 
 def err_fe_levitation_dependency_file_io_troubles : Error<
   "Failed to create C++ Levitation dependencies file due to IO errors.">;
