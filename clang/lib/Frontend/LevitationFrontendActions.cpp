@@ -199,7 +199,11 @@ public:
     MainFile(mainFile),
     Diags(CompilerInst.getDiagnostics()),
     OnFail(std::move(onFail))
-  {}
+  {
+    // FIXME Levitation: convert into another stage LBSK_InstantiateDeclAST
+    if (CompilerInst.getFrontendOpts().ProgramAction == frontend::GeneratePCH)
+      ReadDeclarationsOnly = true;
+  }
 
   using OpenedScope = levitation::ScopeExit<std::function<void()>>;
 

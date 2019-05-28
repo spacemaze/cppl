@@ -904,6 +904,7 @@ private:
 
   /// List of levitation package dependent declarations
   llvm::DenseSet<uint64_t> LevitationPackageDependentDecls;
+  bool ReadDeclarationsOnly = false;
 
   //
   // end of C++ Levitation Mode
