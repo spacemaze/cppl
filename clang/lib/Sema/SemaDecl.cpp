@@ -8654,8 +8654,18 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
         break;
     }
 
+    // TODO Levitation: refernce to draft standard
+    // C++ Levitation extension: altering of [class.mfct]p2:
+    // A  member function may be defined (_dcl.fct.def_) in its class defini-
+    // tion, in which case it is forced to be externally visible.
+
+    bool LevitationFunctionDefinition =
+        getLangOpts().LevitationMode &&
+        getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildAST;
+
     if (isa<CXXMethodDecl>(NewFD) && DC == CurContext &&
-        D.isFunctionDefinition()) {
+        D.isFunctionDefinition() &&
+        !LevitationFunctionDefinition) {
       // C++ [class.mfct]p2:
       //   A member function may be defined (8.4) in its class definition, in
       //   which case it is an inline member function (7.1.2)

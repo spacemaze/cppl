@@ -903,14 +903,7 @@ private:
   //
 
   /// List of levitation package dependent declarations
-  SmallVector<uint64_t, 8> LevitationPackageDependentDecls;
-
-  /// This flag alters reader behaviour so it reads only declarations.
-  bool ReadDeclarationsOnly = false;
-
-public:
-  void setReadDeclarationsOnly() { ReadDeclarationsOnly = true; }
-private:
+  llvm::DenseSet<uint64_t> LevitationPackageDependentDecls;
 
   //
   // end of C++ Levitation Mode

@@ -2034,8 +2034,12 @@ void ASTReader::resolvePendingMacro(IdentifierInfo *II,
 
   // Don't read the directive history for a module; we don't have anywhere
   // to put it.
-  // FIXME Levitation: introduce special flag for C++ Levitation mode.
-  if (M.isModule() || M.Kind == MK_LevitationDependency)
+  // C++ Levitation extension:
+  // also skip it if we're reading C++ Levitation Dependency.
+  bool SkipDirectiveHistory =
+      M.isModule() || M.Kind == MK_LevitationDependency;
+
+  if (SkipDirectiveHistory)
     return;
 
   // Deserialize the macro directives history in reverse source-order.
@@ -3513,7 +3517,7 @@ ASTReader::ReadASTBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
 
     case LEVITATION_PACKAGE_DEPENDENT_DECLS:
       for (unsigned I = 0, N = Record.size(); I != N; ++I) {
-        LevitationPackageDependentDecls.push_back(getGlobalDeclID(F, Record[I]));
+        LevitationPackageDependentDecls.insert(getGlobalDeclID(F, Record[I]));
       }
       break;
     }
@@ -7696,6 +7700,16 @@ void ASTReader::FindExternalLexicalDecls(
         PredefsVisited[ID] = true;
       }
 
+      auto GlobalID = getGlobalDeclID(*M, ID);
+
+      bool skipPackageDependentDecls =
+          M->Kind == serialization::MK_LevitationDependency;
+
+      if (skipPackageDependentDecls &&
+          LevitationPackageDependentDecls.count(GlobalID))
+        continue;
+
+      // TODO Levitation: may be just check D->isPackageDependent?
       if (Decl *D = GetLocalDecl(*M, ID)) {
         assert(D->getKind() == K && "wrong kind for lexical decl");
         if (!DC->isDeclInLexicalTraversal(D))
@@ -8416,8 +8430,8 @@ void ASTReader::ReadMismatchingDeleteExpressions(llvm::MapVector<
 
 void ASTReader::ReadLevitationPackageDependentDecls(
     llvm::SmallVectorImpl<clang::NamedDecl *> &PackageDependentDeclarations) {
-  for (unsigned Idx = 0, N = LevitationPackageDependentDecls.size(); Idx != N; ++Idx) {
-    NamedDecl *D = cast<NamedDecl>(GetDecl(LevitationPackageDependentDecls[Idx]));
+  for (uint64_t ID : LevitationPackageDependentDecls) {
+    NamedDecl *D = cast<NamedDecl>(GetDecl(ID));
     PackageDependentDeclarations.push_back(D);
   }
 }
