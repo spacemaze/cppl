@@ -28,6 +28,8 @@ public:
       CompilerInstance &CI,
       StringRef InFile
   ) override;
+
+    bool BeginInvocation(CompilerInstance &CI) override;
 };
 
 class LevitationBuildPreambleAction : public GeneratePCHAction {
@@ -36,6 +38,7 @@ class LevitationBuildPreambleAction : public GeneratePCHAction {
 
 class LevitationBuildObjectAction : public ASTMergeAction {
   StringRef PreambleFileName;
+  ASTConsumer *Consumer = nullptr;
 public:
 
   LevitationBuildObjectAction(
@@ -69,9 +72,19 @@ public:
   bool usesPreprocessorOnly() const override { return false; }
 
 protected:
-    std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef InFile) override;
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(
+      CompilerInstance &CI,
+      StringRef InFile
+  ) override;
+
+  std::unique_ptr<ASTConsumer> createASTConsumerInternal(
+      CompilerInstance &CI,
+      StringRef InFile
+  );
 
   void loadASTFiles();
+
+  void setupDeserializationListener(ASTReader &Reader);
 };
 
 }  // end namespace clang

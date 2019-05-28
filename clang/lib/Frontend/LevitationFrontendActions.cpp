@@ -19,6 +19,7 @@
 #include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/Levitation/FileExtensions.h"
+#include "clang/Levitation/DeserializationListeners.h"
 #include "clang/Levitation/WithOperator.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Preprocessor.h"
@@ -298,10 +299,6 @@ private:
   ) {
     LastReadModuleKind = Type;
 
-    // FIXME Levitation: should pass as additional parameter?
-    llvm::SaveAndRestore<bool>
-    ReadDeclarationsOnlyFlagScope(ReadDeclarationsOnly, DeclarationsOnly);
-
     switch (ASTReadResult ReadResult = ReadASTCore(
         FileName,
         Type,
@@ -352,6 +349,14 @@ std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
       .addNotNull(CreateDependenciesASTProcessor(CI, InFile))
       .addRequired(CreateGeneratePCHConsumer(CI, InFile))
   .done();
+}
+
+bool LevitationBuildASTAction::BeginInvocation(CompilerInstance &CI) {
+  if (CI.getFrontendOpts().LevitationPreambleFileName.size()) {
+    CI.getPreprocessorOpts().ImplicitPCHInclude =
+        CI.getFrontendOpts().LevitationPreambleFileName;
+  }
+  return FrontendAction::BeginInvocation(CI);
 }
 
 void LevitationBuildObjectAction::ExecuteAction() {
@@ -450,6 +455,7 @@ void LevitationBuildObjectAction::loadASTFiles() {
       ));
 
   CI.getASTContext().setExternalSource(Reader);
+  setupDeserializationListener(*Reader);
 
   with(auto Opened = Reader->open()) {
 
@@ -465,7 +471,65 @@ void LevitationBuildObjectAction::loadASTFiles() {
     diagFailedToRead(CI.getDiagnostics(), MainFile, Reader->getStatus());
 }
 
-std::unique_ptr<ASTConsumer> LevitationBuildObjectAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
+void LevitationBuildObjectAction::setupDeserializationListener(
+    clang::ASTReader &Reader
+) {
+  assert(
+      Consumer &&
+      "setupDeserializationListener is part of "
+      "FrontendAction::Execute stage and requires "
+      "ASTConsumer instance to be created"
+  );
+
+  CompilerInstance &CI = getCompilerInstance();
+
+  ASTDeserializationListener *DeserialListener =
+      Consumer->GetASTDeserializationListener();
+
+  bool DeleteDeserialListener = false;
+
+  if (CI.getPreprocessorOpts().DumpDeserializedPCHDecls) {
+    DeserialListener = new levitation::DeserializedDeclsDumper(
+        DeserialListener,
+        DeleteDeserialListener
+    );
+
+    DeleteDeserialListener = true;
+  }
+
+  if (!CI.getPreprocessorOpts().DeserializedPCHDeclsToErrorOn.empty()) {
+
+    DeserialListener = new levitation::DeserializedDeclsChecker(
+        CI.getASTContext(),
+        CI.getPreprocessorOpts().DeserializedPCHDeclsToErrorOn,
+        DeserialListener,
+        DeleteDeserialListener
+    );
+
+    DeleteDeserialListener = true;
+  }
+
+  Reader.setDeserializationListener(
+      DeserialListener,
+      DeleteDeserialListener
+  );
+}
+
+std::unique_ptr<ASTConsumer>
+LevitationBuildObjectAction::CreateASTConsumer(
+    CompilerInstance &CI,
+    StringRef InFile
+) {
+  std::unique_ptr<ASTConsumer> C = createASTConsumerInternal(CI, InFile);
+  Consumer = C.get();
+  return C;
+}
+
+std::unique_ptr<ASTConsumer>
+LevitationBuildObjectAction::createASTConsumerInternal(
+    CompilerInstance &CI,
+    StringRef InFile
+) {
 
   auto AdoptedConsumer = ASTMergeAction::CreateASTConsumer(CI, InFile);
 
