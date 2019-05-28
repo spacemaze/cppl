@@ -7,10 +7,10 @@ namespace clang {
 namespace levitation {
 
 struct FileExtensions {
-  static const char *SourceCode;
-  static const char *DeclarationAST;
-  static const char *DefinitionAST;
-  static const char *DeclarationInstantiatedAST;
+  static constexpr char SourceCode [] = "cppl";
+  static constexpr char DeclarationAST [] = "decl-ast";
+  static constexpr char DefinitionAST [] = "def-ast";
+  static constexpr char DeclarationInstantiatedAST [] = "ast";
 };
 
 }

@@ -5,10 +5,10 @@
 namespace clang {
 namespace levitation {
 
-  const char *FileExtensions::SourceCode = "cppl";
-  const char *FileExtensions::DeclarationAST = "decl-ast";
-  const char *FileExtensions::DefinitionAST = "def-ast";
-  const char *FileExtensions::DeclarationInstantiatedAST = "ast";
+  constexpr char FileExtensions::SourceCode[];
+  constexpr char FileExtensions::DeclarationAST[];
+  constexpr char FileExtensions::DefinitionAST[];
+  constexpr char FileExtensions::DeclarationInstantiatedAST[];
 
 }
 }

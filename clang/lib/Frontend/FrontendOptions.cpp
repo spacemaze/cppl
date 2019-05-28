@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Frontend/FrontendOptions.h"
+#include "clang/Levitation/FileExtensions.h"
 #include "llvm/ADT/StringSwitch.h"
 
 using namespace clang;
@@ -30,5 +31,12 @@ InputKind FrontendOptions::getInputKindForExtension(StringRef Extension) {
     .Case("cl", InputKind::OpenCL)
     .Case("cu", InputKind::CUDA)
     .Cases("ll", "bc", InputKind::LLVM_IR)
+
+    // C++ Levitation extension:
+    .Case(
+        levitation::FileExtensions::DefinitionAST,
+        InputKind(InputKind::Unknown, InputKind::Precompiled)
+    )
+
     .Default(InputKind::Unknown);
 }

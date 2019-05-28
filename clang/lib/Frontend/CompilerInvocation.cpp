@@ -3282,10 +3282,6 @@ static void parseLevitationBuildASTArgs(
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-dependency" << Stage;
   }
-  if (!FrontendOpts.LevitationPreambleFileName.empty()) {
-    Diags.Report(diag::err_fe_levitation_wrong_option)
-    << "-levitation-preamble" << Stage;
-  }
   if (FrontendOpts.LevitationSourcesRootDir.empty()) {
     Diags.Report(diag::err_fe_levitation_missed_option)
     << "-levitation-sources-root-dir" << Stage;
