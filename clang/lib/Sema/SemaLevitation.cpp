@@ -13,6 +13,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclTemplate.h"
+#include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/LangOptions.h"
@@ -348,14 +349,28 @@ class PackageDependentClassesMarker
     };
 
     MarkActionTy MarkAction;
+    llvm::DenseSet<NamespaceDecl *> PackageNamespaces;
 
 public:
 
     PackageDependentClassesMarker(MarkActionTy markAction) : MarkAction(markAction) {}
 
+    llvm::DenseSet<NamespaceDecl *> &getPackageNamespaces() {
+      return PackageNamespaces;
+    }
+
     bool TraverseNamespaceDecl(NamespaceDecl *NS) {
-      if (!NS->isLevitationPackage())
+      // We are not interested in contents of non-package namespaces
+      // and non-package redeclarations of package namespaces.
+
+      bool Skip =
+         !NS->isLevitationPackage() ||
+         !NS->getMostRecentDecl()->isLevitationPackage();
+
+      if (Skip)
         return ParentTy::TraverseNamespaceDecl(NS);
+
+      PackageNamespaces.insert(NS);
 
       PackageDependentDeclsVisitor DependentDeclsMarker(MarkAction);
       for (auto *D : NS->decls())
@@ -417,23 +432,65 @@ Decl* Sema::findLevitationPackageDependentInstantiationFor(const Decl* D) {
   return nullptr;
 }
 
-class PackageDeclsInstantiator : public DeclVisitor<PackageDeclsInstantiator, Decl*> {
+class PackageDeclsInstantiator : public DeclVisitor<PackageDeclsInstantiator, NamedDecl*> {
 private:
   Sema *SemaObj;
   ASTContext &Context;
 
+  // Even though it contains only one field,
+  // we underline, that this is valid only during visit call
+  struct {
+    DeclContext *SemanticDC;
+  } VisitContext;
+
+  // Map of declaration contexts where key is package
+  // dependent declaration context, and value is
+  // an instantiated one.
+  llvm::DenseMap<DeclContext*, DeclContext*> DCsMap;
+
 public:
+
+  typedef DeclVisitor<PackageDeclsInstantiator, NamedDecl*> ParentTy;
+
   PackageDeclsInstantiator(Sema *semaObj) :
   SemaObj(semaObj), Context(semaObj->getASTContext()) {}
 
-  Decl *VisitEnumDecl(EnumDecl *PackageDependent) {
+  // This is a package namespace instantiation method,
+  // basically it should happen once per PackageDeclsInstantiator
+  // life.
+  NamedDecl *VisitNamespaceDecl(NamespaceDecl *PackageDependent) {
+    // In case if we create instantiated AST file, we
+    // should force identifier to be rewritten
+    PackageDependent->getIdentifier()->setChangedSinceDeserialization();
+
+    auto &Context = PackageDependent->getASTContext();
+
+    NamespaceDecl *InstantiatedNamespace = NamespaceDecl::Create(
+        Context,
+        PackageDependent->getDeclContext(),
+        false,
+        PackageDependent->getBeginLoc(),
+        PackageDependent->getLocation(),
+        PackageDependent->getIdentifier(),
+        /*Previous Declaration = */PackageDependent
+    );
+
+    auto *LexicalDC = PackageDependent->getLexicalDeclContext();
+
+    InstantiatedNamespace->setLexicalDeclContext(LexicalDC);
+    LexicalDC->addDecl(InstantiatedNamespace);
+
+    mapDC(PackageDependent, InstantiatedNamespace);
+
+    return InstantiatedNamespace;
+  }
+
+  NamedDecl *VisitEnumDecl(EnumDecl *PackageDependent) {
     // TODO levitation: is not implemented.
     return nullptr;
   }
 
-  Decl *VisitClassTemplateSpecializationDecl(ClassTemplateSpecializationDecl *PackageDependent) {
-
-    auto *SemanticDC = PackageDependent->getDeclContext();
+  NamedDecl *VisitClassTemplateSpecializationDecl(ClassTemplateSpecializationDecl *PackageDependent) {
 
     auto &TemplateArgs = PackageDependent->getTemplateArgs();
 
@@ -441,7 +498,7 @@ public:
     auto *New = ClassTemplateSpecializationDecl::Create(
         Context,
         PackageDependent->getTagKind(),
-        SemanticDC,
+        VisitContext.SemanticDC,
         PackageDependent->getBeginLoc(),
         PackageDependent->getLocation(),
         Template,
@@ -468,7 +525,7 @@ public:
 
   // FIXME levitation: I think we don't need this, but keep for now, for better
   // commit diffs.
-  Decl *VisitClassTemplatePartialSpecializationDecl(
+  NamedDecl *VisitClassTemplatePartialSpecializationDecl(
           ClassTemplatePartialSpecializationDecl *PackageDependent
   ) {
     auto &Context = SemaObj->getASTContext();
@@ -483,7 +540,7 @@ public:
     ClassTemplatePartialSpecializationDecl *New = ClassTemplatePartialSpecializationDecl::Create(
         Context,
         PackageDependent->getTagKind(),
-        PackageDependent->getDeclContext(),
+        VisitContext.SemanticDC,
         PackageDependent->getBeginLoc(),
         PackageDependent->getLocation(),
 
@@ -507,11 +564,11 @@ public:
     return New;
   }
 
-  Decl *VisitCXXRecordDecl(CXXRecordDecl *PackageDependent) {
+  NamedDecl *VisitCXXRecordDecl(CXXRecordDecl *PackageDependent) {
     return visitCXXRecordDeclInternal(PackageDependent);
   }
 
-  Decl *visitCXXRecordDeclInternal(
+  NamedDecl *visitCXXRecordDeclInternal(
       CXXRecordDecl *PackageDependent,
       bool AffectDeclContext = true,
       bool DelayTypeCreation = false,
@@ -529,10 +586,26 @@ public:
     // Process regular class case.
     auto &Context = SemaObj->getASTContext();
 
+    // TODO Levitation:
+    // So far we can't maintain redeclaration chain with current class.
+    // Direct redaclaration chain is impossible, since it supports
+    // the only definition for whole chain, so whenever
+    // we call "startDefinition" we forget existing definition and
+    // allocate new one.
+    // Postponing redeclaration is also bad idea. Whenever we instantiate new
+    // class (through InstantiateClass) it also instantiates its implicit
+    // redeclaration, and thus creates redeclaration chain.
+    // And implicit redecl considers it "New" as "First".
+    // If we just set PackageDependent to be prev for New afterwards, we
+    // will build ill-formed chain.
+    // This is why we only can just to remove old declaration from DC,
+    // and order it to be removed whenever ASTReader reads it.
+    // We should introduce concept similar to ClassTemplateDecl, which whould
+    // allow ot hold new instantiated decl as specificiation.
     auto *New = CXXRecordDecl::Create(
         Context,
         PackageDependent->getTagKind(),
-        PackageDependent->getDeclContext(),
+        VisitContext.SemanticDC,
         PackageDependent->getBeginLoc(),
         PackageDependent->getLocation(),
         PackageDependent->getIdentifier(),
@@ -579,7 +652,7 @@ public:
     return New;
   }
 
-  Decl *VisitDecl(Decl *D) {
+  NamedDecl *VisitDecl(Decl *D) {
     llvm_unreachable(
         "Declaration type is not supported. Don't know "
         "how to instantiate package dependencies."
@@ -587,7 +660,29 @@ public:
     return nullptr;
   }
 
+  NamedDecl *Visit(NamedDecl *ND) {
+    if (!(VisitContext.SemanticDC = getInstantiatedDC(ND->getDeclContext())))
+      return nullptr;
+    return ParentTy::Visit(ND);
+  }
+
 private:
+
+  // FIXME Levitation: introduce VisitNamespaceDecl
+  void mapDC(DeclContext *Dependent, DeclContext *New) {
+    DCsMap.insert({Dependent, New});
+  }
+
+  DeclContext* getInstantiatedDC(DeclContext *OriginalDC) {
+    if (!OriginalDC->isPackageDependentContext())
+      return OriginalDC;
+
+    auto Found = DCsMap.find(OriginalDC);
+    if (Found == DCsMap.end())
+      return nullptr;
+
+    return Found->second;
+  }
 
   void instantiateClass(
       CXXRecordDecl *New,
@@ -595,14 +690,20 @@ private:
       bool AffectDeclContext = true
   ) {
 
-    auto *LexicalDC = PackageDependent->getLexicalDeclContext();
-
     if (AffectDeclContext) {
       // If declaration has been loaded from AST,
       // force DeclContext lazy decls collection to load it.
+
+      auto *LexicalDC = PackageDependent->getLexicalDeclContext();
+
       LexicalDC->containsDeclAndLoad(PackageDependent);
       LexicalDC->removeDecl(PackageDependent);
-      LexicalDC->addDecl(New);
+      LexicalDC = addToInstantiatedDeclContext(LexicalDC, New);
+
+      assert(
+          LexicalDC &&
+          "Declaration contexts should be instantiated before their children"
+      );
     }
 
     auto PointOfInstantiation = PackageDependent->getBeginLoc();
@@ -627,6 +728,19 @@ private:
         EmptyArgsList,
         TSK_ExplicitInstantiationDefinition
     );
+
+    mapDC(PackageDependent, New);
+  }
+
+  DeclContext *addToInstantiatedDeclContext(DeclContext *DC, NamedDecl *D) {
+
+    auto *MappedDC = getInstantiatedDC(DC);
+    if (!MappedDC)
+      return nullptr;
+
+    D->setLexicalDeclContext(MappedDC);
+    MappedDC->addDecl(D);
+    return MappedDC;
   }
 
   void setAdditionalSpecializationProperties(
@@ -689,10 +803,25 @@ void Sema::InstantiatePackageClasses() {
   // 2. Go through collection, and instantiate its items.
 
   if (!ExternalSource)
-  return;
+    return;
 
   SmallVector<NamedDecl*, 8> LevitationPackageDependentDecls;
-  ExternalSource->ReadLevitationPackageDependentDecls(LevitationPackageDependentDecls);
+
+  PackageDependentClassesMarker Search([&] (NamedDecl *ND) {
+    ND->dump();
+    LevitationPackageDependentDecls.push_back(ND);
+  });
+  Search.TraverseDecl(Context.getTranslationUnitDecl());
+
+  if (LevitationPackageDependentDecls.empty())
+    return;
+
+  assert(
+      Search.getPackageNamespaces().size() == 1 &&
+      "Only one package namespace allowed per instantiation stage"
+  );
+
+  NamespaceDecl *PackageNamespace = *Search.getPackageNamespaces().begin();
 
   SmallVector<NamedDecl*, 8> ToBeInstantiated;
   SmallVector<NamedDecl*, 8> OutOfScopeMemberDecls;
@@ -706,22 +835,16 @@ void Sema::InstantiatePackageClasses() {
       OutOfScopeMemberDecls.push_back(D);
     }
 
-    if (auto *DC = dyn_cast<DeclContext>(D)) {
-      assert(!DC->getLookupPtr() &&
-      "Package instantiation should be launched before any lookups");
-    }
-
-    // During package instantiation we should consider decls as
-    // package dependent.
-    D->setLevitationPackageDependent(true);
-
     ToBeInstantiated.push_back(D);
   }
 
   PackageDeclsInstantiator Instantiator(this);
+  Instantiator.Visit(PackageNamespace);
 
-  for (auto *D : ToBeInstantiated) {
-    Instantiator.Visit(D);
+  if (ToBeInstantiated.size()) {
+    for (auto *D : ToBeInstantiated) {
+      Instantiator.Visit(D);
+    }
   }
 
   for (auto *D : OutOfScopeMemberDecls) {
