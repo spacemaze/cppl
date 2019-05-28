@@ -1185,6 +1185,7 @@ void ASTDeclWriter::VisitNamespaceDecl(NamespaceDecl *D) {
   VisitRedeclarable(D);
   VisitNamedDecl(D);
   Record.push_back(D->isInline());
+  Record.push_back(D->isLevitationPackage());
   Record.AddSourceLocation(D->getBeginLoc());
   Record.AddSourceLocation(D->getRBraceLoc());
 
