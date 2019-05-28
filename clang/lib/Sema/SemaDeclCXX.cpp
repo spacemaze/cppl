@@ -9104,9 +9104,8 @@ Decl *Sema::ActOnStartPackageNamespaceDef(
           StartLoc,
           Loc,
           II,
-          PrevNS);
-
-  Namespc->setLevitationPackage(true);
+          PrevNS,
+          /*Levitation Package=*/true);
 
   if (IsInvalid)
     Namespc->setInvalidDecl();

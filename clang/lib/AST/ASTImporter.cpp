@@ -2155,7 +2155,8 @@ ExpectedDecl ASTNodeImporter::VisitNamespaceDecl(NamespaceDecl *D) {
     if (GetImportedOrCreateDecl(
             ToNamespace, D, Importer.getToContext(), DC, D->isInline(),
             *BeginLocOrErr, Loc, Name.getAsIdentifierInfo(),
-            /*PrevDecl=*/nullptr))
+            /*PrevDecl=*/nullptr,
+            D->isLevitationPackage()))
       return ToNamespace;
     ToNamespace->setLexicalDeclContext(LexicalDC);
     LexicalDC->addDeclInternal(ToNamespace);

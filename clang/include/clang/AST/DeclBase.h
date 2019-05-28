@@ -307,11 +307,6 @@ private:
   /// definition.
   unsigned TopLevelDeclInObjCContainer : 1;
 
-  /// Whether this declaration is levitation package dependent.
-  /// In another words, whether you can define 'global::Some::Ref' somewhere
-  /// in its body.
-  unsigned LevitationPackageDependent : 1;
-
   /// Whether statistic collection is enabled.
   static bool StatisticsEnabled;
 
@@ -378,7 +373,6 @@ protected:
         DeclCtx(DC), Loc(L), DeclKind(DK), InvalidDecl(false), HasAttrs(false),
         Implicit(false), Used(false), Referenced(false),
         TopLevelDeclInObjCContainer(false),
-        LevitationPackageDependent(false),
         Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(0) {
@@ -388,7 +382,6 @@ protected:
   Decl(Kind DK, EmptyShell Empty)
       : DeclKind(DK), InvalidDecl(false), HasAttrs(false), Implicit(false),
         Used(false), Referenced(false), TopLevelDeclInObjCContainer(false),
-        LevitationPackageDependent(false),
         Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(0) {
@@ -1165,8 +1158,10 @@ protected:
   // C++ Levitation Mode
   //
 public:
-  void setLevitationPackageDependent(bool v) { LevitationPackageDependent = v; }
-  bool isLevitationPackageDependent() const { return LevitationPackageDependent; }
+  /// Whether this declaration is levitation package dependent.
+  /// In another words, whether you can define 'global::Some::Ref' somewhere
+  /// in its body.
+  bool isLevitationPackageDependent() const;
 };
 
 /// Determine whether two declarations declare the same entity.
@@ -1867,6 +1862,11 @@ public:
   /// Determines whether this context is dependent on a
   /// template parameter.
   bool isDependentContext() const;
+
+  /// C++ Levitation extension:
+  /// Determines whether current context is C++ Levitation package
+  /// or belongs to levitation package.
+  bool isPackageDependentContext() const;
 
   /// isTransparentContext - Determines whether this context is a
   /// "transparent" context, meaning that the members declared in this

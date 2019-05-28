@@ -381,6 +381,10 @@ ASTMutationListener *Decl::getASTMutationListener() const {
   return getASTContext().getASTMutationListener();
 }
 
+bool Decl::isLevitationPackageDependent() const {
+  return getDeclContext()->isDependentContext();
+}
+
 unsigned Decl::getMaxAlignment() const {
   if (!hasAttrs())
     return 0;
@@ -1119,6 +1123,19 @@ bool DeclContext::isDependentContext() const {
   // should be considered dependent.
 
   return getParent() && getParent()->isDependentContext();
+}
+
+// C++ Levitation extension:
+bool DeclContext::isPackageDependentContext() const {
+  if (isFileContext()) {
+    if (const auto *NS = dyn_cast<NamespaceDecl>(this))
+      if (NS->isLevitationPackage())
+        return true;
+
+    return false;
+  }
+
+  return getParent() && getParent()->isPackageDependentContext();
 }
 
 bool DeclContext::isTransparentContext() const {

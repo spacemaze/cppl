@@ -1562,6 +1562,7 @@ void ASTDeclReader::VisitNamespaceDecl(NamespaceDecl *D) {
   RedeclarableResult Redecl = VisitRedeclarable(D);
   VisitNamedDecl(D);
   D->setInline(Record.readInt());
+  D->setLevitationPackage(Record.readInt());
   D->LocStart = ReadSourceLocation();
   D->RBraceLoc = ReadSourceLocation();
 

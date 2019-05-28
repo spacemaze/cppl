@@ -2634,11 +2634,12 @@ NamespaceDecl *UsingDirectiveDecl::getNominatedNamespace() {
 
 NamespaceDecl::NamespaceDecl(ASTContext &C, DeclContext *DC, bool Inline,
                              SourceLocation StartLoc, SourceLocation IdLoc,
-                             IdentifierInfo *Id, NamespaceDecl *PrevDecl)
+                             IdentifierInfo *Id, NamespaceDecl *PrevDecl,
+                             bool LevitationPackage)
     : NamedDecl(Namespace, DC, IdLoc, Id), DeclContext(Namespace),
       redeclarable_base(C), LocStart(StartLoc),
       AnonOrFirstNamespaceAndInline(nullptr, Inline),
-      IsLevitationPackage(false) {
+      IsLevitationPackage(LevitationPackage) {
   setPreviousDecl(PrevDecl);
 
   if (PrevDecl)
@@ -2648,14 +2649,15 @@ NamespaceDecl::NamespaceDecl(ASTContext &C, DeclContext *DC, bool Inline,
 NamespaceDecl *NamespaceDecl::Create(ASTContext &C, DeclContext *DC,
                                      bool Inline, SourceLocation StartLoc,
                                      SourceLocation IdLoc, IdentifierInfo *Id,
-                                     NamespaceDecl *PrevDecl) {
+                                     NamespaceDecl *PrevDecl,
+                                     bool LevitationPackage) {
   return new (C, DC) NamespaceDecl(C, DC, Inline, StartLoc, IdLoc, Id,
-                                   PrevDecl);
+                                   PrevDecl, LevitationPackage);
 }
 
 NamespaceDecl *NamespaceDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
   return new (C, ID) NamespaceDecl(C, nullptr, false, SourceLocation(),
-                                   SourceLocation(), nullptr, nullptr);
+                                   SourceLocation(), nullptr, nullptr, false);
 }
 
 NamespaceDecl *NamespaceDecl::getOriginalNamespace() {

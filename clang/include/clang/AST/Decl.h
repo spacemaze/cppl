@@ -531,7 +531,8 @@ class NamespaceDecl : public NamedDecl, public DeclContext,
 
   NamespaceDecl(ASTContext &C, DeclContext *DC, bool Inline,
                 SourceLocation StartLoc, SourceLocation IdLoc,
-                IdentifierInfo *Id, NamespaceDecl *PrevDecl);
+                IdentifierInfo *Id, NamespaceDecl *PrevDecl,
+                bool LevitationPackage);
 
   using redeclarable_base = Redeclarable<NamespaceDecl>;
 
@@ -546,7 +547,8 @@ public:
   static NamespaceDecl *Create(ASTContext &C, DeclContext *DC,
                                bool Inline, SourceLocation StartLoc,
                                SourceLocation IdLoc, IdentifierInfo *Id,
-                               NamespaceDecl *PrevDecl);
+                               NamespaceDecl *PrevDecl,
+                               bool LevitationPackage = false);
 
   static NamespaceDecl *CreateDeserialized(ASTContext &C, unsigned ID);
 
