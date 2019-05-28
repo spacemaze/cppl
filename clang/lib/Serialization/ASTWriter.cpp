@@ -1548,7 +1548,11 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
 
     for (ModuleFile &M : Mgr) {
       // Skip modules that weren't directly imported.
-      if (!M.isDirectlyImported())
+      // C++ Levitation extension:
+      // TODO Levitation: We probably need our own MK_LevitationMainFile
+      if (!M.isDirectlyImported() ||
+           M.Kind == MK_LevitationDependency ||
+           M.Kind == MK_MainFile)
         continue;
 
       Record.push_back((unsigned)M.Kind); // FIXME: Stable encoding
@@ -4825,7 +4829,7 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
     }
   }
 
-  // Levitation:
+  // C++ Levitation:
   // Build record containing all levitation package dependent named declarations.
   RecordData LevitationPackageDependentDecls;
   if (SemaRef.getLangOpts().LevitationMode &&
