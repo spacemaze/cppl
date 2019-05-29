@@ -7700,16 +7700,6 @@ void ASTReader::FindExternalLexicalDecls(
         PredefsVisited[ID] = true;
       }
 
-      auto GlobalID = getGlobalDeclID(*M, ID);
-
-      bool skipPackageDependentDecls =
-          M->Kind == serialization::MK_LevitationDependency;
-
-      if (skipPackageDependentDecls &&
-          LevitationPackageDependentDecls.count(GlobalID))
-        continue;
-
-      // TODO Levitation: may be just check D->isPackageDependent?
       if (Decl *D = GetLocalDecl(*M, ID)) {
         assert(D->getKind() == K && "wrong kind for lexical decl");
         if (!DC->isDeclInLexicalTraversal(D))

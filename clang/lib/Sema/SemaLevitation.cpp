@@ -695,9 +695,6 @@ private:
       // force DeclContext lazy decls collection to load it.
 
       auto *LexicalDC = PackageDependent->getLexicalDeclContext();
-
-      LexicalDC->containsDeclAndLoad(PackageDependent);
-      LexicalDC->removeDecl(PackageDependent);
       LexicalDC = addToInstantiatedDeclContext(LexicalDC, New);
 
       assert(
@@ -844,9 +841,5 @@ void Sema::InstantiatePackageClasses() {
     for (auto *D : ToBeInstantiated) {
       Instantiator.Visit(D);
     }
-  }
-
-  for (auto *D : OutOfScopeMemberDecls) {
-    D->getLexicalDeclContext()->removeDecl(D);
   }
 }
