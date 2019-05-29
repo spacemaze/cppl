@@ -902,8 +902,13 @@ private:
   // C++ Levitation Mode
   //
 
+  /// Enables C++ Levitation mode
+  bool LevitationMode = false;
+
   /// List of levitation package dependent declarations
   llvm::DenseSet<uint64_t> LevitationPackageDependentDecls;
+
+  /// Force to read declarations only. Skip reading function bodies.
   bool ReadDeclarationsOnly = false;
 
   //

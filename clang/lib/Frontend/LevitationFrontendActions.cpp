@@ -200,6 +200,8 @@ public:
     Diags(CompilerInst.getDiagnostics()),
     OnFail(std::move(onFail))
   {
+    LevitationMode = true;
+
     if (CompilerInst.getFrontendOpts().LevitationBuildDeclaration)
       ReadDeclarationsOnly = true;
   }
@@ -227,7 +229,7 @@ public:
 
     auto Res = read(
         Preamble,
-        serialization::MK_LevitationDependency,
+        serialization::MK_Preamble,
         /*ReadDeclarationsOnly=*/false
     );
 

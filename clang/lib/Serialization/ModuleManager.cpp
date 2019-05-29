@@ -215,7 +215,15 @@ ModuleManager::addModule(StringRef FileName, ModuleKind Type,
 
   updateModuleImports(*NewModule, ImportedBy, ImportLoc);
 
-  if (!NewModule->isModule())
+  if (NewModule->isLevitationModule()) {
+    NewModule->LevitationModuleID = LevitationModules.size();
+    LevitationModules.push_back(NewModule.get());
+  } else {
+    if (++LevitationNumNonModules > serialization::LEVITATION_NUM_RESERVED_NON_MODULES)
+      return LevitationOutOfIDs;
+  }
+
+  if (!NewModule->isModule() && !NewModule->isLevitationModule())
     PCHChain.push_back(NewModule.get());
   if (!ImportedBy)
     Roots.push_back(NewModule.get());

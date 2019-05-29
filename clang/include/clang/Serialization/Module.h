@@ -483,6 +483,25 @@ public:
 
   /// Dump debugging output for this module.
   void dump();
+
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+
+  serialization::LevitationModuleID LevitationModuleID = 0;
+
+  bool isLevitationDependency() const {
+    return Kind == MK_LevitationDependency;
+  }
+
+  bool isLevitationModule() const {
+    // TODO Levitation: consider introducing MK_LevitationMainFile
+    return isLevitationDependency() || Kind == MK_MainFile;
+  }
+
+  //
+  // end of C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
 };
 
 } // namespace serialization

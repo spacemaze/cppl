@@ -206,7 +206,11 @@ public:
     Missing,
 
     /// The module file is out-of-date.
-    OutOfDate
+    OutOfDate,
+
+    // C++ Levitation extension:
+    /// Can't load module, because we're out of IDs.
+    LevitationOutOfIDs
   };
 
   using ASTFileSignatureReader = ASTFileSignature (*)(StringRef);
@@ -318,6 +322,24 @@ public:
   void viewGraph();
 
   InMemoryModuleCache &getModuleCache() const { return *ModuleCache; }
+
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+
+  /// Set of C++ Levitation modules.
+  /// Per this mode modules load order is strict among all modules set.
+  /// modules order actual during build process only.
+  /// Levitation module ID is same is its index in modules vector.
+  /// If new module has been added, order of dependencies remains without change,
+  /// while dependent modules and their IDs are invalidated.
+  SmallVector<ModuleFile*, 16> LevitationModules;
+
+  serialization::LevitationModuleID LevitationNumNonModules = 0;
+
+  //
+  // end of C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
 };
 
 } // namespace serialization

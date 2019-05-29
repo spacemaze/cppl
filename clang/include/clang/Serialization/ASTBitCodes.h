@@ -173,6 +173,19 @@ namespace serialization {
     /// The number of predefined submodule IDs.
     const unsigned int NUM_PREDEF_SUBMODULE_IDS = 1;
 
+    //===--------------------------------------------------------------------===//
+    // C++ Levitation Mode
+    //
+
+    /// An ID number that refers to a levitation module.
+    using LevitationModuleID = uint32_t;
+
+    const unsigned int LEVITATION_NUM_RESERVED_NON_MODULES = 1;
+
+    //
+    // end of C++ Levitation Mode
+    //===--------------------------------------------------------------------===//
+
     /// Source range/offset of a preprocessed entity.
     struct PPEntityOffset {
       /// Raw source location of beginning of range.

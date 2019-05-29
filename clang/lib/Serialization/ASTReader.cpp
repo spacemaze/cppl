@@ -2036,9 +2036,7 @@ void ASTReader::resolvePendingMacro(IdentifierInfo *II,
   // to put it.
   // C++ Levitation extension:
   // also skip it if we're reading C++ Levitation Dependency.
-  bool SkipDirectiveHistory =
-      M.isModule() || M.Kind == MK_LevitationDependency;
-
+  bool SkipDirectiveHistory = M.isModule() || M.isLevitationDependency();
   if (SkipDirectiveHistory)
     return;
 
@@ -4433,6 +4431,9 @@ ASTReader::ReadASTCore(StringRef FileName,
                                             << FileName << !ErrorStr.empty()
                                             << ErrorStr;
     return Failure;
+  case ModuleManager::LevitationOutOfIDs:
+    Diag(diag::err_levitation_module_out_of_ids);
+
   }
 
   assert(M && "Missing module file");
@@ -8762,6 +8763,15 @@ bool ASTReader::DeclIsFromPCHWithObjectFile(const Decl *D) {
 }
 
 ModuleFile *ASTReader::getLocalModuleFile(ModuleFile &F, unsigned ID) {
+
+  if (LevitationMode) {
+    if (ID >= LEVITATION_NUM_RESERVED_NON_MODULES) {
+      return getModuleManager().LevitationModules[ID - LEVITATION_NUM_RESERVED_NON_MODULES];
+    }
+
+    return getModuleManager().pch_modules().end()[-ID];
+  }
+
   if (ID & 1) {
     // It's a module, look it up by submodule ID.
     auto I = GlobalSubmoduleMap.find(getGlobalSubmoduleID(F, ID >> 1));
@@ -8769,6 +8779,8 @@ ModuleFile *ASTReader::getLocalModuleFile(ModuleFile &F, unsigned ID) {
   } else {
     // It's a prefix (preamble, PCH, ...). Look it up by index.
     unsigned IndexFromEnd = ID >> 1;
+
+    // FIXME Levitation: instead check that sign bit is present (number is negative)
     assert(IndexFromEnd && "got reference to unknown module file");
     return getModuleManager().pch_modules().end()[-IndexFromEnd];
   }
@@ -8784,6 +8796,16 @@ unsigned ASTReader::getModuleFileID(ModuleFile *F) {
   // FIXME: Is this true even if we have an explicit module file and a PCH?
   if (F->isModule())
     return ((F->BaseSubmoduleID + NUM_PREDEF_SUBMODULE_IDS) << 1) | 1;
+
+  if (LevitationMode) {
+    if (F->isLevitationModule())
+      return F->LevitationModuleID + LEVITATION_NUM_RESERVED_NON_MODULES;
+
+    auto PCHModules = getModuleManager().pch_modules();
+    auto I = llvm::find(PCHModules, F);
+    assert(I != PCHModules.end() && "emitting reference to unknown file");
+    return PCHModules.end() - I;
+  }
 
   auto PCHModules = getModuleManager().pch_modules();
   auto I = llvm::find(PCHModules, F);
