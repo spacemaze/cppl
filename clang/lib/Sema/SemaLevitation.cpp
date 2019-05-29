@@ -808,7 +808,6 @@ void Sema::InstantiatePackageClasses() {
   SmallVector<NamedDecl*, 8> LevitationPackageDependentDecls;
 
   PackageDependentClassesMarker Search([&] (NamedDecl *ND) {
-    ND->dump();
     LevitationPackageDependentDecls.push_back(ND);
   });
   Search.TraverseDecl(Context.getTranslationUnitDecl());
