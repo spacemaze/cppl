@@ -200,8 +200,7 @@ public:
     Diags(CompilerInst.getDiagnostics()),
     OnFail(std::move(onFail))
   {
-    // FIXME Levitation: convert into another stage LBSK_InstantiateDeclAST
-    if (CompilerInst.getFrontendOpts().ProgramAction == frontend::GeneratePCH)
+    if (CompilerInst.getFrontendOpts().LevitationBuildDeclaration)
       ReadDeclarationsOnly = true;
   }
 

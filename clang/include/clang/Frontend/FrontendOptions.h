@@ -461,6 +461,7 @@ public:
   std::vector<std::string> LevitationDependencyDeclASTs;
 
   bool LevitationBuildObject;
+  bool LevitationBuildDeclaration;
 
   // end of C++ Levitation Mode
   //

@@ -1680,6 +1680,7 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   }
 
   Opts.LevitationBuildObject = Args.hasArg(OPT_flevitation_build_object);
+  Opts.LevitationBuildDeclaration = Args.hasArg(OPT_flevitation_build_decl);
 
   if (const Arg* A = Args.getLastArg(OPT_plugin)) {
     Opts.Plugins.emplace_back(A->getValue(0));
@@ -3274,10 +3275,10 @@ static void parseLevitationBuildASTArgs(
     Diags.Report(diag::err_fe_levitation_missed_option)
     << "-levitation-deps-output-file=" << Stage;
   }
-//  if (!FrontendOpts.LevitationDependenciesInputFile.empty()) {
-//    Diags.Report(diag::err_fe_levitation_wrong_option)
-//    << "-levitation-deps-input-file" << Stage;
-//  }
+  if (FrontendOpts.LevitationBuildDeclaration) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-flevitation-build-decl" << Stage;
+  }
   if (!FrontendOpts.LevitationDependencyDeclASTs.empty()) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-dependency" << Stage;
@@ -3289,6 +3290,10 @@ static void parseLevitationBuildASTArgs(
   if (FrontendOpts.LevitationBuildObject) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-flevitation-build-object" << Stage;
+  }
+  if (FrontendOpts.LevitationBuildDeclaration) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-flevitation-build-decl" << Stage;
   }
 
   LangOpts.LevitationMode = 1;
@@ -3319,9 +3324,17 @@ static void parseLevitationBuildPreambleArgs(
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-flevitation-build-object" << Stage;
   }
+  if (FrontendOpts.LevitationBuildDeclaration) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-flevitation-build-decl" << Stage;
+  }
   if (!FrontendOpts.LevitationPreambleFileName.empty()) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-preamble" << Stage;
+  }
+  if (FrontendOpts.LevitationBuildDeclaration) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-flevitation-build-decl" << Stage;
   }
 
   LangOpts.LevitationMode = 1;
@@ -3349,6 +3362,14 @@ static void parseLevitationBuildObjectArgs(
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-ast-merge" << Stage;
   }
+  if (
+    FrontendOpts.LevitationBuildObject &&
+    FrontendOpts.LevitationBuildDeclaration
+  ) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+            << "-flevitation-build-decl" << Stage;
+  }
+
 
   LangOpts.LevitationMode = 1;
   LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildObjectFile);
@@ -3456,7 +3477,10 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
     );
   }
 
-  if (Res.getFrontendOpts().LevitationBuildObject) {
+  if (
+    Res.getFrontendOpts().LevitationBuildObject ||
+    Res.getFrontendOpts().LevitationBuildDeclaration
+  ) {
 
     // If we working with precompiled C++ Levitation AST files,
     // we still need -std option to be parsed.

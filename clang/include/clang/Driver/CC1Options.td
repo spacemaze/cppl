@@ -930,6 +930,10 @@ def flevitation_build_object
 : Flag<["-"], "flevitation-build-object">,
 HelpText<"Sets up C++ Levitation 'Build Object File' stage.">;
 
+def flevitation_build_decl
+: Flag<["-"], "flevitation-build-decl">,
+HelpText<"Sets up C++ Levitation 'Build Object File' stage and tells compiler to emit declarations only">;
+
 def levitation_preamble
 : Joined<["-"], "levitation-preamble=">,
 HelpText<"Path to C++ Levitation precompiled preamble.">;

@@ -550,7 +550,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   //   move and strip whole BeginSourceFile implementation
   //   into LevitationBuildObjectAction.
   bool SkipSourceManagerInitialization =
-      CI.getFrontendOpts().LevitationBuildObject &&
+      CI.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
       Input.getKind().getFormat() == InputKind::Precompiled;
 
   if (!BeginInvocation(CI))
@@ -630,7 +630,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   // TODO Levitation: once you get solid with this solution
   //   move and strip whole BeginSourceFile implementation
   //   into LevitationBuildObjectAction.
-      !CI.getFrontendOpts().LevitationBuildObject
+      CI.getLangOpts().getLevitationBuildStage() != LangOptions::LBSK_BuildObjectFile
   ) {
     assert(!usesPreprocessorOnly() && "this case was handled above");
     assert(hasASTFileSupport() &&
