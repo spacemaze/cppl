@@ -2517,9 +2517,12 @@ template<typename T>
 void ASTDeclReader::mergeRedeclarable(Redeclarable<T> *DBase,
                                       RedeclarableResult &Redecl,
                                       DeclID TemplatePatternID) {
-  // TODO Levitation: consider merging of MK_LevitationDependency files.
-  // If modules are not available, there is no reason to perform this merge.
-  if (!Reader.getContext().getLangOpts().Modules)
+  // C++ Levitation extension:
+  // In this mode we allow merging namespaces
+  if (
+    !Reader.getContext().getLangOpts().Modules &&
+    !Reader.getContext().getLangOpts().LevitationMode
+  )
     return;
 
   // If we're not the canonical declaration, we don't need to merge.
@@ -2593,6 +2596,15 @@ void ASTDeclReader::mergeRedeclarable(Redeclarable<T> *DBase, T *Existing,
                                       RedeclarableResult &Redecl,
                                       DeclID TemplatePatternID) {
   auto *D = static_cast<T *>(DBase);
+
+  // C++ Levitation extension:
+  // Per this mode only namespaces are allowed to be merged.
+  if (
+    Reader.getContext().getLangOpts().LevitationMode &&
+    !isa<NamespaceDecl>(D)
+  )
+    return;
+
   T *ExistingCanon = Existing->getCanonicalDecl();
   T *DCanon = D->getCanonicalDecl();
   if (ExistingCanon != DCanon) {
