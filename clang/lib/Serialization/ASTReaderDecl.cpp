@@ -4294,6 +4294,17 @@ void ASTDeclReader::UpdateDecl(Decl *D,
    llvm::SmallVectorImpl<serialization::DeclID> &PendingLazySpecializationIDs) {
   while (Record.getIdx() < Record.size()) {
     switch ((DeclUpdateKind)Record.readInt()) {
+
+    // C++ Levitation extension:
+    case UPD_CXXL_ADDED_PACKAGE_INSTANTIATION: {
+        // It will be added to the template's lazy specialization set.
+        auto *PackageDependent = cast<NamedDecl>(D);
+        Reader
+            .PendingLevitationPackageInstantiations[PackageDependent]
+            .push_back(ReadDeclID());
+      }
+      break;
+
     case UPD_CXX_ADDED_IMPLICIT_MEMBER: {
       auto *RD = cast<CXXRecordDecl>(D);
       // FIXME: If we also have an update record for instantiating the

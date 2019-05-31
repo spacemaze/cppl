@@ -905,6 +905,12 @@ private:
   /// Enables C++ Levitation mode
   bool LevitationMode = false;
 
+  using LevitationDeclIDsVector = SmallVector<serialization::DeclID, 1>;
+  std::map<NamedDecl *, LevitationDeclIDsVector>
+
+  /// Instantiations of package dependent declarations
+  PendingLevitationPackageInstantiations;
+
   /// Force to read declarations only. Skip reading function bodies.
   bool ReadDeclarationsOnly = false;
 
@@ -2086,6 +2092,13 @@ public:
   void ReadLateParsedTemplates(
       llvm::MapVector<const FunctionDecl *, std::unique_ptr<LateParsedTemplate>>
           &LPTMap) override;
+
+  // C++ Levitation extension:
+  /// Reads levitation package dependent declarations instantiations
+  void ReadLevitationPackageInstantiations(
+      NamedDecl *PackageDependent,
+      SmallVectorImpl<NamedDecl *> &Instantiations
+  ) override;
 
   /// Load a selector from disk, registering its ID if it exists.
   void LoadSelector(Selector Sel);

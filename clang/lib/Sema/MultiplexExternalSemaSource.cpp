@@ -311,6 +311,17 @@ void MultiplexExternalSemaSource::ReadLateParsedTemplates(
     Sources[i]->ReadLateParsedTemplates(LPTMap);
 }
 
+void MultiplexExternalSemaSource::ReadLevitationPackageInstantiations(
+    NamedDecl *PackageDependent,
+    SmallVectorImpl<NamedDecl *> &Instantiations
+) {
+
+  for (auto &Source : Sources)
+    Source->ReadLevitationPackageInstantiations(
+        PackageDependent, Instantiations
+    );
+}
+
 TypoCorrection MultiplexExternalSemaSource::CorrectTypo(
                                      const DeclarationNameInfo &Typo,
                                      int LookupKind, Scope *S, CXXScopeSpec *SS,

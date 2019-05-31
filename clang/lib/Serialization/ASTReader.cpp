@@ -8553,6 +8553,17 @@ void ASTReader::ReadLateParsedTemplates(
   LateParsedTemplates.clear();
 }
 
+void ASTReader::ReadLevitationPackageInstantiations(
+    NamedDecl *PackageDependent,
+    SmallVectorImpl<NamedDecl *> &Instantiations
+) {
+  auto Found = PendingLevitationPackageInstantiations.find(PackageDependent);
+  if (Found != PendingLevitationPackageInstantiations.end()) {
+    for (serialization::DeclID InstantiationID : Found->second)
+      Instantiations.push_back(cast<NamedDecl>(GetDecl(InstantiationID)));
+  }
+}
+
 void ASTReader::LoadSelector(Selector Sel) {
   // It would be complicated to avoid reading the methods anyway. So don't.
   ReadMethodPool(Sel);

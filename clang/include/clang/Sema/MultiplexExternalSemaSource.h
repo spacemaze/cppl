@@ -238,6 +238,13 @@ public:
       FieldDecl *, llvm::SmallVector<std::pair<SourceLocation, bool>, 4>> &
                                             Exprs) override;
 
+  // C++ Levitation extension:
+  /// Reads levitation package dependent declarations instantiations
+  void ReadLevitationPackageInstantiations(
+      NamedDecl *PackageDependent,
+      SmallVectorImpl<NamedDecl *> &Instantiations
+  ) override;
+
   /// Do last resort, unqualified lookup on a LookupResult that
   /// Sema cannot find.
   ///

@@ -147,6 +147,22 @@ public:
   virtual void AddedAttributeToRecord(const Attr *Attr,
                                       const RecordDecl *Record) {}
 
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+
+  /// A new package dependent decl instantiation was added.
+  /// \param PackageDependent Package dependent declaration
+  /// \param Instantiated Instantiation of package dependent declaration
+  virtual void AddedLevitationPackageInstantiation(
+      NamedDecl *PackageDependent,
+      NamedDecl *Instantiated
+  ) {}
+
+  //
+  // end of C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
+
   // NOTE: If new methods are added they should also be added to
   // MultiplexASTMutationListener.
 };

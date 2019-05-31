@@ -507,12 +507,7 @@ public:
         PackageDependent->getLocation(),
         Template,
         TemplateArgs.asArray(),
-        // TODO Levitation: if class has been instantiated already
-        //   that means we were instantiated its declaration,
-        //   and now we want to instantiate its definition,
-        //   find declaration and set it as previous.
-        //   Otherwise AST will be ill formed.
-        nullptr
+        getPreviousInstantiation(PackageDependent)
     );
 
     if (Template->getTemplateParameters()->size() > 0) {
@@ -557,10 +552,7 @@ public:
         TemplateArgs.asArray(),
         ArgsAsWritten,
         QualType(PackageDependent->getTypeForDecl(), 0),
-        // Postpone setting previous declaration.
-        // If we set it now, then it will use the same DefinitinoData
-        // and we need it to be different.
-        nullptr
+        getPreviousInstantiation(PackageDependent)
     );
 
     setAdditionalSpecializationProperties(New, PackageDependent);
@@ -615,10 +607,7 @@ public:
         PackageDependent->getBeginLoc(),
         PackageDependent->getLocation(),
         PackageDependent->getIdentifier(),
-        // Postpone setting previous declaration.
-        // If we set it now, then it will use the same DefinitinoData
-        // and we need it to be different.
-        nullptr,
+        getPreviousInstantiation(PackageDependent),
         DelayTypeCreation
     );
 
@@ -669,12 +658,38 @@ public:
   NamedDecl *Visit(NamedDecl *ND) {
     if (!(VisitContext.SemanticDC = getInstantiatedDC(ND->getDeclContext())))
       return nullptr;
-    return ParentTy::Visit(ND);
+
+    NamedDecl *New = ParentTy::Visit(ND);
+
+    if (New) {
+      if (auto *MutationListener = SemaObj->getASTMutationListener())
+        MutationListener->AddedLevitationPackageInstantiation(ND, New);
+    }
+
+    return New;
   }
 
 private:
 
-  // FIXME Levitation: introduce VisitNamespaceDecl
+  template<typename DeclTy>
+  DeclTy *getPreviousInstantiation(DeclTy *PackageDependent) {
+    auto *ExternalSource = SemaObj->getExternalSource();
+
+    if (!ExternalSource)
+      return nullptr;
+
+    SmallVector<NamedDecl *, 1> Instantiations;
+    ExternalSource->ReadLevitationPackageInstantiations(PackageDependent, Instantiations);
+
+    if (Instantiations.empty())
+      return nullptr;
+
+    // TODO Levitation: emit diag error.
+    assert(Instantiations.size() == 1 && "Only one previous instantiation is allowed");
+
+    return cast<DeclTy>(Instantiations.front());
+  }
+
   void mapDC(DeclContext *Dependent, DeclContext *New) {
     DCsMap.insert({Dependent, New});
   }
