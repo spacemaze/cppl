@@ -360,12 +360,9 @@ public:
     }
 
     bool TraverseNamespaceDecl(NamespaceDecl *NS) {
-      // We are not interested in contents of non-package namespaces
-      // and non-package redeclarations of package namespaces.
-
-      bool Skip =
-         !NS->isLevitationPackage() ||
-         !NS->getMostRecentDecl()->isLevitationPackage();
+      // We are interested only in package namespace from main file.
+      bool Skip = !NS->isLevitationPackage() ||
+                  !belongsToMainFile(NS);
 
       if (Skip)
         return ParentTy::TraverseNamespaceDecl(NS);
@@ -377,6 +374,13 @@ public:
          DependentDeclsMarker.Visit(D);
 
     return true;
+  }
+
+private:
+  bool belongsToMainFile(Decl *NS) {
+    auto &SourceManager = NS->getASTContext().getSourceManager();
+    auto NSFileID = SourceManager.getFileID(NS->getLocation());
+    return NSFileID == SourceManager.getMainFileID();
   }
 };
 
@@ -472,7 +476,7 @@ public:
         PackageDependent->getBeginLoc(),
         PackageDependent->getLocation(),
         PackageDependent->getIdentifier(),
-        /*Previous Declaration = */PackageDependent
+        /*Previous Declaration = */PackageDependent->getMostRecentDecl()
     );
 
     auto *LexicalDC = PackageDependent->getLexicalDeclContext();
@@ -503,9 +507,11 @@ public:
         PackageDependent->getLocation(),
         Template,
         TemplateArgs.asArray(),
-        // Postpone setting previous declaration.
-        // If we set it now, then it will use the same DefinitinoData
-        // and we need it to be different.
+        // TODO Levitation: if class has been instantiated already
+        //   that means we were instantiated its declaration,
+        //   and now we want to instantiate its definition,
+        //   find declaration and set it as previous.
+        //   Otherwise AST will be ill formed.
         nullptr
     );
 
