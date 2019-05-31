@@ -660,10 +660,7 @@ namespace serialization {
       PP_CONDITIONAL_STACK = 62,
 
       /// A table of skipped ranges within the preprocessing record.
-      PPD_SKIPPED_RANGES = 63,
-
-      /// List of package dependent levitation declarations
-      LEVITATION_PACKAGE_DEPENDENT_DECLS = 64
+      PPD_SKIPPED_RANGES = 63
     };
 
     /// Record types used within a source manager block.

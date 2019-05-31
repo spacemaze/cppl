@@ -905,9 +905,6 @@ private:
   /// Enables C++ Levitation mode
   bool LevitationMode = false;
 
-  /// List of levitation package dependent declarations
-  llvm::DenseSet<uint64_t> LevitationPackageDependentDecls;
-
   /// Force to read declarations only. Skip reading function bodies.
   bool ReadDeclarationsOnly = false;
 
@@ -2059,9 +2056,6 @@ public:
   void ReadMismatchingDeleteExpressions(llvm::MapVector<
       FieldDecl *, llvm::SmallVector<std::pair<SourceLocation, bool>, 4>> &
                                             Exprs) override;
-
-  void ReadLevitationPackageDependentDecls(
-      llvm::SmallVectorImpl<clang::NamedDecl *> &PackageDependentDeclarations) override;
 
   void ReadTentativeDefinitions(
                             SmallVectorImpl<VarDecl *> &TentativeDefs) override;
