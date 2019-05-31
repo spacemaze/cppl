@@ -6657,6 +6657,10 @@ static bool splitMergedValStore(StoreInst &SI, const DataLayout &DL,
       DL.getTypeSizeInBits(SplitStoreType))
     return false;
 
+  // Don't split the store if it is volatile.
+  if (SI.isVolatile())
+    return false;
+
   // Match the following patterns:
   // (store (or (zext LValue to i64),
   //            (shl (zext HValue to i64), 32)), HalfValBitSize)
@@ -7221,11 +7225,7 @@ bool CodeGenPrepare::splitBranchCondition(Function &F, bool &ModifiedDT) {
       std::swap(TBB, FBB);
 
     // Replace the old BB with the new BB.
-    for (PHINode &PN : TBB->phis()) {
-      int i;
-      while ((i = PN.getBasicBlockIndex(&BB)) >= 0)
-        PN.setIncomingBlock(i, TmpBB);
-    }
+    TBB->replacePhiUsesWith(&BB, TmpBB);
 
     // Add another incoming edge form the new BB.
     for (PHINode &PN : FBB->phis()) {

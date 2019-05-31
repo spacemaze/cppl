@@ -289,3 +289,21 @@ KW DeclGroupInMemberList {
 
 // A tag decl group in the tag decl's own member list is exercised in
 // defSelfRef above.
+
+#ifdef __cplusplus
+// PRINT-CXX-LABEL: outOfRecordDef
+void outOfRecordDef () {
+
+  // PRINT-CXX-NEXT: struct DeclEnclosing {
+  // PRINT-CXX-NEXT: struct DeclMember;
+  // PRINT-CXX-NEXT: };
+  struct DeclEnclosing {
+    struct DeclMember;
+  };
+
+  // PRINT-CXX-NEXT: struct DeclEnclosing::DeclMember {
+  // PRINT-CXX-NEXT: };
+  struct DeclEnclosing::DeclMember {
+  };
+}
+#endif

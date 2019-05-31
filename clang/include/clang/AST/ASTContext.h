@@ -1441,6 +1441,9 @@ public:
 
   QualType getParenType(QualType NamedType) const;
 
+  QualType getMacroQualifiedType(QualType UnderlyingTy,
+                                 const IdentifierInfo *MacroII) const;
+
   QualType getElaboratedType(ElaboratedTypeKeyword Keyword,
                              NestedNameSpecifier *NNS, QualType NamedType,
                              TagDecl *OwnedTagDecl = nullptr) const;
@@ -1974,6 +1977,7 @@ public:
 
   TemplateName getOverloadedTemplateName(UnresolvedSetIterator Begin,
                                          UnresolvedSetIterator End) const;
+  TemplateName getAssumedTemplateName(DeclarationName Name) const;
 
   TemplateName getQualifiedTemplateName(NestedNameSpecifier *NNS,
                                         bool TemplateKeyword,
