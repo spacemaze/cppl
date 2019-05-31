@@ -327,6 +327,8 @@ public:
   // C++ Levitation Mode
   //
 
+  bool LevitationMode = false;
+
   /// Set of C++ Levitation modules.
   /// Per this mode modules load order is strict among all modules set.
   /// modules order actual during build process only.

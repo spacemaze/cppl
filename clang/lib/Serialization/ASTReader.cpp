@@ -4425,9 +4425,10 @@ ASTReader::ReadASTCore(StringRef FileName,
                                             << FileName << !ErrorStr.empty()
                                             << ErrorStr;
     return Failure;
+
   case ModuleManager::LevitationOutOfIDs:
     Diag(diag::err_levitation_module_out_of_ids);
-
+    return Failure;
   }
 
   assert(M && "Missing module file");

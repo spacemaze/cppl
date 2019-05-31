@@ -215,12 +215,14 @@ ModuleManager::addModule(StringRef FileName, ModuleKind Type,
 
   updateModuleImports(*NewModule, ImportedBy, ImportLoc);
 
-  if (NewModule->isLevitationModule()) {
-    NewModule->LevitationModuleID = LevitationModules.size();
-    LevitationModules.push_back(NewModule.get());
-  } else {
-    if (++LevitationNumNonModules > serialization::LEVITATION_NUM_RESERVED_NON_MODULES)
-      return LevitationOutOfIDs;
+  if (LevitationMode) {
+    if (NewModule->isLevitationModule()) {
+      NewModule->LevitationModuleID = LevitationModules.size();
+      LevitationModules.push_back(NewModule.get());
+    } else {
+      if (++LevitationNumNonModules > serialization::LEVITATION_NUM_RESERVED_NON_MODULES)
+        return LevitationOutOfIDs;
+    }
   }
 
   if (!NewModule->isModule() && !NewModule->isLevitationModule())

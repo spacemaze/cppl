@@ -202,6 +202,7 @@ public:
     OnFail(std::move(onFail))
   {
     LevitationMode = true;
+    ModuleMgr.LevitationMode = true;
 
     if (CompilerInst.getFrontendOpts().LevitationBuildDeclaration)
       ReadDeclarationsOnly = true;
