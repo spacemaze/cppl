@@ -4315,10 +4315,7 @@ ASTReader::ASTReadResult ASTReader::EndRead(
     if (Type == MK_Preamble) {
       SourceMgr.setPreambleFileID(PrimaryModule.OriginalSourceFileID);
     } else if (Type == MK_MainFile) {
-      if (LevitationMode)
-        SourceMgr.setMainFileID(ModuleMgr.rbegin()->OriginalSourceFileID);
-      else
-        SourceMgr.setMainFileID(PrimaryModule.OriginalSourceFileID);
+      SourceMgr.setMainFileID(PrimaryModule.OriginalSourceFileID);
     }
   }
 

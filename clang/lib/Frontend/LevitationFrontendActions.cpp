@@ -173,7 +173,8 @@ namespace clang {
 
 class LevitationModulesReader : public ASTReader {
   StringRef MainFile;
-  DiagnosticsEngine &Diags;
+  int MainFileChainIndex = -1;
+DiagnosticsEngine &Diags;
 
   using OnFailFn = std::function<void(
       DiagnosticsEngine &,
@@ -227,11 +228,7 @@ public:
 
   void readPreamble(StringRef Preamble) {
 
-    auto Res = read(
-        Preamble,
-        serialization::MK_Preamble,
-        /*ReadDeclarationsOnly=*/false
-    );
+    auto Res = read(Preamble, serialization::MK_Preamble);
 
     if (Res != ASTReader::Success)
       OnFail(Diags, Preamble, Res);
@@ -239,11 +236,11 @@ public:
 
   void readDependency(StringRef Dependency) {
 
-    auto Res = read(
-        Dependency,
-        serialization::MK_LevitationDependency,
-        /*ReadDeclarationsOnly=*/true
-    );
+    serialization::ModuleKind Kind = serialization::MK_LevitationDependency;
+
+    ASTReadResult Res = Dependency == MainFile ?
+        readMainFile() :
+        read(Dependency, Kind);
 
     if (Res != ASTReader::Success)
       OnFail(Diags, Dependency, Res);
@@ -256,6 +253,15 @@ private:
   SmallVector<ImportedModule, 16> Loaded;
   ASTReadResult ReadResult;
   serialization::ModuleKind LastReadModuleKind = serialization::MK_MainFile;
+
+  bool mainFileLoaded() {
+    return MainFileChainIndex != -1;
+  }
+
+  ASTReadResult readMainFile() {
+    MainFileChainIndex = ModuleMgr.size();
+    return read(MainFile, serialization::MK_MainFile);
+  }
 
   void close(const OpenedReaderContext &OpenedContext) {
     return endRead(OpenedContext);
@@ -273,13 +279,8 @@ private:
   void endRead(const OpenedReaderContext &OpenedContext) {
 
     // Read main file after all dependencies.
-    if (MainFile.size()) {
-      ReadResult = read(
-          MainFile,
-          serialization::MK_MainFile,
-          /*ReadDeclarationsOnly =*/false
-      );
-    }
+    if (MainFile.size() && !mainFileLoaded())
+      ReadResult = readMainFile();
 
     if (ReadResult == Success) {
       ReadResult = EndRead(
@@ -295,12 +296,15 @@ private:
 
     if (hasErrors())
       OnFail(Diags, MainFile, getStatus());
+    else if (mainFileLoaded()){
+      FileID MainFileID = ModuleMgr[MainFileChainIndex].OriginalSourceFileID;
+      SourceMgr.setMainFileID(MainFileID);
+    }
   }
 
   ASTReadResult read(
       StringRef FileName,
-      serialization::ModuleKind Type,
-      bool DeclarationsOnly
+      serialization::ModuleKind Type
   ) {
     LastReadModuleKind = Type;
 
