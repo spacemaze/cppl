@@ -102,7 +102,7 @@ namespace {
     KEYMSCOMPAT   = 0x800000,
     KEYLEVITATION = 0x1000000,
     KEYALLCXX = KEYCXX | KEYCXX11 | KEYCXX2A,
-    KEYALL = (0xffffff & ~KEYNOMS18 &
+    KEYALL = (0xfffffff & ~KEYNOMS18 &
               ~KEYNOOPENCL) // KEYNOMS18 and KEYNOOPENCL are used to exclude.
   };
 

@@ -1502,6 +1502,7 @@ void DeclContext::removeDecl(Decl *D) {
       StoredDeclsMap *Map = DC->getPrimaryContext()->LookupPtr;
       if (Map) {
         StoredDeclsMap::iterator Pos = Map->find(ND->getDeclName());
+
         // FIXME levitation: If we never looked for particular name we shouldn't have
         // any lookup entries.
         // So I have replaced this:
@@ -1510,8 +1511,12 @@ void DeclContext::removeDecl(Decl *D) {
 
         // Remove the decl only if it is contained.
 
-        if (Pos == Map->end())
-          continue;
+        if (getParentASTContext().getLangOpts().LevitationMode) {
+          if (Pos == Map->end())
+            continue;
+        } else {
+          assert(Pos != Map->end() && "no lookup entry for decl");
+        }
 
         StoredDeclsList::DeclsTy *Vec = Pos->second.getAsVector();
         if ((Vec && is_contained(*Vec, ND)) || Pos->second.getAsDecl() == ND)

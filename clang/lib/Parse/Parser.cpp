@@ -895,7 +895,7 @@ Parser::ParseExternalDeclaration(ParsedAttributesWithRange &attrs,
 
       // Inline package namespaces are not allowed, but we can continue
       // parsing process in order to check the rest of code.
-      if (NextKind == tok::kw_package) {
+      if (getLangOpts().LevitationMode && NextKind == tok::kw_package) {
           Diag(ConsumeToken(), diag::err_package_namespace_cannot_be_inline);
           SourceLocation DeclEnd;
           return ParseDeclaration(DeclaratorContext::FileContext, DeclEnd, attrs);

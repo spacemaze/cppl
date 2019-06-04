@@ -1739,8 +1739,14 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
     SingleDecl = ParseDeclarationStartingWithTemplate(Context, DeclEnd, attrs);
     break;
   case tok::kw_package:
+    // TODO Levitation: replace kw_package with kw_levitation_package
+    if (getLangOpts().LevitationMode) {
       ProhibitAttributes(attrs);
       return ParseLevitationPackageNamespace(Context, DeclEnd);
+    } else {
+      // Process default case (make sure it is same)
+      return ParseSimpleDeclaration(Context, DeclEnd, attrs, true);
+    }
   case tok::kw_inline:
     // Could be the start of an inline namespace. Allowed as an ext in C++03.
     if (getLangOpts().CPlusPlus && NextToken().is(tok::kw_namespace)) {
@@ -4580,7 +4586,6 @@ void Parser::ParseEnumSpecifier(SourceLocation StartLoc, DeclSpec &DS,
 void Parser::ParseEnumBody(SourceLocation StartLoc, Decl *EnumDecl) {
   // Enter the scope of the enum body and start the definition.
   ParseScope EnumScope(this, Scope::DeclScope | Scope::EnumScope);
-
   Actions.ActOnTagStartDefinition(getCurScope(), EnumDecl);
 
   BalancedDelimiterTracker T(*this, tok::l_brace);

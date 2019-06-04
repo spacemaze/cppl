@@ -7927,9 +7927,7 @@ void Sema::ActOnFinishCXXMemberSpecification(
               reinterpret_cast<Decl**>(FieldCollector->getCurFields()),
               FieldCollector->getCurNumFields()), LBrac, RBrac, AttrList);
 
-  auto *R = cast<CXXRecordDecl>(TagDecl);
-
-  CheckCompletedCXXClass(R);
+  CheckCompletedCXXClass(cast<CXXRecordDecl>(TagDecl));
 }
 
 /// AddImplicitlyDeclaredMembersToClass - Adds any implicitly-declared
