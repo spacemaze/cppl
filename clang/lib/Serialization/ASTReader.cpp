@@ -1435,11 +1435,7 @@ bool ASTReader::ReadSLocEntry(int ID) {
 
     SourceLocation IncludeLoc = ReadSourceLocation(*F, Record[1]);
 
-    // FIXME Levitation:
-    // fixed:
-    // - if (IncludeLoc.isInvalid() && F->Kind != MK_MainFile) {
-    // + if (IncludeLoc.isInvalid() && F->isModule()) {
-    if (IncludeLoc.isInvalid() && F->isModule()) {
+    if (IncludeLoc.isInvalid() && F->Kind != MK_MainFile) {
       // This is the module's main file.
       IncludeLoc = getImportLocation(F);
     }
