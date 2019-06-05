@@ -11,6 +11,7 @@ struct FileExtensions {
   static constexpr char DeclarationAST [] = "decl-ast";
   static constexpr char DefinitionAST [] = "def-ast";
   static constexpr char DeclarationInstantiatedAST [] = "ast";
+  static constexpr char DirectDependencies [] = "ldeps";
 };
 
 }
