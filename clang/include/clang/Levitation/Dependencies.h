@@ -25,6 +25,7 @@ namespace levitation {
   typedef SmallVector<StringRef, 16> DependencyComponentsVector;
   typedef SmallString<256> DependencyPath;
 
+  /// Stores information about dependency user
   struct PackageDependencyUse {
       const NamedDecl *DependentNamedDecl;
       SourceRange Location;
@@ -33,12 +34,21 @@ namespace levitation {
 
   class PackageDependencyBuilder;
 
+  /// Describes particular dependency used
+  /// in given package.
   class PackageDependency {
   protected:
+
+    /// Describes places where this dependency is used.
     DependencyUsesVector Uses;
+
+    /// Dependency components. E.g. for global::A::B
+    /// components vector will store {A, B}
     DependencyComponentsVector Components;
 
-    /// If dependency is validated stores path to file
+    /// Stores path to dependency file.
+    /// This value is set during validation process or
+    /// in case of manual dependencies declaration (not implemented yet)
     DependencyPath Path;
 
     PackageDependency() {};
@@ -113,9 +123,10 @@ namespace levitation {
   };
 
   /// Dependencies map.
+  /// Implements indexing of package dependency by its component.
   /// E.g. for 'class C { global::A::D d; };' it will add
   /// dependency "A::D".
-  class DepenciesMap : public llvm::DenseMap<
+  class DependenciesMap : public llvm::DenseMap<
   // FIXME Levitation: this is very unstable definition,
   // Key is a ref to PackageDependency's components SmallVector,
   // after the first internal DenseMap::moveFromOldBuckets call
@@ -130,22 +141,21 @@ namespace levitation {
       void mergeDependency(PackageDependency &&Dep);
   };
 
-  class ValidatedDependenciesMap : public DepenciesMap {
+  /// Almost same as DependenciesMap, but also adds information
+  /// about dependency file whenever it is possible.
+  class ValidatedDependenciesMap : public DependenciesMap {
     bool HasMissingDependencies = false;
   public:
     void setHasMissingDependencies() { HasMissingDependencies = true; }
     bool hasMissingDependencies() { return HasMissingDependencies; }
   };
 
-  struct DependentDeclarationInfo {
-    DependencyComponentsArrRef ComponentsPath;
-    SourceRange Location;
-  };
-
-  struct ValidatedDependencies {
+  /// Describes whole set of dependencies used by
+  /// given package.
+  struct PackageDependencies {
     ValidatedDependenciesMap DeclarationDependencies;
     ValidatedDependenciesMap DefinitionDependencies;
-    StringRef DependentUnitFilePath;
+    StringRef PackageFilePath;
     bool hasMissingDependencies() {
       return DeclarationDependencies.hasMissingDependencies() ||
              DefinitionDependencies.hasMissingDependencies();

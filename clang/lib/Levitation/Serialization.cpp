@@ -161,7 +161,7 @@ namespace levitation {
       HeaderWritten = true;
     }
 
-    void writeAndFinalize(ValidatedDependencies &Dependencies) override {
+    void writeAndFinalize(PackageDependencies &Dependencies) override {
       if (Finalized)
         llvm_unreachable("Can't write dependencies structure twice.");
 
@@ -201,7 +201,7 @@ namespace levitation {
         RECORD(DEPS_STRING_RECORD);
 
         BLOCK(DEPS_DEPENDENCIES_MAIN_BLOCK);
-        RECORD(DEPS_UNIT_FILE_PATH_RECORD);
+        RECORD(DEPS_PACKAGE_FILE_PATH_RECORD);
 
         BLOCK(DEPS_DEFINITION_DEPENDENCIES_BLOCK);
         RECORD(DEPS_DECLARATION_RECORD);
@@ -217,7 +217,7 @@ namespace levitation {
     // TODO Levitation: It should be probably moved into separate source
     //  and combined with DependenciesData class.
     //  I mean all buildXXXX methods and their helpers.
-    DependenciesData buildDependenciesData(ValidatedDependencies &Dependencies) {
+    DependenciesData buildDependenciesData(PackageDependencies &Dependencies) {
       DependenciesData Data;
 
       addDeclarationsData(
@@ -232,8 +232,8 @@ namespace levitation {
           Dependencies.DefinitionDependencies
       );
 
-      Data.DependentUnitFilePathID =
-          Data.Strings.addItem(Dependencies.DependentUnitFilePath);
+      Data.PackageFilePathID =
+          Data.Strings.addItem(Dependencies.PackageFilePath);
       return Data;
     }
 
@@ -275,7 +275,7 @@ namespace levitation {
 
       with (auto MainBlockScope = enterBlock(DEPS_DEPENDENCIES_MAIN_BLOCK_ID)) {
 
-        writeDependentUnitFilePath(Data.DependentUnitFilePathID);
+        writeDependentPackageFilePath(Data.PackageFilePathID);
 
         writeDeclarations(
                 DEPS_DECLARATION_DEPENDENCIES_BLOCK_ID,
@@ -310,9 +310,9 @@ namespace levitation {
       }
     }
 
-    void writeDependentUnitFilePath(DependenciesData::StringIDType PathID) {
+    void writeDependentPackageFilePath(DependenciesData::StringIDType PathID) {
       RecordData::value_type Record[] { PathID };
-      Writer.EmitRecord(DEPS_UNIT_FILE_PATH_RECORD_ID, Record);
+      Writer.EmitRecord(DEPS_PACKAGE_FILE_PATH_RECORD_ID, Record);
     }
 
     void writeDeclaration(

@@ -107,22 +107,22 @@ namespace levitation {
 
     StringsTable Strings;
 
-    StringIDType DependentUnitFilePathID;
+    StringIDType PackageFilePathID;
 
     DeclarationsBlock DeclarationDependencies;
     DeclarationsBlock DefinitionDependencies;
   };
 
-  struct ValidatedDependencies;
+  struct PackageDependencies;
   class DependenciesWriter {
   public:
     virtual ~DependenciesWriter() = default;
-    virtual void writeAndFinalize(ValidatedDependencies &Dependencies) = 0;
+    virtual void writeAndFinalize(PackageDependencies &Dependencies) = 0;
   };
 
   enum DependenciesRecordTypes {
       DEPS_DECLARATION_RECORD_ID = 1,
-      DEPS_UNIT_FILE_PATH_RECORD_ID,
+      DEPS_PACKAGE_FILE_PATH_RECORD_ID,
       DEPS_STRING_RECORD_ID,
   };
 

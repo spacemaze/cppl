@@ -13,7 +13,7 @@
 namespace clang {
 namespace levitation {
 
-void DepenciesMap::mergeDependency(PackageDependency &&Dep) {
+void DependenciesMap::mergeDependency(PackageDependency &&Dep) {
   auto Res = try_emplace(Dep.getComponents(), std::move(Dep));
   if (!Res.second)
     // Note: we use Dep after std::move(Dep) only in case it wasn't really moved

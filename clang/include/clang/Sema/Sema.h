@@ -11153,10 +11153,10 @@ private:
   /// If dependency is met only in function body whith external
   /// linkage, then this is not a declaration dependency. It would be
   /// a definition dependency.
-  levitation::DepenciesMap LevitationDeclarationDependencies;
+  levitation::DependenciesMap LevitationDeclarationDependencies;
 
   /// Set of dependencies definition depends on.
-  levitation::DepenciesMap LevitationDefinitionDependencies;
+  levitation::DependenciesMap LevitationDefinitionDependencies;
 
 // TODO Levitation:
 // Don't forget to initialize in constructor.
@@ -11166,11 +11166,11 @@ public:
 
   void setLevitationPackageDependentDecls(llvm::SmallVectorImpl<NamedDecl*> Decls);
 
-  const levitation::DepenciesMap &getLevitationDeclarationDependencies() {
+  const levitation::DependenciesMap &getLevitationDeclarationDependencies() {
     return LevitationDeclarationDependencies;
   }
 
-  const levitation::DepenciesMap &getLevitationDefinitionDependencies() {
+  const levitation::DependenciesMap &getLevitationDefinitionDependencies() {
     return LevitationDefinitionDependencies;
   }
 

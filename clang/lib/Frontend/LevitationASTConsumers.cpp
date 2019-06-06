@@ -80,7 +80,7 @@ namespace {
         Diag(diag)
     {}
 
-    ValidatedDependenciesMap validate(const DepenciesMap& Dependencies) {
+    ValidatedDependenciesMap validate(const DependenciesMap& Dependencies) {
       ValidatedDependenciesMap ValidatedDependencies;
       for (const auto &Dep : Dependencies) {
         validate(ValidatedDependencies, Dep.second);
@@ -182,7 +182,7 @@ namespace {
           CI.getDiagnostics()
       );
 
-      ValidatedDependencies Dependencies {
+      PackageDependencies Dependencies {
         Validator.validate(SemaObj->getLevitationDeclarationDependencies()),
         Validator.validate(SemaObj->getLevitationDefinitionDependencies()),
         CurrentInputFile
