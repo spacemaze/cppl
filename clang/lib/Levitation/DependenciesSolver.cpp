@@ -225,7 +225,7 @@ public:
           llvm::MemoryBuffer &MemBuf = *Buffer.get();
 
           if (!loadFromBuffer(Solver->error(), Dest, MemBuf, PackagePath)) {
-            // TODO Levitation: Do something with errors loggin and DumpAction
+            // TODO Levitation: Do something with errors logging and DumpAction
             //   it is awful.
             A.setFailed();
             Solver->error()
