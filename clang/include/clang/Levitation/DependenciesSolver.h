@@ -3,6 +3,8 @@
 #ifndef LLVM_CLANG_LEVITATION_DEPENDENCIESSOLVER_H
 #define LLVM_CLANG_LEVITATION_DEPENDENCIESSOLVER_H
 
+#include "clang/Basic/FileManager.h"
+
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -19,21 +21,14 @@ namespace clang {
 
 namespace clang { namespace levitation {
 
-struct PackageDependencies;
-
-using Paths = llvm::SmallVector<llvm::SmallString<256>, 64>;
-
-using ParsedDependenciesVector = Paths;
-using ParsedDependencies = llvm::DenseMap<llvm::StringRef, std::unique_ptr<PackageDependencies>>;
-class DependenciesDAG;
-class SolvedDependenciesInfo;
-using SolvedDependenciesMap = llvm::DenseMap<llvm::StringRef, std::unique_ptr<SolvedDependenciesInfo>>;
-
 class DependenciesSolver {
   llvm::StringRef DirectDepsRoot;
   llvm::StringRef DepsOutput;
   bool Verbose = false;
+  FileManager FileMgr;
 public:
+
+  DependenciesSolver() : FileMgr( { /*Working dir*/ StringRef()} ) {}
 
   void setVerbose(bool Verbose) {
     DependenciesSolver::Verbose = Verbose;
@@ -51,15 +46,9 @@ public:
 
 protected:
   llvm::raw_ostream &verbose();
+  llvm::raw_ostream &error();
 
-  void collectParsedDependencies(ParsedDependenciesVector &Dest);
-
-  void  loadDependencies(
-      ParsedDependencies &Dest,
-      const ParsedDependenciesVector &ParsedDepFiles
-  );
-
-  void writeResult(const SolvedDependenciesMap &SolvedDependencies);
+  friend class DependenciesSolverHelper;
 };
 
 }}

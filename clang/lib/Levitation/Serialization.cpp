@@ -10,7 +10,9 @@
 #include "clang/Levitation/Serialization.h"
 #include "clang/Levitation/WithOperator.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/Bitcode/BitstreamReader.h"
 #include "llvm/Bitcode/BitstreamWriter.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <functional>
@@ -20,6 +22,9 @@ using namespace llvm;
 
 namespace clang {
 namespace levitation {
+
+  // ==========================================================================
+  // Dependencies Bitstream Writer
 
   // TODO Levitation: may be in future introduce LevitationMetadataWriter.
 
@@ -197,11 +202,11 @@ namespace levitation {
 #define BLOCK(X) EmitBlockID(X ## _ID, #X, Writer, Record)
 #define RECORD(X) EmitRecordID(X ## _ID, #X, Writer, Record)
 
-        BLOCK(DEPS_STRINGS_BLOCK);
-        RECORD(DEPS_STRING_RECORD);
-
         BLOCK(DEPS_DEPENDENCIES_MAIN_BLOCK);
         RECORD(DEPS_PACKAGE_FILE_PATH_RECORD);
+
+        BLOCK(DEPS_STRINGS_BLOCK);
+        RECORD(DEPS_STRING_RECORD);
 
         BLOCK(DEPS_DEFINITION_DEPENDENCIES_BLOCK);
         RECORD(DEPS_DECLARATION_RECORD);
@@ -221,24 +226,24 @@ namespace levitation {
       DependenciesData Data;
 
       addDeclarationsData(
-          Data.Strings,
+          *Data.Strings,
           Data.DeclarationDependencies,
           Dependencies.DeclarationDependencies
       );
 
       addDeclarationsData(
-          Data.Strings,
+          *Data.Strings,
           Data.DefinitionDependencies,
           Dependencies.DefinitionDependencies
       );
 
       Data.PackageFilePathID =
-          Data.Strings.addItem(Dependencies.PackageFilePath);
+          Data.Strings->addItem(Dependencies.PackageFilePath);
       return Data;
     }
 
     void addDeclarationsData(
-        DependenciesData::StringsTable &Strings,
+        DependenciesStringsPool &Strings,
         DependenciesData::DeclarationsBlock &StoredDeclarations,
         const ValidatedDependenciesMap &Declarations
     ) {
@@ -255,7 +260,7 @@ namespace levitation {
     }
 
     DependenciesData::Declaration buildDeclarationData(
-        DependenciesData::StringsTable &Strings,
+        DependenciesStringsPool &Strings,
         StringRef FilePath,
         DependencyComponentsArrRef Components,
         SourceRange FirstUse
@@ -271,9 +276,9 @@ namespace levitation {
 
     void write(const DependenciesData &Data) {
 
-      writeStrings(Data.Strings);
-
       with (auto MainBlockScope = enterBlock(DEPS_DEPENDENCIES_MAIN_BLOCK_ID)) {
+
+        writeStrings(*Data.Strings);
 
         writeDependentPackageFilePath(Data.PackageFilePathID);
 
@@ -289,17 +294,18 @@ namespace levitation {
       }
     }
 
-    void writeStrings(const DependenciesData::StringsTable &Data) {
+    void writeStrings(const DependenciesStringsPool &Data) {
 
       with (auto StringBlock = enterBlock(DEPS_STRINGS_BLOCK_ID)) {
 
         unsigned StringsTableAbbrev = AbbrevsBuilder(DEPS_STRING_RECORD_ID, Writer)
+            .addFieldType<uint32_t>()
             .addBlobType()
         .done();
 
         for (const auto &StringItem : Data.items()) {
 
-          RecordData::value_type Record[] = { DEPS_STRING_RECORD_ID };
+          RecordData::value_type Record[] = { DEPS_STRING_RECORD_ID, StringItem.first };
 
           Writer.EmitRecordWithBlob(
               StringsTableAbbrev,
@@ -310,7 +316,7 @@ namespace levitation {
       }
     }
 
-    void writeDependentPackageFilePath(DependenciesData::StringIDType PathID) {
+    void writeDependentPackageFilePath(StringID PathID) {
       RecordData::value_type Record[] { PathID };
       Writer.EmitRecord(DEPS_PACKAGE_FILE_PATH_RECORD_ID, Record);
     }
@@ -349,6 +355,288 @@ namespace levitation {
       llvm::raw_ostream &OS
   ) {
     return llvm::make_unique<DependenciesBitstreamWriter>(OS);
+  }
+
+  // ==========================================================================
+  // Dependencies Bitstream Reader
+
+  class DependenciesBitstreamReader : public DependenciesReader {
+    BitstreamCursor Reader;
+    StringRef ErrorMessage;
+    Optional<llvm::BitstreamBlockInfo> BlockInfo;
+    bool HasFailure = false;
+  public:
+    DependenciesBitstreamReader(const llvm::MemoryBuffer &MemoryBuffer)
+    : Reader(MemoryBuffer) {}
+
+    bool read(DependenciesData &Data) override {
+      if (!readSignature())
+        return false;
+
+      if (!readData(Data))
+        return false;
+
+      return true;
+    }
+
+    StringRef getErrorMessage() const override { return ErrorMessage; }
+
+  protected:
+
+    bool readSignature() {
+      return Reader.canSkipToPos(4) &&
+             Reader.Read(8) == 'L' &&
+             Reader.Read(8) == 'D' &&
+             Reader.Read(8) == 'E' &&
+             Reader.Read(8) == 'P';
+    }
+
+    bool readData(DependenciesData &Data) {
+      if (!readBlockInfo())
+        return false;
+
+      if (enterBlock(DEPS_DEPENDENCIES_MAIN_BLOCK_ID)) {
+        bool EndOfBlock = false;
+        while (!EndOfBlock) {
+          auto Entry = Reader.advance();
+          switch (Entry.Kind) {
+            case BitstreamEntry::Error:
+              return failure("Failed to enter read bitstream.");
+
+            case BitstreamEntry::EndBlock:
+              Reader.ReadBlockEnd();
+              EndOfBlock = true;
+              break;
+            case BitstreamEntry::SubBlock: {
+
+                auto BlockID = (DependenciesBlockIDs)Entry.ID;
+
+                switch (BlockID) {
+                  case DEPS_STRINGS_BLOCK_ID:
+                    if (!readStringsTable(Data))
+                      return false;
+                    break;
+
+                  case DEPS_DEFINITION_DEPENDENCIES_BLOCK_ID:
+                    if (!readDependencies(BlockID, Data.DefinitionDependencies))
+                      return false;
+                    break;
+
+                  case DEPS_DECLARATION_DEPENDENCIES_BLOCK_ID:
+                    if (!readDependencies(BlockID, Data.DeclarationDependencies))
+                      return false;
+                    break;
+
+                  case DEPS_DEPENDENCIES_MAIN_BLOCK_ID:
+                    llvm_unreachable("Recursive main block.");
+                }
+              }
+              break;
+            case BitstreamEntry::Record:
+              if (!readPackageFilePath(Entry.ID, Data))
+                return false;
+              break;
+          }
+        }
+
+        return true;
+      }
+
+      return false;
+    }
+
+    bool readBlockInfo() {
+
+      // Read the top level blocks.
+      if (Reader.AtEndOfStream())
+        return failure("No blocks.");
+
+      while (!Reader.AtEndOfStream()) {
+
+        if (Reader.ReadCode() != llvm::bitc::ENTER_SUBBLOCK)
+          return failure("Expected BlockInfo Subblock, malformed file.");
+
+        std::error_code EC;
+        switch (Reader.ReadSubBlockID()) {
+          case llvm::bitc::BLOCKINFO_BLOCK_ID:
+            if ((BlockInfo = Reader.ReadBlockInfoBlock())) {
+              Reader.setBlockInfo(BlockInfo.getPointer());
+              return true;
+            } else {
+              return failure("Malformed BlockInfo.");
+            }
+          case DEPS_DEPENDENCIES_MAIN_BLOCK_ID:
+            return failure("Blockinfo missed");
+          default:
+            break;
+            // Skip all unknown blocks.
+        }
+      }
+
+      return failure("BlockInfo missed");
+    }
+
+    using RecordTy = SmallVector<uint64_t, 64>;
+
+    bool readStringsTable(DependenciesData &Data) {
+
+      auto recordHandler = [&](const RecordTy &Record, StringRef BlobStr) {
+        auto SID = (StringID) Record[0];
+        Data.Strings->addItem(SID, BlobStr);
+      };
+
+      return readAllRecords(
+          DEPS_STRINGS_BLOCK_ID,
+          DEPS_STRING_RECORD_ID,
+          /*WithBlob=*/true,
+          std::move(recordHandler)
+      );
+    }
+
+    bool readDependencies(
+        DependenciesBlockIDs BlockID,
+        DependenciesData::DeclarationsBlock &Deps
+    ) {
+      auto recordHandler = [&](const RecordTy &Record, StringRef BlobStr) {
+        Deps.emplace_back(DependenciesData::Declaration {
+            /*FilePathID=*/ (StringID) Record[0],
+            /*LocationIDBegin=*/ (DependenciesData::LocationIDType) Record[1],
+            /*LocationIDEnd=*/ (DependenciesData::LocationIDType) Record[2]
+        });
+      };
+
+      return readAllRecords(
+          BlockID,
+          DEPS_DECLARATION_RECORD_ID,
+          /*WithBlob*/false,
+          recordHandler
+      );
+    }
+
+    bool readPackageFilePath(unsigned int AbbrevID, DependenciesData &Data) {
+      RecordTy Record;
+      auto RecordID = Reader.readRecord(AbbrevID, Record, nullptr);
+      Data.PackageFilePathID = (StringID) Record[0];
+
+      return checkRecordType(DEPS_PACKAGE_FILE_PATH_RECORD_ID, RecordID);
+    }
+
+    using OnReadRecordFn = std::function<void(const RecordTy&, StringRef)>;
+
+    bool readAllRecords(
+        DependenciesBlockIDs BlockID,
+        DependenciesRecordTypes RecordID,
+        bool WithBlob,
+        OnReadRecordFn &&OnReadRecord) {
+      RecordTy RecordStorage;
+      StringRef BlobRef;
+
+      if (!Reader.EnterSubBlock(BlockID)) {
+
+        while (readRecord(
+            RecordID, RecordStorage, BlobRef, WithBlob, OnReadRecord
+        )) {
+          // do nothing
+        }
+        return !hasFailure();
+      }
+      return failure("Failed to read records, can't enter subblock");
+    }
+
+    /// Reads record
+    /// \param RecordStorage heap for reacord values
+    /// \param BlobRef blob variable
+    /// \param RecordID record ID, is used to pick up prober abbrev.
+    /// \param WithBlob true if record has blob data.
+    /// \param OnReadRecord record handler.
+    /// \return true, if we can read more,
+    /// false if there was an error, or end of block.
+    bool readRecord(
+        DependenciesRecordTypes RecordID,
+        RecordTy &RecordStorage,
+        StringRef &BlobRef,
+        bool WithBlob,
+        const OnReadRecordFn &OnReadRecord
+    ) {
+      auto Entry = Reader.advanceSkippingSubblocks();
+      switch (Entry.Kind) {
+        case BitstreamEntry::Error:
+          return failure("Failed to read strings");
+        case BitstreamEntry::Record: {
+            RecordStorage.clear();
+
+            StringRef *BlobPtr = WithBlob ? &BlobRef : nullptr;
+
+            unsigned int ObtainedRecordID =
+              Reader.readRecord(Entry.ID, RecordStorage, BlobPtr);
+
+            if (!checkRecordType(RecordID, ObtainedRecordID))
+              return false;
+
+            OnReadRecord(RecordStorage, BlobRef);
+          }
+          return true;
+        case BitstreamEntry::EndBlock:
+          return false;
+        default:
+          return true;
+      }
+    }
+
+    bool checkRecordType(
+        DependenciesRecordTypes RecordID,
+        unsigned int ObtainedID
+    ) {
+      if (ObtainedID != RecordID) {
+        failure("Malformed file. Wrong record type read.");
+        return false;
+      }
+      return true;
+    }
+
+    bool enterBlock(DependenciesBlockIDs ID) {
+      if (hasFailure()) return false;
+
+      while (true) {
+        auto Entry = Reader.advance();
+
+        switch (Entry.Kind) {
+          case BitstreamEntry::Error:
+            return failure("Failed to enter read bitstream.");
+
+          case BitstreamEntry::EndBlock:
+            break;
+          case BitstreamEntry::SubBlock:
+            if (Entry.ID != ID) {
+              if (Reader.SkipBlock())
+                return failure("Failed to skip block.");
+            } else {
+              if (!Reader.EnterSubBlock(Entry.ID))
+                return true;
+              return failure("Failed to enter subblock.");
+            }
+            break;
+          case BitstreamEntry::Record:
+            break;
+        }
+      }
+    }
+
+    bool failure(StringRef Msg) {
+      ErrorMessage = Msg;
+      HasFailure = true;
+      return false;
+    }
+
+    bool hasFailure() const {
+      return HasFailure;
+    }
+  };
+
+  std::unique_ptr<DependenciesReader> CreateBitstreamReader(
+      const llvm::MemoryBuffer &MB
+  ) {
+    return llvm::make_unique<DependenciesBitstreamReader>(MB);
   }
 }
 }

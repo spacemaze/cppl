@@ -6,4 +6,6 @@ target_link_libraries(
     ${LEVITATION_DEPS_TARGET}
     clangLevitation
     clangAST
+    clangBasic
+    clangSerialization
 )

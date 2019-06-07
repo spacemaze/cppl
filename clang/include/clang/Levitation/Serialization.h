@@ -4,9 +4,9 @@
 #define LLVM_CLANG_LEVITATION_SERIALIZATION_H
 
 #include "clang/Basic/SourceLocation.h"
+#include "clang/Levitation/IndexedSet.h"
+#include "clang/Levitation/StringsPool.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Bitcode/BitCodes.h"
 #include <map>
@@ -14,103 +14,54 @@
 
 namespace llvm {
     class raw_ostream;
+    class MemoryBuffer;
 }
 
 namespace clang {
 namespace levitation {
 
-  template <typename IdTy, typename ItemTy, typename ItemRefTy = ItemTy>
-  class IndexedSet {
-
-      // TODO Levitation: so far, I give up and use std::map.
-      typedef typename std::map<ItemTy, IdTy> SetTy;
-      typedef typename SetTy::iterator set_iterator;
-
-      typedef typename llvm::DenseMap<IdTy, ItemTy> IndexTy;
-      typedef typename IndexTy::const_iterator const_iterator;
-
-
-      SetTy Set;
-      IndexTy Index;
-
-      IdTy LastIndex;
-
-      static IdTy getInvalidIndex() {
-        static IdTy Invalid = IdTy();
-        return Invalid;
-      }
-
-  public:
-
-      IndexedSet() : LastIndex(getInvalidIndex()) {}
-
-      llvm::iterator_range<const_iterator> items() const {
-        return llvm::iterator_range<const_iterator>(Index.begin(), Index.end());
-      }
-
-      IdTy addItem(ItemTy&& Item) {
-        auto Res = Set.emplace(std::move(Item), getInvalidIndex());
-
-        if (Res.second)
-          return addIndex(Res.first, Item);
-
-        return Res.first->second;
-      }
-
-      IdTy addItem(const ItemTy& Item) {
-        auto Res = Set.insert({ Item, getInvalidIndex() });
-
-        if (Res.second)
-          return addIndex(Res.first, Item);
-
-        return Res.first->second;
-      }
-
-      const ItemTy* getItem(const IdTy &Id) {
-        const auto Found = Index.find(Id);
-        if (Found != Index.end())
-          return &Found->second;
-
-        return nullptr;
-      }
-
-  private:
-
-      IdTy addIndex(set_iterator &SetIt, const ItemTy &Item) {
-        IdTy NewIndex = LastIndex + 1;
-
-        SetIt->second = NewIndex;
-        Index.insert({ NewIndex, ItemRefTy(Item) });
-
-        LastIndex = NewIndex;
-        return LastIndex;
-      }
-  };
+  using DependenciesStringsPool = StringsPool<256>;
 
   struct DependenciesData {
-
-    /// String identifier type in strings table.
-    typedef uint32_t StringIDType;
-
-    /// Strings table. As strings we store file paths and components.
-    typedef IndexedSet<StringIDType, StringRef> StringsTable;
 
     typedef uint32_t LocationIDType;
 
     struct Declaration {
-      StringIDType FilePathID;
+      StringID FilePathID;
       LocationIDType LocationIDBegin;
       LocationIDType LocationIDEnd;
     };
 
     typedef SmallVector<Declaration, 32> DeclarationsBlock;
 
-    StringsTable Strings;
+    std::unique_ptr<DependenciesStringsPool> Strings;
+    bool OwnStringsPool = true;
 
-    StringIDType PackageFilePathID;
+    StringID PackageFilePathID;
 
     DeclarationsBlock DeclarationDependencies;
     DeclarationsBlock DefinitionDependencies;
+
+    DependenciesData()
+    : Strings(new DependenciesStringsPool),
+      OwnStringsPool(true)
+    {}
+
+    DependenciesData(DependenciesStringsPool *Strings)
+    : Strings(Strings),
+      OwnStringsPool(false)
+    {}
+
+    DependenciesData(DependenciesData &&Src)
+    : Strings(std::move(Src.Strings)),
+      DeclarationDependencies(std::move(Src.DeclarationDependencies)),
+      DefinitionDependencies(std::move(Src.DefinitionDependencies))
+    {}
+
+    ~DependenciesData() {
+      if (!OwnStringsPool)
+        Strings.release();
+    }
   };
 
   struct PackageDependencies;
@@ -120,7 +71,15 @@ namespace levitation {
     virtual void writeAndFinalize(PackageDependencies &Dependencies) = 0;
   };
 
+  class DependenciesReader {
+  public:
+    virtual ~DependenciesReader() = default;
+    virtual bool read(DependenciesData &Dependencies) = 0;
+    virtual StringRef getErrorMessage() const = 0;
+  };
+
   enum DependenciesRecordTypes {
+      DEPS_INVALID_RECORD_ID = 0,
       DEPS_DECLARATION_RECORD_ID = 1,
       DEPS_PACKAGE_FILE_PATH_RECORD_ID,
       DEPS_STRING_RECORD_ID,
@@ -136,6 +95,7 @@ namespace levitation {
   };
 
   std::unique_ptr<DependenciesWriter> CreateBitstreamWriter(llvm::raw_ostream &OS);
+  std::unique_ptr<DependenciesReader> CreateBitstreamReader(const llvm::MemoryBuffer &MemBuf);
 }
 }
 
