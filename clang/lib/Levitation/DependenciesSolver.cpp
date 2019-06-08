@@ -158,6 +158,7 @@ class DependenciesDAG {
     NodeID::Type ID;
     NodeKind Kind;
     PackageInfo* PackageInfo;
+    NodesSet Dependencies;
     NodesSet DependentNodes;
   };
 
@@ -190,12 +191,12 @@ public:
           DAGPtr->Roots.insert(Package.Declaration->ID);
 
         DAGPtr->addDependenciesTo(
-            Package.Declaration->ID,
+            *Package.Declaration,
             PackageDependencies.DeclarationDependencies
         );
 
         DAGPtr->addDependenciesTo(
-            Package.Definition->ID,
+            *Package.Definition,
             PackageDependencies.DefinitionDependencies
         );
       }
@@ -238,6 +239,15 @@ public:
           }
         }
 
+        if (Node.Dependencies.size()) {
+          out << "    Dependencies:\n";
+          for (auto DependencyID : Node.Dependencies) {
+            out << "        ";
+            dump(out, DependencyID);
+            out << "\n";
+          }
+        }
+
         out << "\n";
 
         NewWorklist.insert(Node.DependentNodes.begin(), Node.DependentNodes.end());
@@ -262,15 +272,18 @@ public:
 protected:
 
   void addDependenciesTo(
-      NodeID::Type DependentNodeID,
+      Node &DependentNode,
       const DependenciesData::DeclarationsBlock &Dependencies
   ) {
+    auto DependentNodeID = DependentNode.ID;
+
     for (auto &Dep : Dependencies) {
       Node &DeclDependencyNode = getOrCreateNode(
           NodeKind::Declaration,
           Dep.FilePathID
       );
 
+      DependentNode.Dependencies.insert(DeclDependencyNode.ID);
       DeclDependencyNode.DependentNodes.insert(DependentNodeID);
     }
   }
@@ -292,6 +305,7 @@ protected:
     Node &DefNode = getOrCreateNode(NodeKind::Definition, PackagePathID);
 
     DeclNode.DependentNodes.insert(DefNode.ID);
+    DefNode.Dependencies.insert(DeclNode.ID);
 
     DeclNode.PackageInfo = &Package;
     DefNode.PackageInfo = &Package;
