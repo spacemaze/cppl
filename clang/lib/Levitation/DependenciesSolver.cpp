@@ -9,6 +9,7 @@
 #include "clang/Levitation/StringsPool.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/FileSystem.h"
@@ -45,6 +46,8 @@ public:
 
 } // end of anonymous namespace
 
+//=============================================================================
+// Deserialized data object
 
 class ParsedDependencies {
   DependenciesStringsPool Strings;
@@ -96,20 +99,225 @@ public:
 
   DependenciesMap::const_iterator begin() const { return Map.begin(); }
   DependenciesMap::const_iterator end() const { return Map.end(); }
+
+  const DependenciesStringsPool &getStringsPool() const {
+    return Strings;
+  }
 };
 
+//=============================================================================
+// Dependencies DAG
+
 class DependenciesDAG {
+
+  struct Node;
+
+  struct PackageInfo {
+    StringID PackagePath;
+    Node *Declaration;
+    Node *Definition;
+  };
+
+  enum class NodeKind {
+      Declaration,
+      Definition
+  };
+
+  struct NodeID {
+      using Type = uint64_t;
+
+      static Type get(NodeKind Kind, StringID PathID) {
+
+        const int NodeKindBits = 1;
+
+        uint64_t PathIDWithoutHighestBits = (((uint64_t)~0) >> NodeKindBits) & PathID;
+
+        return ((uint64_t)Kind << (64 - NodeKindBits) ) |
+               PathIDWithoutHighestBits;
+      }
+
+      static std::pair<NodeKind, StringID> getKindAndPathID(Type ID) {
+        const int NodeKindBits = 1;
+
+        auto Kind = (NodeKind)(ID >> (64 - NodeKindBits));
+
+        StringID PathIDWithoutHighestBits = (((uint64_t)~0) >> NodeKindBits) & ID;
+
+        return { Kind, PathIDWithoutHighestBits };
+      }
+  };
+
+  using NodesMap = DenseMap<NodeID::Type, std::unique_ptr<Node>>;
+  using NodesSet = DenseSet<NodeID::Type>;
+  using PackagesMap = DenseMap<StringID, std::unique_ptr<PackageInfo>>;
+
+  struct Node {
+    Node(NodeID::Type id, NodeKind kind)
+    : ID(id), Kind(kind), PackageInfo(nullptr)
+    {}
+    NodeID::Type ID;
+    NodeKind Kind;
+    PackageInfo* PackageInfo;
+    NodesSet DependentNodes;
+  };
+
+  /// Nodes whithout dependencies.
+  NodesSet Roots;
+
+  NodesMap AllNodes;
+  PackagesMap PackageInfos;
+
 public:
+
   static std::unique_ptr<DependenciesDAG> build(
       ParsedDependencies &ParsedDeps,
       llvm::raw_ostream &out
   ) {
+    auto DAGPtr = llvm::make_unique<DependenciesDAG>();
+
     with (auto A = DumpAction(out, "Building dependencies DAG")) {
+
+      for (auto &PackageDeps : ParsedDeps) {
+
+        auto PackagePathID = PackageDeps.first;
+        DependenciesData &PackageDependencies = *PackageDeps.second;
+
+        PackageInfo &Package = DAGPtr->createPackageInfo(PackagePathID);
+
+        // If package declaration has no dependencies we add it into the Roots
+        // collection.
+        if (PackageDependencies.DeclarationDependencies.empty())
+          DAGPtr->Roots.insert(Package.Declaration->ID);
+
+        DAGPtr->addDependenciesTo(
+            Package.Declaration->ID,
+            PackageDependencies.DeclarationDependencies
+        );
+
+        DAGPtr->addDependenciesTo(
+            Package.Definition->ID,
+            PackageDependencies.DefinitionDependencies
+        );
+      }
     }
 
-    return nullptr;
+    return DAGPtr;
+  }
+
+  // Do BFS graph walk and dump each node
+  void dump(
+      llvm::raw_ostream &out, const DependenciesStringsPool &Strings
+  ) {
+    NodesSet Worklist = Roots;
+
+    NodesSet VisitedNodes;
+    NodesSet NewWorklist;
+
+    while (Worklist.size()) {
+      NewWorklist.clear();
+      for (auto NodeID : Worklist) {
+        auto &Node = *AllNodes[NodeID];
+
+        if (!VisitedNodes.insert(NodeID).second)
+          continue;
+
+        out
+        << "Node[";
+        dump(out, NodeID);
+        out << "]\n"
+        << "    Path: " << *Strings.getItem(Node.PackageInfo->PackagePath) << "\n"
+        << "    Kind: "
+        << (Node.Kind == NodeKind::Declaration ? "Declaration" : "Definition") << "\n";
+
+        if (Node.DependentNodes.size()) {
+          out << "    Is used by:\n";
+          for (auto DependentNodeID : Node.DependentNodes) {
+            out << "        ";
+            dump(out, DependentNodeID);
+            out << "\n";
+          }
+        }
+
+        out << "\n";
+
+        NewWorklist.insert(Node.DependentNodes.begin(), Node.DependentNodes.end());
+      }
+      Worklist.swap(NewWorklist);
+    }
+  }
+
+  void dump(llvm::raw_ostream &out, NodeID::Type NodeID) {
+    NodeKind Kind;
+    StringID PathID;
+    std::tie(Kind, PathID) = NodeID::getKindAndPathID(NodeID);
+
+    out
+    << PathID << ":"
+    << (Kind == NodeKind::Declaration ? "DECL" : "DEF");
+  }
+
+  const NodesMap &allNodes() const { return AllNodes; }
+  const NodesSet &roots() const { return Roots; }
+
+protected:
+
+  void addDependenciesTo(
+      NodeID::Type DependentNodeID,
+      const DependenciesData::DeclarationsBlock &Dependencies
+  ) {
+    for (auto &Dep : Dependencies) {
+      Node &DeclDependencyNode = getOrCreateNode(
+          NodeKind::Declaration,
+          Dep.FilePathID
+      );
+
+      DeclDependencyNode.DependentNodes.insert(DependentNodeID);
+    }
+  }
+
+  PackageInfo &createPackageInfo(StringID PackagePathID) {
+
+    auto PackageRes = PackageInfos.insert({
+      PackagePathID, llvm::make_unique<PackageInfo>()
+    });
+
+    PackageInfo &Package = *PackageRes.first->second;
+
+    assert(
+        PackageRes.second &&
+        "Only one package can be created for particular PackagePathID"
+    );
+
+    Node &DeclNode = getOrCreateNode(NodeKind::Declaration, PackagePathID);
+    Node &DefNode = getOrCreateNode(NodeKind::Definition, PackagePathID);
+
+    DeclNode.DependentNodes.insert(DefNode.ID);
+
+    DeclNode.PackageInfo = &Package;
+    DefNode.PackageInfo = &Package;
+
+    Package.PackagePath = PackagePathID;
+    Package.Declaration = &DeclNode;
+    Package.Definition = &DefNode;
+
+    return Package;
+  }
+
+  Node &getOrCreateNode(
+      NodeKind Kind, StringID PackagePathID
+  ) {
+    auto ID = NodeID::get(Kind, PackagePathID);
+    auto InsertionRes = AllNodes.insert({ ID, nullptr });
+
+    if (InsertionRes.second)
+      InsertionRes.first->second.reset(new Node(ID, Kind));
+
+    return *InsertionRes.first->second;
   }
 };
+
+//=============================================================================
+// Dependencies solving
 
 class SolvedDependenciesInfo {
 public:
@@ -308,6 +516,7 @@ void DependenciesSolver::solve() {
   Helper.dump(parsedDependencies);
 
   auto DDAG = DependenciesDAG::build(parsedDependencies, verbose());
+  DDAG->dump(verbose(), parsedDependencies.getStringsPool());
 
   auto SolvedDependencies = buildSolvedDependencies(*DDAG, verbose());
 
