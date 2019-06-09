@@ -180,6 +180,8 @@ namespace {
 }
 
 static const int RES_WRONG_ARGUMENTS = 1;
+static const int RES_FAILED_TO_SOLVE = 2;
+
 static const int RES_SUCCESS = 0;
 
 int main(int argc, char **argv) {
@@ -214,7 +216,8 @@ int main(int argc, char **argv) {
     .parse<ArgsSeparator::Equal>()
   ) {
 
-    Solver.solve();
+    if (!Solver.solve())
+      return RES_FAILED_TO_SOLVE;
 
     return RES_SUCCESS;
   }

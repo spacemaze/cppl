@@ -195,6 +195,8 @@ private:
   NodesMap AllNodes;
   PackagesMap PackageInfos;
 
+  bool Invalid = false;
+
 public:
 
   static std::unique_ptr<DependenciesDAG> build(
@@ -228,6 +230,10 @@ public:
         );
       }
 
+      if (!DAGPtr->AllNodes.empty() && DAGPtr->Roots.empty()) {
+        DAGPtr->Invalid = true;
+      }
+
       // Scan for declaration terminal nodes.
       DAGPtr->collectDeclarationTerminals();
     }
@@ -238,12 +244,14 @@ public:
   // TODO Levitation: That looks pretty much like A* walk.
   //
   void bsfWalkSkipVisited(std::function<void(const Node &)> OnNode) const {
-    bsfWalk(true, OnNode);
+    bsfWalk(true, [&] (const Node &N) { OnNode(N); return true; });
   }
 
-  void bsfWalk(std::function<void(const Node &)> OnNode) const {
-    bsfWalk(false, OnNode);
+  bool bsfWalk(std::function<bool(const Node &)> OnNode) const {
+    return bsfWalk(false, OnNode);
   }
+
+  bool isInvalid() const { return Invalid; }
 
   // Do BFS graph walk and dump each node
   void dump(
@@ -251,7 +259,7 @@ public:
   ) const {
 
     if (Roots.empty()) {
-      out << "(empty)";
+      out << "(empty)\n\n";
       return;
     }
 
@@ -313,7 +321,22 @@ public:
     }
   }
 
-  void dumpNodeID(llvm::raw_ostream &out, NodeID::Type NodeID) const {
+  void dumpNodeShort(
+      llvm::raw_ostream &out,
+      NodeID::Type NodeID,
+      const DependenciesStringsPool &Strings
+  ) const {
+
+    const Node &Node = getNode(NodeID);
+
+    out
+    << "Node[";
+    dumpNodeID(out, NodeID);
+    out << "]: " << *Strings.getItem(Node.PackageInfo->PackagePath);
+  }
+
+
+  static void dumpNodeID(llvm::raw_ostream &out, NodeID::Type NodeID) {
     NodeKind Kind;
     StringID PathID;
     std::tie(Kind, PathID) = NodeID::getKindAndPathID(NodeID);
@@ -338,9 +361,9 @@ public:
 
 protected:
 
-  void bsfWalk(
+  bool bsfWalk(
       bool SkipVisited,
-      std::function<void(const Node&)> OnNode
+      std::function<bool(const Node&)> OnNode
   ) const {
     NodesSet Worklist = Roots;
 
@@ -356,12 +379,14 @@ protected:
 
         const auto &Node = getNode(NID);
 
-        OnNode(Node);
+        if (!OnNode(Node))
+          return false;
 
         NewWorklist.insert(Node.DependentNodes.begin(), Node.DependentNodes.end());
       }
       Worklist.swap(NewWorklist);
     }
+    return true;
   }
 
   void addDependenciesTo(
@@ -464,50 +489,90 @@ class SolvedDependenciesInfo {
 
   using FullDependenciesMap =
       DenseMap<NodeID::Type, std::unique_ptr<FullDependencies>>;
-
+public:
   using FullDependenciesList = SmallVector<DependencyWithDistance, 16>;
 
   using FullDependenciesSortedMap =
       DenseMap<NodeID::Type, std::unique_ptr<FullDependenciesList>>;
 
+private:
   const DependenciesDAG &DDAG;
   FullDependenciesMap FullDepsMap;
   FullDependenciesSortedMap FullDepsSortedMap;
+
+  bool Valid = true;
+  StringRef ErrorMessage;
 
   SolvedDependenciesInfo(const DependenciesDAG &DDAG) : DDAG(DDAG) {}
 
 public:
 
+  using OnDiagCyclesFoundFn = std::function<void(
+      const FullDependenciesList &, NodeID::Type
+  )>;
 
   static SolvedDependenciesInfo build(
       const DependenciesDAG &DDAG,
-      const DependenciesStringsPool &Strings,
-      llvm::raw_ostream &errs
+      OnDiagCyclesFoundFn OnDiagCyclesFound
   ) {
 
     SolvedDependenciesInfo SolvedInfo(DDAG);
 
     FullDependencies EmptyList;
 
-    DDAG.bsfWalk([&] (const Node &N) {
-      NodeID::Type NID = N.ID;
+    // TODO Levitation: if after BFS walk we have unvisited nodes,
+    //   such unvisited nodes belong to isolated cycle islands,
+    //   check those nodes and diagnose cycles.
+    DependenciesDAG::NodesSet Unvisited;
+    for (auto &NodeIt : DDAG.allNodes()) {
+      Unvisited.insert(NodeIt.first);
+    }
 
-      const auto &CurrentDependencies = N.Dependencies.size() ?
-          SolvedInfo.getDependencies(NID) :
-          EmptyList;
+    bool Successfull =
+      DDAG.bsfWalk([&] (const Node &N) {
+        NodeID::Type NID = N.ID;
 
-      for (auto DependentNodeID : N.DependentNodes) {
-        auto &NextDependencies =
-            SolvedInfo.getOrCreateDependencies(DependentNodeID);
+        const auto &CurrentDependencies = N.Dependencies.size() ?
+            SolvedInfo.getDependencies(NID) :
+            EmptyList;
 
-        SolvedInfo.merge(NextDependencies, CurrentDependencies, NID);
-      }
-    });
+        for (auto DependentNodeID : N.DependentNodes) {
+
+          auto &NextDependencies =
+              SolvedInfo.getOrCreateDependencies(DependentNodeID);
+
+          SolvedInfo.merge(NextDependencies, CurrentDependencies, NID);
+
+          // Diagnose cycles.
+          if (NextDependencies.count(DependentNodeID)) {
+            FullDependenciesList DepsList;
+            sortNodeDependencies(DepsList, NextDependencies);
+            OnDiagCyclesFound(DepsList, DependentNodeID);
+            return false;
+          }
+        }
+
+        Unvisited.erase(NID);
+        return true;
+      });
+
+    if (!Successfull) {
+      SolvedInfo.setFailure("Found cycles.");
+      return SolvedInfo;
+    }
+
+    if (Unvisited.size()) {
+      SolvedInfo.setFailure("Found isolated cycles.");
+      return SolvedInfo;
+    }
 
     SolvedInfo.sortAllDependencies();
 
     return SolvedInfo;
   }
+
+  bool isValid() const { return Valid; }
+  StringRef getErrorMessage() const { return ErrorMessage; }
 
   const FullDependencies &getDependencies(NodeID::Type NID) const {
     auto Found = FullDepsMap.find(NID);
@@ -574,6 +639,28 @@ public:
     });
   }
 
+  static void dumpDependencies(
+      llvm::raw_ostream &out,
+      const DependenciesDAG &DGraph,
+      const DependenciesStringsPool &Strings,
+      const FullDependenciesList &Deps
+  ) {
+    if (Deps.empty()) {
+      out << "(empty chain)";
+      return;
+    }
+
+    size_t NumNodes = Deps.size();
+
+    DGraph.dumpNodeShort(out, Deps[NumNodes-1].NodeID, Strings);
+
+    for (size_t i = 1; i != NumNodes; ++i) {
+      out << "\ndepends on: ";
+      DGraph.dumpNodeShort(out, Deps[NumNodes-1-i].NodeID, Strings);
+    }
+    out << "\n\n";
+  }
+
 protected:
 
   FullDependencies &getOrCreateDependencies(NodeID::Type NID) {
@@ -629,7 +716,7 @@ protected:
     }
   }
 
-  void sortNodeDependencies(
+  static void sortNodeDependencies(
       FullDependenciesList &Dest, const FullDependencies &Src
   ) {
     for (const auto &DepWithDistIt : Src) {
@@ -644,6 +731,11 @@ protected:
             return L.Range > R.Range;
         }
     );
+  }
+
+  void setFailure(StringRef errorMessage) {
+    Valid = false;
+    ErrorMessage = errorMessage;
   }
 };
 
@@ -761,29 +853,30 @@ public:
     }
   }
 
-  void dump(const ParsedDependencies &ParsedDependencies) {
+  static void dump(llvm::raw_ostream &out, const ParsedDependencies &ParsedDependencies) {
     for (auto &PackageDependencies : ParsedDependencies) {
       DependenciesData &Data = *PackageDependencies.second;
       auto &Strings = *Data.Strings;
-      Solver->verbose()
+      out
       << "Package: " << *Strings.getItem(Data.PackageFilePathID) << "\n";
 
       if (
         Data.DeclarationDependencies.empty() &&
         Data.DefinitionDependencies.empty()
       ) {
-        Solver->verbose()
+        out
         << "    no dependencies.\n";
       } else {
-        dump(4, "Declaration depends on:", Strings, Data.DeclarationDependencies);
-        dump(4, "Definition depends on:", Strings, Data.DefinitionDependencies);
+        dump(out, 4, "Declaration depends on:", Strings, Data.DeclarationDependencies);
+        dump(out, 4, "Definition depends on:", Strings, Data.DefinitionDependencies);
       }
 
-      Solver->verbose() << "\n";
+      out << "\n";
     }
   }
 
-  void dump(
+  static void dump(
+      llvm::raw_ostream &out,
       unsigned Indent,
       StringRef Title,
       DependenciesStringsPool &Strings,
@@ -792,9 +885,9 @@ public:
     if (Deps.empty())
       return;
 
-    Solver->verbose().indent(Indent) << Title << "\n";
+    out.indent(Indent) << Title << "\n";
     for (auto &Dep : Deps) {
-        Solver->verbose().indent(Indent + 4)
+        out.indent(Indent + 4)
         << *Strings.getItem(Dep.FilePathID) << "\n";
     }
   }
@@ -809,7 +902,7 @@ public:
 
 };
 
-void DependenciesSolver::solve() {
+bool DependenciesSolver::solve() {
   verbose()
   << "Running Dependencies Solver\n"
   << "Root: " << DirectDepsRoot << "\n"
@@ -826,28 +919,63 @@ void DependenciesSolver::solve() {
 
   ParsedDependencies parsedDependencies;
   Helper.loadDependencies(parsedDependencies, ParsedDepFiles);
+  const DependenciesStringsPool &Strings = parsedDependencies.getStringsPool();
 
   verbose()
   << "Loaded dependencies:\n";
-  Helper.dump(parsedDependencies);
+  Helper.dump(verbose(), parsedDependencies);
 
   auto DDAG = DependenciesDAG::build(parsedDependencies, verbose());
+  if (DDAG->isInvalid()) {
+    error() << "Failed to solve dependencies. Unable to find root nodes.\n";
+    if (!Verbose) {
+      error()
+      << "Loaded dependencies:\n";
+      Helper.dump(error(), parsedDependencies);
+    }
+    return false;
+  }
 
   verbose()
   << "Dependencies DAG:\n";
   DDAG->dump(verbose(), parsedDependencies.getStringsPool());
 
+  auto OnCyclesFound = [&] (
+      const SolvedDependenciesInfo::FullDependenciesList &Deps,
+      DependenciesDAG::NodeID::Type NID
+  ) {
+    error()
+    << "Can't solve dependencies. Found cycle.\n"
+    << "Node '";
+    DDAG->dumpNodeShort(error(), NID, Strings);
+    error() << "' is about to be added second time into chain:\n";
+    SolvedDependenciesInfo::dumpDependencies(
+        error(),
+        *DDAG,
+        Strings,
+        Deps
+    );
+    error() << "\n";
+  };
+
+  verbose() << "Solving dependencies...\n";
+
   auto SolvedInfo = SolvedDependenciesInfo::build(
-      *DDAG,
-      parsedDependencies.getStringsPool(),
-      error()
+      *DDAG, OnCyclesFound
   );
+
+  if (!SolvedInfo.isValid()) {
+    error() << "Failed to solve: " << SolvedInfo.getErrorMessage() << "\n";
+    return false;
+  }
 
   verbose()
   << "Dependencies solved info:\n";
   SolvedInfo.dump(verbose(), parsedDependencies.getStringsPool());
 
   Helper.writeResult(SolvedInfo);
+
+  return true;
 }
 
 llvm::raw_ostream &DependenciesSolver::verbose() {

@@ -42,7 +42,7 @@ public:
     DependenciesSolver::DepsOutput = DepsOutput;
   }
 
-  void solve();
+  bool solve();
 
 protected:
   llvm::raw_ostream &verbose();
