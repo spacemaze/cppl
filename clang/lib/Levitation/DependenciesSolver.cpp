@@ -13,7 +13,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/FileSystem.h"
-
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
@@ -474,7 +474,7 @@ protected:
 //=============================================================================
 // Dependencies solving
 
-class SolvedDependenciesInfo {
+class SolvedDependenciesInfo : public Failable {
 
   using NodeID = DependenciesDAG::NodeID;
   using Node = DependenciesDAG::Node;
@@ -499,9 +499,6 @@ private:
   const DependenciesDAG &DDAG;
   FullDependenciesMap FullDepsMap;
   FullDependenciesSortedMap FullDepsSortedMap;
-
-  bool Valid = true;
-  StringRef ErrorMessage;
 
   SolvedDependenciesInfo(const DependenciesDAG &DDAG) : DDAG(DDAG) {}
 
@@ -566,13 +563,19 @@ public:
       return SolvedInfo;
     }
 
+    // Put empty list for roots
+    // Not sure we need it, but it will force dep-solver to
+    // create empty dependency files.
+    // And thus project build system will think everything is good.
+    // For absence of dependency files looks like a trouble case.
+    for (auto RootID : DDAG.roots()) {
+      SolvedInfo.getOrCreateDependencies(RootID);
+    }
+
     SolvedInfo.sortAllDependencies();
 
     return SolvedInfo;
   }
-
-  bool isValid() const { return Valid; }
-  StringRef getErrorMessage() const { return ErrorMessage; }
 
   const FullDependencies &getDependencies(NodeID::Type NID) const {
     auto Found = FullDepsMap.find(NID);
@@ -582,6 +585,14 @@ public:
     );
 
     return *Found->second;
+  }
+
+  const DependenciesDAG &getDependenciesGraph() const {
+    return DDAG;
+  }
+
+  const FullDependenciesSortedMap &getDependenciesMap() const {
+    return FullDepsSortedMap;
   }
 
   const FullDependenciesList &getDependenciesList(NodeID::Type NID) const {
@@ -732,11 +743,6 @@ protected:
         }
     );
   }
-
-  void setFailure(StringRef errorMessage) {
-    Valid = false;
-    ErrorMessage = errorMessage;
-  }
 };
 
 using SolvedDependenciesMap = llvm::DenseMap<llvm::StringRef, std::unique_ptr<SolvedDependenciesInfo>>;
@@ -745,6 +751,8 @@ using Paths = llvm::SmallVector<llvm::SmallString<256>, 64>;
 using ParsedDependenciesVector = Paths;
 
 class DependenciesSolverHelper {
+  using PathString = SmallString<256>;
+  using DependenciesPaths = SmallVector<PathString, 16>;
   DependenciesSolver *Solver;
 public:
   DependenciesSolverHelper(DependenciesSolver *solver) : Solver(solver) {}
@@ -790,7 +798,7 @@ public:
       SubDirs.push_back(Solver->DirectDepsRoot);
 
       std::string parsedDepsFileExtension = ".";
-      parsedDepsFileExtension += FileExtensions::DirectDependencies;
+      parsedDepsFileExtension += FileExtensions::ParsedDependencies;
 
       Paths NewSubDirs;
       while (SubDirs.size()) {
@@ -892,14 +900,175 @@ public:
     }
   }
 
-  void writeResult(
+  bool writeResult(
+      const DependenciesStringsPool &Strings,
       const SolvedDependenciesInfo &SolvedDependencies
   ) {
-    with (auto A = DumpAction(Solver->verbose(), "Generating dependency files")) {
+    const DependenciesDAG &DGraph = SolvedDependencies.getDependenciesGraph();
+    for (auto &NodeIt : SolvedDependencies.getDependenciesMap()) {
+      auto NID = NodeIt.first;
 
+      const auto &Node = DGraph.getNode(NID);
+
+      StringRef ParentDir = Solver->DirectDepsRoot;
+
+      DependenciesPaths DirectDependencies = buildDirectDependencies(
+          ParentDir, Strings, DGraph, Node.Dependencies
+      );
+
+      DependenciesPaths FullDependencies = buildFullDependencies(
+          ParentDir, Strings, DGraph, *NodeIt.second
+      );
+
+      auto DependentFilePath = getNodeFilePath(
+          ParentDir, Strings, Node
+      );
+
+      if (!writeDependenciesFile(
+          *Solver,
+          FileExtensions::DirectDependencies,
+          DependentFilePath,
+          DirectDependencies
+      )) {
+        return false;
+      }
+
+      if (!writeDependenciesFile(
+          *Solver,
+          FileExtensions::FullDependencies,
+          DependentFilePath,
+          FullDependencies
+      )) {
+        return false;
+      }
     }
+
+    return true;
   }
 
+  PathString getNodeFilePath(
+      const StringRef ParentDir,
+      const DependenciesStringsPool &Strings,
+      const DependenciesDAG::Node &Node
+  ) {
+    PathString SourcePath = *Strings.getItem(Node.PackageInfo->PackagePath);
+
+    StringRef NewExt = Node.Kind == DependenciesDAG::NodeKind::Declaration ?
+        FileExtensions::DeclarationAST :
+        FileExtensions::Object;
+
+    updateFilePath(SourcePath, ParentDir, NewExt);
+
+    return SourcePath;
+  }
+
+  void updateFilePath(
+      PathString &SourcePath,
+      const StringRef ParentDir,
+      StringRef NewExt
+  ) {
+    if (SourcePath.startswith("./"))
+      SourcePath = SourcePath.substr(2);
+
+    llvm::sys::path::replace_extension(SourcePath, NewExt);
+    llvm::sys::fs::make_absolute(ParentDir, SourcePath);
+
+    if (SourcePath.startswith("./"))
+      SourcePath = SourcePath.substr(2);
+
+    llvm::sys::fs::make_absolute(SourcePath);
+  }
+
+  DependenciesPaths buildDirectDependencies(
+    StringRef DepsRoot,
+    const DependenciesStringsPool &Strings,
+    const DependenciesDAG &DGraph,
+    const DependenciesDAG::NodesSet &Dependencies
+  ) {
+    DependenciesPaths Paths;
+    for (auto NID : Dependencies) {
+      auto Kind = DependenciesDAG::NodeID::getKind(NID);
+
+      assert(
+          Kind == DependenciesDAG::NodeKind::Declaration &&
+          "Only declaration nodes are allowed to be dependencies"
+      );
+
+      auto NodeFilePath = getNodeFilePath(
+          DepsRoot, Strings, DGraph.getNode(NID)
+      );
+      Paths.push_back(std::move(NodeFilePath));
+    }
+
+    return Paths;
+  }
+
+  DependenciesPaths buildFullDependencies(
+    StringRef DepsRoot,
+    const DependenciesStringsPool &Strings,
+    const DependenciesDAG &DGraph,
+    const SolvedDependenciesInfo::FullDependenciesList &Dependencies
+  ) {
+    DependenciesPaths Paths;
+    for (auto Dep : Dependencies) {
+
+      auto &N = DGraph.getNode(Dep.NodeID);
+
+      PathString SourcePath = *Strings.getItem(N.PackageInfo->PackagePath);
+      PathString ParsedASTPath = SourcePath;
+
+      assert(
+          N.Kind == DependenciesDAG::NodeKind::Declaration &&
+          "Only declaration nodes are allowed to be dependencies"
+      );
+
+      // Declaration AST is instantiated from parsed AST,
+      // and thus latter depends on former.
+
+      updateFilePath(ParsedASTPath, DepsRoot, FileExtensions::ParsedAST);
+      Paths.push_back(std::move(ParsedASTPath));
+
+      updateFilePath(SourcePath, DepsRoot, FileExtensions::DeclarationAST);
+      Paths.push_back(std::move(SourcePath));
+    }
+
+    return Paths;
+  }
+
+  bool writeDependenciesFile(
+      DependenciesSolver &Solver,
+      StringRef Extension,
+      StringRef DependentFilePath,
+      const DependenciesPaths &Dependencies
+  ) {
+    auto DependenciesFile = (DependentFilePath + "." + Extension).str();
+
+    Solver.verbose()
+    << "Writing '" << DependenciesFile << "'...\n";
+
+    File F(DependenciesFile);
+
+    if (F.hasErrors()) {
+      StringRef Error = "failed to write file '" + DependenciesFile + "'";
+      Solver.setFailure(Error);
+      return false;
+    }
+
+    with (auto Opened = F.open()) {
+      auto &out = Opened.getOutputStream();
+
+      for (auto D : Dependencies)
+        out << D << "\n";
+    }
+
+    if (F.hasErrors()) {
+      StringRef Error = "failed to complete file '" + DependenciesFile + "'";
+      Solver.setFailure(Error);
+      return false;
+    }
+
+    return true;
+  }
 };
 
 bool DependenciesSolver::solve() {
@@ -915,7 +1084,7 @@ bool DependenciesSolver::solve() {
 
   verbose()
   << "Found " << ParsedDepFiles.size()
-  << " '." << FileExtensions::DirectDependencies << "' files.\n\n";
+  << " '." << FileExtensions::ParsedDependencies << "' files.\n\n";
 
   ParsedDependencies parsedDependencies;
   Helper.loadDependencies(parsedDependencies, ParsedDepFiles);
@@ -979,7 +1148,19 @@ bool DependenciesSolver::solve() {
   << "Dependencies solved info:\n";
   SolvedInfo.dump(verbose(), parsedDependencies.getStringsPool());
 
-  Helper.writeResult(SolvedInfo);
+  verbose()
+  << "Writing dependencies...\n";
+
+  if (!Helper.writeResult(Strings, SolvedInfo)) {
+    error()
+    << "failed to write solved depenendices.\n";
+    error()
+    << getErrorMessage() << "\n";
+    return false;
+  }
+
+  verbose()
+  << "\nComplete!\n";
 
   return true;
 }

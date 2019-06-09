@@ -5,6 +5,8 @@
 
 #include "clang/Basic/FileManager.h"
 
+#include "clang/Levitation/Failable.h"
+
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -21,7 +23,7 @@ namespace clang {
 
 namespace clang { namespace levitation {
 
-class DependenciesSolver {
+class DependenciesSolver : public Failable {
   llvm::StringRef DirectDepsRoot;
   llvm::StringRef DepsOutput;
   bool Verbose = false;

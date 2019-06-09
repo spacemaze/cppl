@@ -197,7 +197,7 @@ int main(int argc, char **argv) {
         "-deps-root",
         std::string() +
         "Specify dependencies root directory with"
-        "'." + FileExtensions::DirectDependencies + "' files. "
+        "'." + FileExtensions::ParsedDependencies + "' files. "
         "Directories structure should repeat project structure.",
         [&](StringRef v) { Solver.setDirectDepsRoot(v); }
     )

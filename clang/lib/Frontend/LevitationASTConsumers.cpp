@@ -211,6 +211,7 @@ namespace {
           Diag.Report(diag::err_fe_levitation_dependency_file_io_troubles);
           break;
         case File::FiledToRename:
+        case File::FailedToCreateTempFile:
           Diag.Report(diag::err_fe_levitation_dependency_file_failed_to_create);
           break;
         default:

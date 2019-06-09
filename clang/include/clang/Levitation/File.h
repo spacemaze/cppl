@@ -22,7 +22,8 @@ class File {
     enum StatusEnum {
       Good,
       HasStreamErrors,
-      FiledToRename
+      FiledToRename,
+      FailedToCreateTempFile
     };
 
   private:
@@ -54,8 +55,10 @@ class File {
       TempPath += "-%%%%%%%%";
       int fd;
 
-      if (llvm::sys::fs::createUniqueFile(TempPath, fd, TempPath))
+      if (llvm::sys::fs::createUniqueFile(TempPath, fd, TempPath)) {
+        Status = FailedToCreateTempFile;
         return FileScope(nullptr);
+      }
 
       OutputStream.reset(new llvm::raw_fd_ostream(fd, /*shouldClose=*/true));
 

@@ -34,9 +34,8 @@ InputKind FrontendOptions::getInputKindForExtension(StringRef Extension) {
 
     // C++ Levitation extension:
     .Cases(
-        levitation::FileExtensions::DefinitionAST,
         levitation::FileExtensions::DeclarationAST,
-        levitation::FileExtensions::DeclarationInstantiatedAST,
+        levitation::FileExtensions::ParsedAST,
         InputKind(InputKind::Unknown, InputKind::Precompiled)
     )
 
