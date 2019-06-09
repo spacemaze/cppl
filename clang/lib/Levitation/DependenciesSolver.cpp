@@ -966,6 +966,12 @@ bool DependenciesSolver::solve() {
 
   if (!SolvedInfo.isValid()) {
     error() << "Failed to solve: " << SolvedInfo.getErrorMessage() << "\n";
+
+    if (!Verbose) {
+      error() << "Dependencies:\n";
+      Helper.dump(error(), parsedDependencies);
+    }
+
     return false;
   }
 
