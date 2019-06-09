@@ -147,6 +147,15 @@ public:
 
         return { Kind, PathIDWithoutHighestBits };
       }
+
+      static NodeKind getKind(Type ID) {
+        NodeKind Kind;
+        StringID PathID;
+
+        std::tie(Kind, PathID) = getKindAndPathID(ID);
+
+        return Kind;
+      }
   };
 
   using NodesMap = DenseMap<NodeID::Type, std::unique_ptr<Node>>;
@@ -168,6 +177,20 @@ private:
 
   /// Nodes whithout dependencies.
   NodesSet Roots;
+
+  /// Declaration nodes without dependent declaration nodes.
+  /// E.g. "B" depends on declaration of "A", wich means
+  ///   that "B" definition depends on "B" declaration and
+  ///   "B" declaration in turn depends on declaration of "A".
+  ///   In this case "B" declaration is terminal declaration node,
+  ///   even though it has dependent node (definition of "B").
+  ///
+  /// This tricky collection is required for .h files generation.
+  /// For each declaration node we should generate .h file, but
+  /// declaration terminal nodes provide us with hint of minimum
+  /// possible .h files to be included in order to include
+  /// everything.
+  NodesSet DeclarationTerminals;
 
   NodesMap AllNodes;
   PackagesMap PackageInfos;
@@ -204,6 +227,9 @@ public:
             PackageDependencies.DefinitionDependencies
         );
       }
+
+      // Scan for declaration terminal nodes.
+      DAGPtr->collectDeclarationTerminals();
     }
 
     return DAGPtr;
@@ -223,10 +249,33 @@ public:
   void dump(
       llvm::raw_ostream &out, const DependenciesStringsPool &Strings
   ) const {
+
+    if (Roots.empty()) {
+      out << "(empty)";
+      return;
+    }
+
     bsfWalkSkipVisited([&](const Node &N) {
         dumpNode(out, N.ID, Strings);
         out << "\n";
     });
+
+    // If graph has cycles it may be possible that
+    // we have non-empty graph and empty Terminals collection.
+    // Don't fire error yet, do it later during dependency solve
+    // stage.
+    if (DeclarationTerminals.empty()) {
+      out << "No terminal nodes found. Graph has cycles.\n";
+      return;
+    }
+
+    out << "Declaration terminals:\n";
+    for (auto TerminalNodeID : DeclarationTerminals) {
+      out << "    ";
+      dumpNodeID(out, TerminalNodeID);
+      out << "\n";
+    }
+    out << "\n";
   }
 
   void dumpNode(
@@ -285,6 +334,7 @@ public:
 
   const NodesMap &allNodes() const { return AllNodes; }
   const NodesSet &roots() const { return Roots; }
+  const NodesSet &declarationTerminals() const { return DeclarationTerminals; }
 
 protected:
 
@@ -370,6 +420,29 @@ protected:
       InsertionRes.first->second.reset(new Node(ID, Kind));
 
     return *InsertionRes.first->second;
+  }
+
+  void collectDeclarationTerminals() {
+    for (auto &NodeIt : AllNodes) {
+      auto &N = *NodeIt.second;
+
+      if (N.Kind != NodeKind::Declaration)
+        continue;
+
+      bool HasDependentDeclarationNodes = false;
+
+      for (auto &DependentNodeID : N.DependentNodes) {
+        NodeKind DependentNodeKind = NodeID::getKind(DependentNodeID);
+
+        if (DependentNodeKind == NodeKind::Declaration) {
+          HasDependentDeclarationNodes = true;
+          break;
+        }
+      }
+
+      if (!HasDependentDeclarationNodes)
+        DeclarationTerminals.insert(NodeIt.first);
+    }
   }
 };
 
