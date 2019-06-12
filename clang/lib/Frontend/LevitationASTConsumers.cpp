@@ -95,8 +95,6 @@ namespace {
     ) {
       DependencyPath Path;
 
-      Path.append(SourcesRoot.begin(), SourcesRoot.end());
-
       DependencyComponentsVector ValidatedComponents;
 
       auto UnvalidatedComponents = Dep.getComponents();
@@ -121,22 +119,29 @@ namespace {
         DependencyComponentsArrRef &UnvalidatedComponents
     ) {
       bool Valid = false;
+
+      SmallString<256> FullPath = SourcesRoot;
+
       for (size_t i = 0, e = UnvalidatedComponents.size(); i != e; ++i) {
 
         const StringRef &Component = UnvalidatedComponents[i];
         ValidatedComponents.push_back(Component);
 
         llvm::sys::path::append(Path, Component);
+        llvm::sys::path::append(FullPath, Component);
 
-        if (isDirectory(Path))
+        if (isDirectory(FullPath))
           continue;
 
-        if (FileExtension[0] != '.')
+        if (FileExtension[0] != '.') {
           Path.push_back('.');
+          FullPath.push_back('.');
+        }
 
         Path.append(FileExtension.begin(), FileExtension.end());
+        FullPath.append(FileExtension.begin(), FileExtension.end());
 
-        if (isFile(Path))
+        if (isFile(FullPath))
           Valid = true;
 
         break;
@@ -163,12 +168,31 @@ namespace {
     }
   };
 
+  DependencyPath makeRelative(StringRef &F, StringRef Parent) {
+
+    DependencyPath Relative(F);
+
+    StringRef Separator = llvm::sys::path::get_separator();
+
+    llvm::sys::path::replace_path_prefix(Relative, Parent, "");
+
+    if (Relative.startswith(Separator))
+      Relative = Relative.substr(Separator.size());
+
+    return Relative;
+  }
+
   class ASTDependenciesProcessor : public SemaObjHolderConsumer {
     CompilerInstance &CI;
-    std::string CurrentInputFile;
+    DependencyPath CurrentInputFile;
   public:
     ASTDependenciesProcessor(CompilerInstance &ci, StringRef currentInputFile)
-      : CI(ci), CurrentInputFile(currentInputFile) {}
+      : CI(ci),
+        CurrentInputFile(makeRelative(
+            currentInputFile,
+            CI.getFrontendOpts().LevitationSourcesRootDir
+        ))
+    {}
 
     void HandleTranslationUnit(ASTContext &Context) override {
 
