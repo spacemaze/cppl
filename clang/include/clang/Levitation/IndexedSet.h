@@ -54,7 +54,7 @@ namespace clang { namespace levitation {
         auto Res = Set.emplace(std::move(Item), getInvalidIndex());
 
         if (Res.second)
-          return addIndex(Res.first, Item);
+          return addIndex(Res.first);
 
         return Res.first->second;
       }
@@ -63,7 +63,7 @@ namespace clang { namespace levitation {
         auto Res = Set.insert({ Item, getInvalidIndex() });
 
         if (Res.second)
-          return addIndex(Res.first, Item);
+          return addIndex(Res.first);
 
         return Res.first->second;
       }
@@ -78,11 +78,11 @@ namespace clang { namespace levitation {
 
   private:
 
-      IdTy addIndex(set_iterator &SetIt, const ItemTy &Item) {
+      IdTy addIndex(set_iterator &SetIt) {
         IdTy NewIndex = LastIndex + 1;
 
         SetIt->second = NewIndex;
-        Index.insert({ NewIndex, ItemRefTy(Item) });
+        Index.insert({ NewIndex, ItemRefTy(SetIt->first) });
 
         LastIndex = NewIndex;
         return LastIndex;
