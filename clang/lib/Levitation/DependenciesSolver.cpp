@@ -795,7 +795,7 @@ public:
       auto &FS = Solver->FileMgr.getVirtualFileSystem();
 
       Paths SubDirs;
-      SubDirs.push_back(Solver->DirectDepsRoot);
+      SubDirs.push_back(Solver->BuildRoot);
 
       std::string parsedDepsFileExtension = ".";
       parsedDepsFileExtension += FileExtensions::ParsedDependencies;
@@ -831,6 +831,8 @@ public:
       diags << Reader->getErrorMessage() << "\n";
       return false;
     }
+
+    llvm::outs() << "Loading " << PackagePath << "\n";
 
     Dest.add(Dependencies);
 
@@ -910,7 +912,7 @@ public:
 
       const auto &Node = DGraph.getNode(NID);
 
-      StringRef ParentDir = Solver->DirectDepsRoot;
+      StringRef ParentDir = Solver->BuildRoot;
 
       DependenciesPaths DirectDependencies = buildDirectDependencies(
           ParentDir, Strings, DGraph, Node.Dependencies
@@ -1074,8 +1076,8 @@ public:
 bool DependenciesSolver::solve() {
   verbose()
   << "Running Dependencies Solver\n"
-  << "Root: " << DirectDepsRoot << "\n"
-  << "Output root: " << DepsOutput << "\n\n";
+  << "Sources root: " << SourcesRoot << "\n"
+  << "Build root: " << BuildRoot << "\n\n";
 
   DependenciesSolverHelper Helper(this);
 

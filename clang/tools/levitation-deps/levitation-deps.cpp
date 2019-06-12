@@ -194,18 +194,16 @@ int main(int argc, char **argv) {
         argc, argv
     )
     .parameter(
-        "-deps-root",
+        "-src-root",
         std::string() +
-        "Specify dependencies root directory with"
-        "'." + FileExtensions::ParsedDependencies + "' files. "
-        "Directories structure should repeat project structure.",
-        [&](StringRef v) { Solver.setDirectDepsRoot(v); }
+        "Specify source root (project) directory.",
+        [&](StringRef v) { Solver.setSourcesRoot(v); }
     )
     .parameter(
-        "-deps-output",
-        "Specify dependencies root directory. "
+        "-build-root",
+        "Specify build root directory. "
         "Directories structure should repeat project structure.",
-        [&](StringRef v) { Solver.setDepsOutput(v); }
+        [&](StringRef v) { Solver.setBuildRoot(v); }
     )
     .parameter(
         "--verbose",
