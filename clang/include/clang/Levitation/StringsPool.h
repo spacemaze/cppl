@@ -10,7 +10,7 @@
 
 namespace clang { namespace levitation {
 
-using StringID = uint64_t;
+using StringID = uint32_t;
 
 template<unsigned N>
 using StringsPool = IndexedSet<StringID, llvm::SmallString<N> >;
