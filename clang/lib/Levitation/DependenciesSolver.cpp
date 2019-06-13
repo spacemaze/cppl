@@ -904,22 +904,37 @@ public:
     dump(Log.verbose(), Context.getParsedDependencies());
   }
 
-  static bool loadFromBuffer(
-      llvm::raw_ostream &diags,
+  bool sourceExists(StringRef OriginalSourceRel) {
+    PathString OriginalSourceFull = Context.Solver.SourcesRoot;
+    llvm::sys::path::append(OriginalSourceFull, OriginalSourceRel);
+
+    return llvm::sys::fs::exists(OriginalSourceFull);
+  }
+
+  bool loadFromBuffer(
       ParsedDependencies &Dest,
-      const llvm::MemoryBuffer &MemBuf,
-      StringRef PackagePath
+      const llvm::MemoryBuffer &MemBuf
   ) {
+    auto &Log = log::Logger::get();
+
     auto Reader = CreateBitstreamReader(MemBuf);
 
-    DependenciesData Dependencies;
+    DependenciesData PackageData;
 
-    if (!Reader->read(Dependencies)) {
-      diags << Reader->getErrorMessage() << "\n";
+    if (!Reader->read(PackageData)) {
+      Log.error() << Reader->getErrorMessage() << "\n";
       return false;
     }
 
-    Dest.add(Dependencies);
+    const auto &Source =
+        *PackageData.Strings->getItem(PackageData.PackageFilePathID);
+
+    if (sourceExists(Source))
+      Dest.add(PackageData);
+    else
+      Log.warning()
+      << "Skipping parsed dependency, since its source was removed:\n"
+      << "    " << Source << "\n";
 
     return true;
   }
@@ -938,7 +953,7 @@ public:
       if (auto Buffer = Context.FileMgr.getBufferForFile(PackagePath)) {
         llvm::MemoryBuffer &MemBuf = *Buffer.get();
 
-        if (!loadFromBuffer(Log.error(), Dest, MemBuf, PackagePath)) {
+        if (!loadFromBuffer(Dest, MemBuf)) {
           // TODO Levitation: Do something with errors logging and DumpAction
           //   it is awful.
           Solver->setFailure("Failed to read dependencies");
@@ -1140,6 +1155,20 @@ public:
     return true;
   }
 
+  PathString getNodeSourceFilePath(
+      const StringRef ParentDir,
+      const DependenciesStringsPool &Strings,
+      const DependenciesGraph::Node &Node
+  ) {
+    PathString SourcePath = *Strings.getItem(Node.PackageInfo->PackagePath);
+
+    StringRef NewExt = FileExtensions::SourceCode;
+
+    updateFilePath(SourcePath, ParentDir, NewExt);
+
+    return SourcePath;
+  }
+
   PathString getNodeFilePath(
       const StringRef ParentDir,
       const DependenciesStringsPool &Strings,
@@ -1188,6 +1217,18 @@ public:
           "Only declaration nodes are allowed to be dependencies"
       );
 
+      const auto &N = DGraph.getNode(NID);
+
+      // Also put source file into dependencies
+      // Because we need to rebuild target in case
+      // if source file deleted.
+      auto NodeSourceFilePath = getNodeSourceFilePath(
+          Context.Solver.SourcesRoot,
+          Strings,
+          N
+      );
+      Paths.push_back(NodeSourceFilePath);
+
       auto NodeFilePath = getNodeFilePath(
           DepsRoot, Strings, DGraph.getNode(NID)
       );
@@ -1218,9 +1259,12 @@ public:
 
       // Declaration AST is instantiated from parsed AST,
       // and thus latter depends on former.
+      // The only exception is main file.
 
-      updateFilePath(ParsedASTPath, DepsRoot, FileExtensions::ParsedAST);
-      Paths.push_back(std::move(ParsedASTPath));
+      if (!N.PackageInfo->IsMainFile) {
+        updateFilePath(ParsedASTPath, DepsRoot, FileExtensions::ParsedAST);
+        Paths.push_back(std::move(ParsedASTPath));
+      }
 
       updateFilePath(SourcePath, DepsRoot, FileExtensions::DeclarationAST);
       Paths.push_back(std::move(SourcePath));
@@ -1267,7 +1311,7 @@ public:
 
 bool DependenciesSolver::solve() {
 
-  log::Logger::createLogger(Verbose ? log::Level::Verbose : log::Level::Error);
+  log::Logger::createLogger(Verbose ? log::Level::Verbose : log::Level::Warning);
 
   auto &Log = log::Logger::get();
 
