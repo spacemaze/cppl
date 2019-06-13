@@ -9,6 +9,8 @@
 #include "clang/Levitation/SimpleLogger.h"
 #include "clang/Levitation/StringsPool.h"
 
+#include "clang/Basic/FileManager.h"
+
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringRef.h"
@@ -145,6 +147,7 @@ public:
     StringID PackagePath;
     Node *Declaration;
     Node *Definition;
+    bool IsMainFile = false;
   };
 
   enum class NodeKind {
@@ -227,7 +230,8 @@ private:
 public:
 
   static std::shared_ptr<DependenciesGraph> build(
-      const ParsedDependencies &ParsedDeps
+      const ParsedDependencies &ParsedDeps,
+      StringID MainFileID
   ) {
     auto DGraphPtr = std::make_shared<DependenciesGraph>();
     auto &Log = log::Logger::get();
@@ -261,8 +265,12 @@ public:
       DGraphPtr->Invalid = true;
     }
 
+
+    // Create node which will represent main file
+    PackageInfo &MainFilePackage = DGraphPtr->createMainFilePackage(MainFileID);
+
     // Scan for declaration terminal nodes.
-    DGraphPtr->collectDeclarationTerminals();
+    DGraphPtr->collectDeclarationTerminals(MainFilePackage);
 
     return DGraphPtr;
   }
@@ -461,6 +469,31 @@ protected:
     return Package;
   }
 
+  PackageInfo &createMainFilePackage(StringID MainFileID) {
+
+    auto PackageRes = PackageInfos.insert({
+      MainFileID, llvm::make_unique<PackageInfo>()
+    });
+
+    PackageInfo &Package = *PackageRes.first->second;
+
+    assert(
+        PackageRes.second &&
+        "Only one package can be created for particular PackagePathID"
+    );
+
+    Node &DefNode = getOrCreateNode(NodeKind::Definition, MainFileID);
+
+    DefNode.PackageInfo = &Package;
+
+    Package.PackagePath = MainFileID;
+    Package.Declaration = nullptr;
+    Package.Definition = &DefNode;
+    Package.IsMainFile = true;
+
+    return Package;
+  }
+
   Node &getOrCreateNode(
       NodeKind Kind, StringID PackagePathID
   ) {
@@ -473,7 +506,7 @@ protected:
     return *InsertionRes.first->second;
   }
 
-  void collectDeclarationTerminals() {
+  void collectDeclarationTerminals(PackageInfo &MainFilePackage) {
     for (auto &NodeIt : AllNodes) {
       auto &N = *NodeIt.second;
 
@@ -491,8 +524,15 @@ protected:
         }
       }
 
-      if (!HasDependentDeclarationNodes)
-        DeclarationTerminals.insert(NodeIt.first);
+      if (!HasDependentDeclarationNodes) {
+        auto &N = *NodeIt.second;
+        auto &MainFileNode = *MainFilePackage.Definition;
+
+        DeclarationTerminals.insert(N.ID);
+
+        MainFileNode.Dependencies.insert(N.ID);
+        N.DependentNodes.insert(MainFileNode.ID);
+      }
     }
   }
 };
@@ -938,7 +978,9 @@ public:
     if (!Solver->isValid())
       return;
 
-    auto DGraph = DependenciesGraph::build(Context.getParsedDependencies());
+    auto MainFileID = Context.StringsPool.addItem(Context.Solver.MainFile);
+
+    auto DGraph = DependenciesGraph::build(Context.getParsedDependencies(), MainFileID);
 
     Context.DepsGraph = DGraph;
 
@@ -982,6 +1024,7 @@ public:
             Deps
         );
         Log.error() << "\n";
+        Solver->setFailure("Failed to solve dependencies.");
       };
 
       Log.verbose() << "Solving dependencies...\n";
@@ -999,6 +1042,7 @@ public:
           Log.error() << "Dependencies:\n";
           dump(Log.error(), Context.getParsedDependencies());
         }
+        Solver->setFailure("Failed to solve dependencies.");
 
         return;
       }
@@ -1027,6 +1071,9 @@ public:
 
 
   void writeResult() {
+    if (!Solver->isValid())
+      return;
+
     Log.verbose()
     << "Writing dependencies...\n";
 
@@ -1238,9 +1285,14 @@ bool DependenciesSolver::solve() {
   Impl.solveGraph();
   Impl.writeResult();
 
-  Log.verbose()
-  << "\nComplete!\n";
+  if (isValid()) {
+    Log.verbose()
+    << "\nComplete!\n";
 
-  return true;
+    return true;
+  }
+
+  Log.error() << getErrorMessage() << "\n";
+  return false;
 }
 }}

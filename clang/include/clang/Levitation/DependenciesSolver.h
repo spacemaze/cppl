@@ -24,6 +24,7 @@ namespace clang { namespace levitation {
 class DependenciesSolver : public Failable {
   llvm::StringRef SourcesRoot;
   llvm::StringRef BuildRoot;
+  llvm::StringRef MainFile;
   bool Verbose = false;
 public:
 
@@ -37,6 +38,10 @@ public:
 
   void setBuildRoot(llvm::StringRef BuildRoot) {
     DependenciesSolver::BuildRoot = BuildRoot;
+  }
+
+  void setMainFile(llvm::StringRef MainFile) {
+    DependenciesSolver::MainFile = MainFile;
   }
 
   bool solve();

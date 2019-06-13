@@ -206,6 +206,11 @@ int main(int argc, char **argv) {
         [&](StringRef v) { Solver.setBuildRoot(v); }
     )
     .parameter(
+        "-main-file",
+        "Specify main source faile, usually 'main.cpp'. ",
+        [&](StringRef v) { Solver.setMainFile(v); }
+    )
+    .parameter(
         "--verbose",
         "Enables verbose mode.",
         [&](StringRef v) { Solver.setVerbose(true); }
