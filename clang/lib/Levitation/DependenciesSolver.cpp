@@ -104,12 +104,15 @@ class DependenciesSolverContext {
   std::shared_ptr<ParsedDependencies> ParsedDeps;
   std::shared_ptr<DependenciesGraph> DepsGraph;
   std::shared_ptr<SolvedDependenciesInfo> SolvedDepsInfo;
+  FileManager FileMgr;
 
   friend class clang::levitation::DependenciesSolverImpl;
 
 public:
 
-  DependenciesSolverContext(DependenciesSolver &Solver) : Solver(Solver) {}
+  DependenciesSolverContext(DependenciesSolver &Solver)
+  : Solver(Solver), FileMgr( { /*Working dir*/ StringRef()} )
+  {}
 
   DependenciesStringsPool &getStringsPool() {
     return StringsPool;
@@ -827,7 +830,7 @@ public:
 
     Log.verbose() << "Collecting dependencies...\n";
 
-    auto &FS = Solver->FileMgr.getVirtualFileSystem();
+    auto &FS = Context.FileMgr.getVirtualFileSystem();
 
     Paths SubDirs;
     SubDirs.push_back(Solver->BuildRoot);
@@ -892,7 +895,7 @@ public:
     Log.verbose() << "Loading dependencies info...\n";
 
     for (StringRef PackagePath : ParsedDepFiles) {
-      if (auto Buffer = Solver->FileMgr.getBufferForFile(PackagePath)) {
+      if (auto Buffer = Context.FileMgr.getBufferForFile(PackagePath)) {
         llvm::MemoryBuffer &MemBuf = *Buffer.get();
 
         if (!loadFromBuffer(Log.error(), Dest, MemBuf, PackagePath)) {

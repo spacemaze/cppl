@@ -3,8 +3,6 @@
 #ifndef LLVM_CLANG_LEVITATION_DEPENDENCIESSOLVER_H
 #define LLVM_CLANG_LEVITATION_DEPENDENCIESSOLVER_H
 
-#include "clang/Basic/FileManager.h"
-
 #include "clang/Levitation/Failable.h"
 
 #include "llvm/ADT/DenseMap.h"
@@ -27,10 +25,7 @@ class DependenciesSolver : public Failable {
   llvm::StringRef SourcesRoot;
   llvm::StringRef BuildRoot;
   bool Verbose = false;
-  FileManager FileMgr;
 public:
-
-  DependenciesSolver() : FileMgr( { /*Working dir*/ StringRef()} ) {}
 
   void setVerbose(bool Verbose) {
     DependenciesSolver::Verbose = Verbose;
