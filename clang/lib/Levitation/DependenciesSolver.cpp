@@ -23,7 +23,7 @@ using namespace llvm;
 
 namespace clang { namespace levitation {
 
-class DependenciesSolverImplementation;
+class DependenciesSolverImpl;
 
 namespace {
 
@@ -125,7 +125,7 @@ class DependenciesSolverContext {
   std::shared_ptr<DependenciesGraph> DependenciesGraph;
   std::shared_ptr<SolvedDependenciesInfo> SolvedDependenciesInfo;
 
-  friend class clang::levitation::DependenciesSolverHelper;
+  friend class clang::levitation::DependenciesSolverImpl;
 
 public:
 
@@ -796,13 +796,13 @@ using SolvedDependenciesMap = llvm::DenseMap<llvm::StringRef, std::unique_ptr<So
 using Paths = llvm::SmallVector<llvm::SmallString<256>, 64>;
 using ParsedDependenciesVector = Paths;
 
-class DependenciesSolverImplementation {
+class DependenciesSolverImpl {
   DependenciesSolverContext &Context;
   log::Logger &Log = log::Logger::get();
   DependenciesSolver *Solver;
 
 public:
-  DependenciesSolverImplementation(
+  DependenciesSolverImpl(
       DependenciesSolverContext &Context
   ) : Context(Context), Solver(&Context.Solver) {}
 
@@ -1142,22 +1142,22 @@ bool DependenciesSolver::solve() {
   << "Sources root: " << SourcesRoot << "\n"
   << "Build root: " << BuildRoot << "\n\n";
 
-  DependenciesSolverImplementation Helper(Context);
+  DependenciesSolverImpl Impl(Context);
 
   ParsedDependenciesVector ParsedDepFiles;
-  Helper.collectParsedDependencies(ParsedDepFiles);
+  Impl.collectParsedDependencies(ParsedDepFiles);
 
   Log.verbose()
   << "Found " << ParsedDepFiles.size()
   << " '." << FileExtensions::ParsedDependencies << "' files.\n\n";
 
   ParsedDependencies parsedDependencies;
-  Helper.loadDependencies(parsedDependencies, ParsedDepFiles);
+  Impl.loadDependencies(parsedDependencies, ParsedDepFiles);
   const DependenciesStringsPool &Strings = parsedDependencies.getStringsPool();
 
   Log.verbose()
   << "Loaded dependencies:\n";
-  Helper.dump(Log.verbose(), parsedDependencies);
+  Impl.dump(Log.verbose(), parsedDependencies);
 
   auto DGraph = DependenciesGraph::build(parsedDependencies, Log.verbose());
   if (DGraph->isInvalid()) {
@@ -1165,7 +1165,7 @@ bool DependenciesSolver::solve() {
     if (!Verbose) {
       Log.error()
       << "Loaded dependencies:\n";
-      Helper.dump(Log.error(), parsedDependencies);
+      Impl.dump(Log.error(), parsedDependencies);
     }
     return false;
   }
@@ -1203,7 +1203,7 @@ bool DependenciesSolver::solve() {
 
     if (!Verbose) {
       Log.error() << "Dependencies:\n";
-      Helper.dump(Log.error(), parsedDependencies);
+      Impl.dump(Log.error(), parsedDependencies);
     }
 
     return false;
@@ -1216,7 +1216,7 @@ bool DependenciesSolver::solve() {
   Log.verbose()
   << "Writing dependencies...\n";
 
-  if (!Helper.writeResult(Strings, SolvedInfo)) {
+  if (!Impl.writeResult(Strings, SolvedInfo)) {
     Log.error()
     << "failed to write solved depenendices.\n";
     Log.error()

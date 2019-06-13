@@ -46,7 +46,7 @@ public:
 
   bool solve();
 
-  friend class DependenciesSolverImplementation;
+  friend class DependenciesSolverImpl;
 };
 
 }}
