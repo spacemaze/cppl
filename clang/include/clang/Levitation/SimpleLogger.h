@@ -15,29 +15,34 @@ enum class Level {
   Verbose
 };
 
-class Log {
+class Logger {
   Level LogLevel;
   llvm::raw_ostream &Out;
 
-  Log(Level LogLevel, llvm::raw_ostream &Out)
+  Logger(Level LogLevel, llvm::raw_ostream &Out)
   : LogLevel(LogLevel), Out(Out)
   {}
 
+protected:
+  static std::unique_ptr<Logger> &accessLoggerPtr() {
+    static std::unique_ptr<Logger> LoggerPtr;
+    return LoggerPtr;
+  }
+
 public:
 
-  static Log &getLogger(Level LogLevel) {
+  static void createLogger(Level LogLevel) {
 
-    static llvm::DenseMap<Level, std::unique_ptr<Log>> Loggers;
+    llvm::raw_ostream &Out = LogLevel > Level::Error ?
+        llvm::outs() : llvm::errs();
 
-    auto InsertionRes = Loggers.insert({LogLevel, nullptr});
+    accessLoggerPtr() = std::unique_ptr<Logger>(new Logger(LogLevel, Out));
+  }
 
-    if (InsertionRes.second) {
-      llvm::raw_ostream &Out = LogLevel > Level::Error ?
-          llvm::outs() : llvm::errs();
-      InsertionRes.first->second = std::unique_ptr<Log>(new Log(LogLevel, Out));
-    }
-
-    return *InsertionRes.first->second;
+  static Logger &get() {
+    auto &LoggerPtr = accessLoggerPtr();
+    assert(LoggerPtr && "Logger should be created");
+    return *LoggerPtr;
   }
 
   llvm::raw_ostream &error() {

@@ -46,10 +46,6 @@ public:
 
   bool solve();
 
-protected:
-  llvm::raw_ostream &verbose();
-  llvm::raw_ostream &error();
-
   friend class DependenciesSolverHelper;
 };
 

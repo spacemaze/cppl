@@ -23,6 +23,8 @@ using namespace llvm;
 
 namespace clang { namespace levitation {
 
+class DependenciesSolverHelper;
+
 namespace {
 
 class DumpAction : public WithOperand {
@@ -46,8 +48,6 @@ public:
 
   llvm::raw_ostream &operator()() { return Out; }
 };
-
-} // end of anonymous namespace
 
 //=============================================================================
 // Deserialized data object
@@ -105,6 +105,49 @@ public:
 
   const DependenciesStringsPool &getStringsPool() const {
     return Strings;
+  }
+};
+
+//=============================================================================
+// Dependencies Solver Context
+
+class ParsedDependencies;
+class DependenciesGraph;
+class SolvedDependenciesInfo;
+
+class DependenciesSolverContext {
+
+  DependenciesSolver &Solver;
+
+  DependenciesStringsPool StringsPool;
+
+  std::shared_ptr<ParsedDependencies> ParsedDependencies;
+  std::shared_ptr<DependenciesGraph> DependenciesGraph;
+  std::shared_ptr<SolvedDependenciesInfo> SolvedDependenciesInfo;
+
+  friend class clang::levitation::DependenciesSolverHelper;
+
+public:
+
+  DependenciesSolverContext(DependenciesSolver &Solver) : Solver(Solver) {}
+
+  DependenciesStringsPool &getStringsPool() {
+    return StringsPool;
+  }
+
+  const levitation::ParsedDependencies &getParsedDependencies() const {
+    assert(ParsedDependencies && "ParsedDependencies should be set");
+    return *ParsedDependencies;
+  }
+
+  const levitation::DependenciesGraph &getDependenciesGraph() const {
+    assert(DependenciesGraph && "DependenciesGraph should be set");
+    return *DependenciesGraph;
+  }
+
+  const levitation::SolvedDependenciesInfo &getSolvedDependenciesInfo() const {
+    assert(SolvedDependenciesInfo && "SolvedDependenciesInfo should be set");
+    return *SolvedDependenciesInfo;
   }
 };
 
@@ -746,17 +789,25 @@ protected:
   }
 };
 
+} // end of anonymous namespace
+
 using SolvedDependenciesMap = llvm::DenseMap<llvm::StringRef, std::unique_ptr<SolvedDependenciesInfo>>;
 
 using Paths = llvm::SmallVector<llvm::SmallString<256>, 64>;
 using ParsedDependenciesVector = Paths;
 
 class DependenciesSolverHelper {
-  using PathString = SmallString<256>;
-  using DependenciesPaths = SmallVector<PathString, 16>;
+  DependenciesSolverContext &Context;
+  log::Logger &Log = log::Logger::get();
   DependenciesSolver *Solver;
+
 public:
-  DependenciesSolverHelper(DependenciesSolver *solver) : Solver(solver) {}
+  DependenciesSolverHelper(
+      DependenciesSolverContext &Context
+  ) : Context(Context), Solver(&Context.Solver) {}
+
+  DependenciesSolverContext &getContext() { return Context; }
+
   static void collectFilesWithExtension(
       ParsedDependenciesVector &Dest,
       Paths &NewSubDirs,
@@ -792,7 +843,7 @@ public:
   void collectParsedDependencies(
       ParsedDependenciesVector &Dest
   ) {
-    with(auto A = DumpAction(Solver->verbose(), "Collecting dependencies")) {
+    with(auto A = DumpAction(Log.verbose(), "Collecting dependencies")) {
       auto &FS = Solver->FileMgr.getVirtualFileSystem();
 
       Paths SubDirs;
@@ -844,21 +895,22 @@ public:
       ParsedDependencies &Dest,
       const ParsedDependenciesVector &ParsedDepFiles
   ) {
-    with (auto A = DumpAction(Solver->verbose(), "Loading dependencies info")) {
+    auto *Solver = &Context.Solver;
+    with (auto A = DumpAction(Log.verbose(), "Loading dependencies info")) {
       for (StringRef PackagePath : ParsedDepFiles) {
         if (auto Buffer = Solver->FileMgr.getBufferForFile(PackagePath)) {
           llvm::MemoryBuffer &MemBuf = *Buffer.get();
 
-          if (!loadFromBuffer(Solver->error(), Dest, MemBuf, PackagePath)) {
+          if (!loadFromBuffer(Log.error(), Dest, MemBuf, PackagePath)) {
             // TODO Levitation: Do something with errors logging and DumpAction
             //   it is awful.
             A.setFailed();
-            Solver->error()
+            Log.error()
             << "Failed to read dependencies for '" << PackagePath << "'\n";
           }
         } else {
          A.setFailed();
-         Solver->error() << "Failed to open file '" << PackagePath << "'\n";
+         Log.error() << "Failed to open file '" << PackagePath << "'\n";
         }
       }
     }
@@ -902,6 +954,9 @@ public:
         << *Strings.getItem(Dep.FilePathID) << "\n";
     }
   }
+
+  using PathString = SmallString<256>;
+  using DependenciesPaths = SmallVector<PathString, 16>;
 
   bool writeResult(
       const DependenciesStringsPool &Strings,
@@ -1046,7 +1101,7 @@ public:
   ) {
     auto DependenciesFile = (DependentFilePath + "." + Extension).str();
 
-    Solver.verbose()
+    Log.verbose()
     << "Writing '" << DependenciesFile << "'...\n";
 
     File F(DependenciesFile);
@@ -1075,17 +1130,24 @@ public:
 };
 
 bool DependenciesSolver::solve() {
-  verbose()
+
+  log::Logger::createLogger(Verbose ? log::Level::Verbose : log::Level::Error);
+
+  auto &Log = log::Logger::get();
+
+  DependenciesSolverContext Context(*this);
+
+  Log.verbose()
   << "Running Dependencies Solver\n"
   << "Sources root: " << SourcesRoot << "\n"
   << "Build root: " << BuildRoot << "\n\n";
 
-  DependenciesSolverHelper Helper(this);
+  DependenciesSolverHelper Helper(Context);
 
   ParsedDependenciesVector ParsedDepFiles;
   Helper.collectParsedDependencies(ParsedDepFiles);
 
-  verbose()
+  Log.verbose()
   << "Found " << ParsedDepFiles.size()
   << " '." << FileExtensions::ParsedDependencies << "' files.\n\n";
 
@@ -1093,85 +1155,78 @@ bool DependenciesSolver::solve() {
   Helper.loadDependencies(parsedDependencies, ParsedDepFiles);
   const DependenciesStringsPool &Strings = parsedDependencies.getStringsPool();
 
-  verbose()
+  Log.verbose()
   << "Loaded dependencies:\n";
-  Helper.dump(verbose(), parsedDependencies);
+  Helper.dump(Log.verbose(), parsedDependencies);
 
-  auto DGraph = DependenciesGraph::build(parsedDependencies, verbose());
+  auto DGraph = DependenciesGraph::build(parsedDependencies, Log.verbose());
   if (DGraph->isInvalid()) {
-    error() << "Failed to solve dependencies. Unable to find root nodes.\n";
+    Log.error() << "Failed to solve dependencies. Unable to find root nodes.\n";
     if (!Verbose) {
-      error()
+      Log.error()
       << "Loaded dependencies:\n";
-      Helper.dump(error(), parsedDependencies);
+      Helper.dump(Log.error(), parsedDependencies);
     }
     return false;
   }
 
-  verbose()
+  Log.verbose()
   << "Dependencies graph:\n";
-  DGraph->dump(verbose(), parsedDependencies.getStringsPool());
+  DGraph->dump(Log.verbose(), parsedDependencies.getStringsPool());
 
   auto OnCyclesFound = [&] (
       const SolvedDependenciesInfo::FullDependenciesList &Deps,
       DependenciesGraph::NodeID::Type NID
   ) {
-    error()
+    Log.error()
     << "Can't solve dependencies. Found cycle.\n"
     << "Node '";
-    DGraph->dumpNodeShort(error(), NID, Strings);
-    error() << "' is about to be added second time into chain:\n";
+    DGraph->dumpNodeShort(Log.error(), NID, Strings);
+    Log.error() << "' is about to be added second time into chain:\n";
     SolvedDependenciesInfo::dumpDependencies(
-        error(),
+        Log.error(),
         *DGraph,
         Strings,
         Deps
     );
-    error() << "\n";
+    Log.error() << "\n";
   };
 
-  verbose() << "Solving dependencies...\n";
+  Log.verbose() << "Solving dependencies...\n";
 
   auto SolvedInfo = SolvedDependenciesInfo::build(
       *DGraph, OnCyclesFound
   );
 
   if (!SolvedInfo.isValid()) {
-    error() << "Failed to solve: " << SolvedInfo.getErrorMessage() << "\n";
+    Log.error() << "Failed to solve: " << SolvedInfo.getErrorMessage() << "\n";
 
     if (!Verbose) {
-      error() << "Dependencies:\n";
-      Helper.dump(error(), parsedDependencies);
+      Log.error() << "Dependencies:\n";
+      Helper.dump(Log.error(), parsedDependencies);
     }
 
     return false;
   }
 
-  verbose()
+  Log.verbose()
   << "Dependencies solved info:\n";
-  SolvedInfo.dump(verbose(), parsedDependencies.getStringsPool());
+  SolvedInfo.dump(Log.verbose(), parsedDependencies.getStringsPool());
 
-  verbose()
+  Log.verbose()
   << "Writing dependencies...\n";
 
   if (!Helper.writeResult(Strings, SolvedInfo)) {
-    error()
+    Log.error()
     << "failed to write solved depenendices.\n";
-    error()
+    Log.error()
     << getErrorMessage() << "\n";
     return false;
   }
 
-  verbose()
+  Log.verbose()
   << "\nComplete!\n";
 
   return true;
-}
-
-llvm::raw_ostream &DependenciesSolver::verbose() {
-  return Verbose ? llvm::outs() : llvm::nulls();
-}
-llvm::raw_ostream &DependenciesSolver::error() {
-  return llvm::errs();
 }
 }}
