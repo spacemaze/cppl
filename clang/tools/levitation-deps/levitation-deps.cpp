@@ -5,6 +5,7 @@
 #include "clang/Levitation/Serialization.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
@@ -44,6 +45,9 @@ namespace {
     llvm::SmallVector<StringRef, 16> ParametersInOriginalOrder;
     llvm::DenseMap<StringRef, Parameter> Parameters;
 
+    llvm::DenseSet<StringRef> Visited;
+    llvm::DenseSet<StringRef> Optional;
+
   public:
     ArgsParser(StringRef AppTitle, int Argc, char **Argv)
     : AppTitle(AppTitle), Argc(Argc), Argv(Argv) {}
@@ -60,11 +64,26 @@ namespace {
       return *this;
     }
 
+    ArgsParser& optional(
+        StringRef Name,
+        std::string Description,
+        ArgHandleFn HandleFunction
+    ) {
+      Parameters.try_emplace(Name,
+          Parameter { Name, std::move(Description), std::move(HandleFunction) }
+      );
+      ParametersInOriginalOrder.push_back(Name);
+
+      Optional.insert(Name);
+
+      return *this;
+    }
+
     ArgsParser& helpParameter(
         StringRef Name,
         std::string Description
     ) {
-      return parameter(
+      return optional(
           Name, std::move(Description),
           [=] (StringRef v) { printHelp(llvm::outs()); }
       );
@@ -81,6 +100,25 @@ namespace {
       for (int i = 1; i != Argc;) {
         tryParse<Separator>(i);
       }
+
+      bool HasMissedParameters = false;
+      for (auto &P : Parameters) {
+        auto ParameterName = P.first;
+
+        if (Optional.count(ParameterName))
+          continue;
+
+        if (!Visited.count(ParameterName)) {
+          reportMissedParameter(ParameterName);
+          HasMissedParameters = true;
+        }
+      }
+
+      if (HasMissedParameters) {
+        printHelp(llvm::errs());
+        return false;
+      }
+
       return true;
     }
 
@@ -149,6 +187,9 @@ namespace {
     void reportUnknownParameter(StringRef P) {
       llvm::errs() << "Unknown parameter: '" << P << "'\n";
     }
+    void reportMissedParameter(StringRef P) {
+      llvm::errs() << "Missed parameter: '" << P << "'\n";
+    }
   };
 
   template<>
@@ -168,6 +209,7 @@ namespace {
     auto Found = Parameters.find(Name);
 
     if (Found != Parameters.end()) {
+      Visited.insert(Name);
       Found->second.HandleFunction(Value);
       ++Offset;
       return true;
@@ -195,7 +237,6 @@ int main(int argc, char **argv) {
     )
     .parameter(
         "-src-root",
-        std::string() +
         "Specify source root (project) directory.",
         [&](StringRef v) { Solver.setSourcesRoot(v); }
     )
@@ -210,7 +251,7 @@ int main(int argc, char **argv) {
         "Specify main source faile, usually 'main.cpp'. ",
         [&](StringRef v) { Solver.setMainFile(v); }
     )
-    .parameter(
+    .optional(
         "--verbose",
         "Enables verbose mode.",
         [&](StringRef v) { Solver.setVerbose(true); }
