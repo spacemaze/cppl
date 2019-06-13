@@ -11,6 +11,7 @@ namespace clang { namespace levitation { namespace log {
 
 enum class Level {
   Error,
+  Warning,
   Info,
   Verbose
 };
@@ -33,7 +34,7 @@ public:
 
   static void createLogger(Level LogLevel) {
 
-    llvm::raw_ostream &Out = LogLevel > Level::Error ?
+    llvm::raw_ostream &Out = LogLevel > Level::Warning ?
         llvm::outs() : llvm::errs();
 
     accessLoggerPtr() = std::unique_ptr<Logger>(new Logger(LogLevel, Out));
@@ -47,6 +48,10 @@ public:
 
   llvm::raw_ostream &error() {
     return getStream(Level::Error);
+  }
+
+  llvm::raw_ostream &warning() {
+    return getStream(Level::Warning);
   }
 
   llvm::raw_ostream &info() {
