@@ -23,7 +23,7 @@ using namespace llvm;
 
 namespace clang { namespace levitation {
 
-class DependenciesSolverHelper;
+class DependenciesSolverImplementation;
 
 namespace {
 
@@ -796,13 +796,13 @@ using SolvedDependenciesMap = llvm::DenseMap<llvm::StringRef, std::unique_ptr<So
 using Paths = llvm::SmallVector<llvm::SmallString<256>, 64>;
 using ParsedDependenciesVector = Paths;
 
-class DependenciesSolverHelper {
+class DependenciesSolverImplementation {
   DependenciesSolverContext &Context;
   log::Logger &Log = log::Logger::get();
   DependenciesSolver *Solver;
 
 public:
-  DependenciesSolverHelper(
+  DependenciesSolverImplementation(
       DependenciesSolverContext &Context
   ) : Context(Context), Solver(&Context.Solver) {}
 
@@ -1142,7 +1142,7 @@ bool DependenciesSolver::solve() {
   << "Sources root: " << SourcesRoot << "\n"
   << "Build root: " << BuildRoot << "\n\n";
 
-  DependenciesSolverHelper Helper(Context);
+  DependenciesSolverImplementation Helper(Context);
 
   ParsedDependenciesVector ParsedDepFiles;
   Helper.collectParsedDependencies(ParsedDepFiles);
