@@ -6,6 +6,7 @@
 #include "clang/Levitation/File.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/Serialization.h"
+#include "clang/Levitation/SimpleLogger.h"
 #include "clang/Levitation/StringsPool.h"
 
 #include "llvm/ADT/DenseMap.h"
