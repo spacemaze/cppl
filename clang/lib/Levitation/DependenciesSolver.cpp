@@ -109,9 +109,9 @@ public:
 };
 
 //=============================================================================
-// Dependencies DAG
+// Dependencies Graph
 
-class DependenciesDAG {
+class DependenciesGraph {
 public:
   struct Node;
 
@@ -200,46 +200,46 @@ private:
 
 public:
 
-  static std::unique_ptr<DependenciesDAG> build(
+  static std::unique_ptr<DependenciesGraph> build(
       ParsedDependencies &ParsedDeps,
       llvm::raw_ostream &out
   ) {
-    auto DAGPtr = llvm::make_unique<DependenciesDAG>();
+    auto DGraphPtr = llvm::make_unique<DependenciesGraph>();
 
-    with (auto A = DumpAction(out, "Building dependencies DAG")) {
+    with (auto A = DumpAction(out, "Building dependencies graph")) {
 
       for (auto &PackageDeps : ParsedDeps) {
 
         auto PackagePathID = PackageDeps.first;
         DependenciesData &PackageDependencies = *PackageDeps.second;
 
-        PackageInfo &Package = DAGPtr->createPackageInfo(PackagePathID);
+        PackageInfo &Package = DGraphPtr->createPackageInfo(PackagePathID);
 
         // If package declaration has no dependencies we add it into the Roots
         // collection.
         if (PackageDependencies.DeclarationDependencies.empty())
-          DAGPtr->Roots.insert(Package.Declaration->ID);
+          DGraphPtr->Roots.insert(Package.Declaration->ID);
 
-        DAGPtr->addDependenciesTo(
+        DGraphPtr->addDependenciesTo(
             *Package.Declaration,
             PackageDependencies.DeclarationDependencies
         );
 
-        DAGPtr->addDependenciesTo(
+        DGraphPtr->addDependenciesTo(
             *Package.Definition,
             PackageDependencies.DefinitionDependencies
         );
       }
 
-      if (!DAGPtr->AllNodes.empty() && DAGPtr->Roots.empty()) {
-        DAGPtr->Invalid = true;
+      if (!DGraphPtr->AllNodes.empty() && DGraphPtr->Roots.empty()) {
+        DGraphPtr->Invalid = true;
       }
 
       // Scan for declaration terminal nodes.
-      DAGPtr->collectDeclarationTerminals();
+      DGraphPtr->collectDeclarationTerminals();
     }
 
-    return DAGPtr;
+    return DGraphPtr;
   }
 
   // TODO Levitation: That looks pretty much like A* walk.
@@ -477,8 +477,8 @@ protected:
 
 class SolvedDependenciesInfo : public Failable {
 
-  using NodeID = DependenciesDAG::NodeID;
-  using Node = DependenciesDAG::Node;
+  using NodeID = DependenciesGraph::NodeID;
+  using Node = DependenciesGraph::Node;
 
   struct DependencyWithDistance {
     NodeID::Type NodeID;
@@ -497,11 +497,11 @@ public:
       DenseMap<NodeID::Type, std::unique_ptr<FullDependenciesList>>;
 
 private:
-  const DependenciesDAG &DDAG;
+  const DependenciesGraph &DGraph;
   FullDependenciesMap FullDepsMap;
   FullDependenciesSortedMap FullDepsSortedMap;
 
-  SolvedDependenciesInfo(const DependenciesDAG &DDAG) : DDAG(DDAG) {}
+  SolvedDependenciesInfo(const DependenciesGraph &DGraph) : DGraph(DGraph) {}
 
 public:
 
@@ -510,24 +510,24 @@ public:
   )>;
 
   static SolvedDependenciesInfo build(
-      const DependenciesDAG &DDAG,
+      const DependenciesGraph &DGraph,
       OnDiagCyclesFoundFn OnDiagCyclesFound
   ) {
 
-    SolvedDependenciesInfo SolvedInfo(DDAG);
+    SolvedDependenciesInfo SolvedInfo(DGraph);
 
     FullDependencies EmptyList;
 
     // TODO Levitation: if after BFS walk we have unvisited nodes,
     //   such unvisited nodes belong to isolated cycle islands,
     //   check those nodes and diagnose cycles.
-    DependenciesDAG::NodesSet Unvisited;
-    for (auto &NodeIt : DDAG.allNodes()) {
+    DependenciesGraph::NodesSet Unvisited;
+    for (auto &NodeIt : DGraph.allNodes()) {
       Unvisited.insert(NodeIt.first);
     }
 
     bool Successfull =
-      DDAG.bsfWalk([&] (const Node &N) {
+      DGraph.bsfWalk([&] (const Node &N) {
         NodeID::Type NID = N.ID;
 
         const auto &CurrentDependencies = N.Dependencies.size() ?
@@ -569,7 +569,7 @@ public:
     // create empty dependency files.
     // And thus project build system will think everything is good.
     // For absence of dependency files looks like a trouble case.
-    for (auto RootID : DDAG.roots()) {
+    for (auto RootID : DGraph.roots()) {
       SolvedInfo.getOrCreateDependencies(RootID);
     }
 
@@ -588,8 +588,8 @@ public:
     return *Found->second;
   }
 
-  const DependenciesDAG &getDependenciesGraph() const {
-    return DDAG;
+  const DependenciesGraph &getDependenciesGraph() const {
+    return DGraph;
   }
 
   const FullDependenciesSortedMap &getDependenciesMap() const {
@@ -611,13 +611,13 @@ public:
       llvm::raw_ostream &out,
       const DependenciesStringsPool &Strings
   ) const {
-    DDAG.bsfWalkSkipVisited([&](const Node &N) {
+    DGraph.bsfWalkSkipVisited([&](const Node &N) {
       auto NID = N.ID;
       const FullDependenciesList &FullDeps = getDependenciesList(NID);
 
       const auto &Path = *Strings.getItem(N.PackageInfo->PackagePath);
       out << "[";
-      DDAG.dumpNodeID(out, NID);
+      DGraph.dumpNodeID(out, NID);
       out << "]\n";
 
       out << "    Path: " << Path << "\n";
@@ -626,11 +626,11 @@ public:
                 << "    Full dependencies:\n";
 
         for (const auto &DepWithDist : FullDeps) {
-          const auto &Dep = DDAG.getNode(DepWithDist.NodeID);
+          const auto &Dep = DGraph.getNode(DepWithDist.NodeID);
           const auto &DepPath = *Strings.getItem(Dep.PackageInfo->PackagePath);
 
           out.indent(8) << "[";
-          DDAG.dumpNodeID(out, DepWithDist.NodeID);
+          DGraph.dumpNodeID(out, DepWithDist.NodeID);
           out
                   << "]: " << DepPath << "\n";
         }
@@ -639,7 +639,7 @@ public:
                 << "    Direct dependencies:\n";
 
         for (const auto &DepID : N.Dependencies) {
-          const auto &Dep = DDAG.getNode(DepID);
+          const auto &Dep = DGraph.getNode(DepID);
           const auto &DepPath = *Strings.getItem(Dep.PackageInfo->PackagePath);
 
           out
@@ -653,7 +653,7 @@ public:
 
   static void dumpDependencies(
       llvm::raw_ostream &out,
-      const DependenciesDAG &DGraph,
+      const DependenciesGraph &DGraph,
       const DependenciesStringsPool &Strings,
       const FullDependenciesList &Deps
   ) {
@@ -907,7 +907,7 @@ public:
       const DependenciesStringsPool &Strings,
       const SolvedDependenciesInfo &SolvedDependencies
   ) {
-    const DependenciesDAG &DGraph = SolvedDependencies.getDependenciesGraph();
+    const DependenciesGraph &DGraph = SolvedDependencies.getDependenciesGraph();
     for (auto &NodeIt : SolvedDependencies.getDependenciesMap()) {
       auto NID = NodeIt.first;
 
@@ -952,11 +952,11 @@ public:
   PathString getNodeFilePath(
       const StringRef ParentDir,
       const DependenciesStringsPool &Strings,
-      const DependenciesDAG::Node &Node
+      const DependenciesGraph::Node &Node
   ) {
     PathString SourcePath = *Strings.getItem(Node.PackageInfo->PackagePath);
 
-    StringRef NewExt = Node.Kind == DependenciesDAG::NodeKind::Declaration ?
+    StringRef NewExt = Node.Kind == DependenciesGraph::NodeKind::Declaration ?
         FileExtensions::DeclarationAST :
         FileExtensions::Object;
 
@@ -985,15 +985,15 @@ public:
   DependenciesPaths buildDirectDependencies(
     StringRef DepsRoot,
     const DependenciesStringsPool &Strings,
-    const DependenciesDAG &DGraph,
-    const DependenciesDAG::NodesSet &Dependencies
+    const DependenciesGraph &DGraph,
+    const DependenciesGraph::NodesSet &Dependencies
   ) {
     DependenciesPaths Paths;
     for (auto NID : Dependencies) {
-      auto Kind = DependenciesDAG::NodeID::getKind(NID);
+      auto Kind = DependenciesGraph::NodeID::getKind(NID);
 
       assert(
-          Kind == DependenciesDAG::NodeKind::Declaration &&
+          Kind == DependenciesGraph::NodeKind::Declaration &&
           "Only declaration nodes are allowed to be dependencies"
       );
 
@@ -1009,7 +1009,7 @@ public:
   DependenciesPaths buildFullDependencies(
     StringRef DepsRoot,
     const DependenciesStringsPool &Strings,
-    const DependenciesDAG &DGraph,
+    const DependenciesGraph &DGraph,
     const SolvedDependenciesInfo::FullDependenciesList &Dependencies
   ) {
     DependenciesPaths Paths;
@@ -1021,7 +1021,7 @@ public:
       PathString ParsedASTPath = SourcePath;
 
       assert(
-          N.Kind == DependenciesDAG::NodeKind::Declaration &&
+          N.Kind == DependenciesGraph::NodeKind::Declaration &&
           "Only declaration nodes are allowed to be dependencies"
       );
 
@@ -1097,8 +1097,8 @@ bool DependenciesSolver::solve() {
   << "Loaded dependencies:\n";
   Helper.dump(verbose(), parsedDependencies);
 
-  auto DDAG = DependenciesDAG::build(parsedDependencies, verbose());
-  if (DDAG->isInvalid()) {
+  auto DGraph = DependenciesGraph::build(parsedDependencies, verbose());
+  if (DGraph->isInvalid()) {
     error() << "Failed to solve dependencies. Unable to find root nodes.\n";
     if (!Verbose) {
       error()
@@ -1109,21 +1109,21 @@ bool DependenciesSolver::solve() {
   }
 
   verbose()
-  << "Dependencies DAG:\n";
-  DDAG->dump(verbose(), parsedDependencies.getStringsPool());
+  << "Dependencies graph:\n";
+  DGraph->dump(verbose(), parsedDependencies.getStringsPool());
 
   auto OnCyclesFound = [&] (
       const SolvedDependenciesInfo::FullDependenciesList &Deps,
-      DependenciesDAG::NodeID::Type NID
+      DependenciesGraph::NodeID::Type NID
   ) {
     error()
     << "Can't solve dependencies. Found cycle.\n"
     << "Node '";
-    DDAG->dumpNodeShort(error(), NID, Strings);
+    DGraph->dumpNodeShort(error(), NID, Strings);
     error() << "' is about to be added second time into chain:\n";
     SolvedDependenciesInfo::dumpDependencies(
         error(),
-        *DDAG,
+        *DGraph,
         Strings,
         Deps
     );
@@ -1133,7 +1133,7 @@ bool DependenciesSolver::solve() {
   verbose() << "Solving dependencies...\n";
 
   auto SolvedInfo = SolvedDependenciesInfo::build(
-      *DDAG, OnCyclesFound
+      *DGraph, OnCyclesFound
   );
 
   if (!SolvedInfo.isValid()) {
