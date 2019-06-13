@@ -27,28 +27,6 @@ class DependenciesSolverImpl;
 
 namespace {
 
-class DumpAction : public WithOperand {
-  llvm::raw_ostream &Out;
-  bool Failed = false;
-  unsigned NumPageBreaks;
-public:
-  DumpAction(raw_ostream &Out, const char *Title, unsigned NumPageBreaks = 1)
-  : Out(Out),
-    NumPageBreaks(NumPageBreaks) {
-    Out << Title << "... ";
-  }
-
-  ~DumpAction() {
-    Out << "complete.";
-    for (unsigned i = 0; i != NumPageBreaks; ++i)
-      Out << "\n";
-  }
-
-  void setFailed() { DumpAction::Failed = true; }
-
-  llvm::raw_ostream &operator()() { return Out; }
-};
-
 //=============================================================================
 // Deserialized data object
 
@@ -246,43 +224,42 @@ private:
 public:
 
   static std::shared_ptr<DependenciesGraph> build(
-      const ParsedDependencies &ParsedDeps,
-      llvm::raw_ostream &out
+      const ParsedDependencies &ParsedDeps
   ) {
     auto DGraphPtr = std::make_shared<DependenciesGraph>();
+    auto &Log = log::Logger::get();
 
-    with (auto A = DumpAction(out, "Building dependencies graph")) {
+    Log.verbose() << "Building dependencies graph...\n";
 
-      for (auto &PackageDeps : ParsedDeps) {
+    for (auto &PackageDeps : ParsedDeps) {
 
-        auto PackagePathID = PackageDeps.first;
-        DependenciesData &PackageDependencies = *PackageDeps.second;
+      auto PackagePathID = PackageDeps.first;
+      DependenciesData &PackageDependencies = *PackageDeps.second;
 
-        PackageInfo &Package = DGraphPtr->createPackageInfo(PackagePathID);
+      PackageInfo &Package = DGraphPtr->createPackageInfo(PackagePathID);
 
-        // If package declaration has no dependencies we add it into the Roots
-        // collection.
-        if (PackageDependencies.DeclarationDependencies.empty())
-          DGraphPtr->Roots.insert(Package.Declaration->ID);
+      // If package declaration has no dependencies we add it into the Roots
+      // collection.
+      if (PackageDependencies.DeclarationDependencies.empty())
+        DGraphPtr->Roots.insert(Package.Declaration->ID);
 
-        DGraphPtr->addDependenciesTo(
-            *Package.Declaration,
-            PackageDependencies.DeclarationDependencies
-        );
+      DGraphPtr->addDependenciesTo(
+          *Package.Declaration,
+          PackageDependencies.DeclarationDependencies
+      );
 
-        DGraphPtr->addDependenciesTo(
-            *Package.Definition,
-            PackageDependencies.DefinitionDependencies
-        );
-      }
-
-      if (!DGraphPtr->AllNodes.empty() && DGraphPtr->Roots.empty()) {
-        DGraphPtr->Invalid = true;
-      }
-
-      // Scan for declaration terminal nodes.
-      DGraphPtr->collectDeclarationTerminals();
+      DGraphPtr->addDependenciesTo(
+          *Package.Definition,
+          PackageDependencies.DefinitionDependencies
+      );
     }
+
+    if (!DGraphPtr->AllNodes.empty() && DGraphPtr->Roots.empty()) {
+      DGraphPtr->Invalid = true;
+    }
+
+    // Scan for declaration terminal nodes.
+    DGraphPtr->collectDeclarationTerminals();
 
     return DGraphPtr;
   }
@@ -848,7 +825,7 @@ public:
 
     ParsedDependenciesVector ParsedData;
 
-    Log.verbose() << "Collecting dependencies...";
+    Log.verbose() << "Collecting dependencies...\n";
 
     auto &FS = Solver->FileMgr.getVirtualFileSystem();
 
@@ -907,30 +884,27 @@ public:
   void loadDependencies(
       const ParsedDependenciesVector &ParsedDepFiles
   ) {
-
     Context.ParsedDeps = std::make_shared<ParsedDependencies>(
         Context.getStringsPool()
     );
-
     ParsedDependencies &Dest = *Context.ParsedDeps;
 
-    auto *Solver = &Context.Solver;
-    with (auto A = DumpAction(Log.verbose(), "Loading dependencies info")) {
-      for (StringRef PackagePath : ParsedDepFiles) {
-        if (auto Buffer = Solver->FileMgr.getBufferForFile(PackagePath)) {
-          llvm::MemoryBuffer &MemBuf = *Buffer.get();
+    Log.verbose() << "Loading dependencies info...\n";
 
-          if (!loadFromBuffer(Log.error(), Dest, MemBuf, PackagePath)) {
-            // TODO Levitation: Do something with errors logging and DumpAction
-            //   it is awful.
-            A.setFailed();
-            Log.error()
-            << "Failed to read dependencies for '" << PackagePath << "'\n";
-          }
-        } else {
-         A.setFailed();
-         Log.error() << "Failed to open file '" << PackagePath << "'\n";
+    for (StringRef PackagePath : ParsedDepFiles) {
+      if (auto Buffer = Solver->FileMgr.getBufferForFile(PackagePath)) {
+        llvm::MemoryBuffer &MemBuf = *Buffer.get();
+
+        if (!loadFromBuffer(Log.error(), Dest, MemBuf, PackagePath)) {
+          // TODO Levitation: Do something with errors logging and DumpAction
+          //   it is awful.
+          Solver->setFailure("Failed to read dependencies");
+          Log.error()
+          << "Failed to read dependencies for '" << PackagePath << "'\n";
         }
+      } else {
+       Solver->setFailure("Failed to open one of dependency files");
+       Log.error() << "Failed to open file '" << PackagePath << "'\n";
       }
     }
   }
@@ -961,10 +935,8 @@ public:
     if (!Solver->isValid())
       return;
 
-    auto DGraph = DependenciesGraph::build(
-        Context.getParsedDependencies(),
-        Log.verbose()
-    );
+    auto DGraph = DependenciesGraph::build(Context.getParsedDependencies());
+
     Context.DepsGraph = DGraph;
 
     if (DGraph->isInvalid()) {
@@ -983,6 +955,9 @@ public:
   }
 
   void solveGraph() {
+    if (!Solver->isValid())
+      return;
+
     const auto *DGraph = &Context.getDependenciesGraph();
 
     // TODO Levitation: remove this way.
