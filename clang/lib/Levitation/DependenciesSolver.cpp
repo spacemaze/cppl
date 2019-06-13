@@ -53,12 +53,14 @@ public:
 // Deserialized data object
 
 class ParsedDependencies {
-  DependenciesStringsPool Strings;
+  DependenciesStringsPool &Strings;
 
   using DependenciesMap = llvm::DenseMap<StringID, std::unique_ptr<DependenciesData>>;
   DependenciesMap Map;
 
 public:
+
+  ParsedDependencies(DependenciesStringsPool &Strings) : Strings(Strings) {}
 
   void add(const DependenciesData &Deps) {
     auto NewDeps = llvm::make_unique<DependenciesData>(&Strings);
@@ -244,7 +246,7 @@ private:
 public:
 
   static std::unique_ptr<DependenciesGraph> build(
-      ParsedDependencies &ParsedDeps,
+      const ParsedDependencies &ParsedDeps,
       llvm::raw_ostream &out
   ) {
     auto DGraphPtr = llvm::make_unique<DependenciesGraph>();
@@ -840,33 +842,40 @@ public:
     }
   }
 
-  void collectParsedDependencies(
-      ParsedDependenciesVector &Dest
-  ) {
-    with(auto A = DumpAction(Log.verbose(), "Collecting dependencies")) {
-      auto &FS = Solver->FileMgr.getVirtualFileSystem();
+  void collectParsedDependencies() {
 
-      Paths SubDirs;
-      SubDirs.push_back(Solver->BuildRoot);
+    ParsedDependenciesVector ParsedData;
 
-      std::string parsedDepsFileExtension = ".";
-      parsedDepsFileExtension += FileExtensions::ParsedDependencies;
+    Log.verbose() << "Collecting dependencies...";
 
-      Paths NewSubDirs;
-      while (SubDirs.size()) {
-        NewSubDirs.clear();
-        for (StringRef CurDir : SubDirs) {
-          collectFilesWithExtension(
-              Dest,
-              NewSubDirs,
-              FS,
-              CurDir,
-              parsedDepsFileExtension
-          );
-        }
-        SubDirs.swap(NewSubDirs);
+    auto &FS = Solver->FileMgr.getVirtualFileSystem();
+
+    Paths SubDirs;
+    SubDirs.push_back(Solver->BuildRoot);
+
+    std::string parsedDepsFileExtension = ".";
+    parsedDepsFileExtension += FileExtensions::ParsedDependencies;
+
+    Paths NewSubDirs;
+    while (SubDirs.size()) {
+      NewSubDirs.clear();
+      for (StringRef CurDir : SubDirs) {
+        collectFilesWithExtension(
+            ParsedData,
+            NewSubDirs,
+            FS,
+            CurDir,
+            parsedDepsFileExtension
+        );
       }
+      SubDirs.swap(NewSubDirs);
     }
+
+    Log.verbose()
+    << "Found " << ParsedData.size()
+    << " '." << FileExtensions::ParsedDependencies << "' files.\n\n";
+
+    loadDependencies(ParsedData);
   }
 
   static bool loadFromBuffer(
@@ -884,17 +893,21 @@ public:
       return false;
     }
 
-    llvm::outs() << "Loading " << PackagePath << "\n";
-
     Dest.add(Dependencies);
 
     return true;
   }
 
   void loadDependencies(
-      ParsedDependencies &Dest,
       const ParsedDependenciesVector &ParsedDepFiles
   ) {
+
+    Context.ParsedDependencies = std::make_shared<ParsedDependencies>(
+        Context.getStringsPool()
+    );
+
+    ParsedDependencies &Dest = *Context.ParsedDependencies;
+
     auto *Solver = &Context.Solver;
     with (auto A = DumpAction(Log.verbose(), "Loading dependencies info")) {
       for (StringRef PackagePath : ParsedDepFiles) {
@@ -1144,16 +1157,10 @@ bool DependenciesSolver::solve() {
 
   DependenciesSolverImpl Impl(Context);
 
-  ParsedDependenciesVector ParsedDepFiles;
-  Impl.collectParsedDependencies(ParsedDepFiles);
+  Impl.collectParsedDependencies();
 
-  Log.verbose()
-  << "Found " << ParsedDepFiles.size()
-  << " '." << FileExtensions::ParsedDependencies << "' files.\n\n";
-
-  ParsedDependencies parsedDependencies;
-  Impl.loadDependencies(parsedDependencies, ParsedDepFiles);
-  const DependenciesStringsPool &Strings = parsedDependencies.getStringsPool();
+  const DependenciesStringsPool &Strings = Context.getStringsPool();
+  const auto &parsedDependencies = Context.getParsedDependencies();
 
   Log.verbose()
   << "Loaded dependencies:\n";
