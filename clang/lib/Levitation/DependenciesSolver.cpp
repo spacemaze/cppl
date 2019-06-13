@@ -123,9 +123,9 @@ class DependenciesSolverContext {
 
   DependenciesStringsPool StringsPool;
 
-  std::shared_ptr<ParsedDependencies> ParsedDependencies;
-  std::shared_ptr<DependenciesGraph> DependenciesGraph;
-  std::shared_ptr<SolvedDependenciesInfo> SolvedDependenciesInfo;
+  std::shared_ptr<ParsedDependencies> ParsedDeps;
+  std::shared_ptr<DependenciesGraph> DepsGraph;
+  std::shared_ptr<SolvedDependenciesInfo> SolvedDepsInfo;
 
   friend class clang::levitation::DependenciesSolverImpl;
 
@@ -138,18 +138,18 @@ public:
   }
 
   const levitation::ParsedDependencies &getParsedDependencies() const {
-    assert(ParsedDependencies && "ParsedDependencies should be set");
-    return *ParsedDependencies;
+    assert(ParsedDeps && "ParsedDependencies should be set");
+    return *ParsedDeps;
   }
 
-  const levitation::DependenciesGraph &getDependenciesGraph() const {
-    assert(DependenciesGraph && "DependenciesGraph should be set");
-    return *DependenciesGraph;
+  const DependenciesGraph &getDependenciesGraph() const {
+    assert(DepsGraph && "DependenciesGraph should be set");
+    return *DepsGraph;
   }
 
   const levitation::SolvedDependenciesInfo &getSolvedDependenciesInfo() const {
-    assert(SolvedDependenciesInfo && "SolvedDependenciesInfo should be set");
-    return *SolvedDependenciesInfo;
+    assert(SolvedDepsInfo && "SolvedDependenciesInfo should be set");
+    return *SolvedDepsInfo;
   }
 };
 
@@ -245,11 +245,11 @@ private:
 
 public:
 
-  static std::unique_ptr<DependenciesGraph> build(
+  static std::shared_ptr<DependenciesGraph> build(
       const ParsedDependencies &ParsedDeps,
       llvm::raw_ostream &out
   ) {
-    auto DGraphPtr = llvm::make_unique<DependenciesGraph>();
+    auto DGraphPtr = std::make_shared<DependenciesGraph>();
 
     with (auto A = DumpAction(out, "Building dependencies graph")) {
 
@@ -554,12 +554,14 @@ public:
       const FullDependenciesList &, NodeID::Type
   )>;
 
-  static SolvedDependenciesInfo build(
+  static std::shared_ptr<SolvedDependenciesInfo> build(
       const DependenciesGraph &DGraph,
       OnDiagCyclesFoundFn OnDiagCyclesFound
   ) {
 
-    SolvedDependenciesInfo SolvedInfo(DGraph);
+    std::shared_ptr<SolvedDependenciesInfo> SolvedInfoPtr;
+    SolvedInfoPtr.reset(new SolvedDependenciesInfo(DGraph));
+    SolvedDependenciesInfo &SolvedInfo = *SolvedInfoPtr;
 
     FullDependencies EmptyList;
 
@@ -601,12 +603,12 @@ public:
 
     if (!Successfull) {
       SolvedInfo.setFailure("Found cycles.");
-      return SolvedInfo;
+      return SolvedInfoPtr;
     }
 
     if (Unvisited.size()) {
       SolvedInfo.setFailure("Found isolated cycles.");
-      return SolvedInfo;
+      return SolvedInfoPtr;
     }
 
     // Put empty list for roots
@@ -620,7 +622,7 @@ public:
 
     SolvedInfo.sortAllDependencies();
 
-    return SolvedInfo;
+    return SolvedInfoPtr;
   }
 
   const FullDependencies &getDependencies(NodeID::Type NID) const {
@@ -876,6 +878,10 @@ public:
     << " '." << FileExtensions::ParsedDependencies << "' files.\n\n";
 
     loadDependencies(ParsedData);
+
+    Log.verbose()
+    << "Loaded dependencies:\n";
+    dump(Log.verbose(), Context.getParsedDependencies());
   }
 
   static bool loadFromBuffer(
@@ -902,11 +908,11 @@ public:
       const ParsedDependenciesVector &ParsedDepFiles
   ) {
 
-    Context.ParsedDependencies = std::make_shared<ParsedDependencies>(
+    Context.ParsedDeps = std::make_shared<ParsedDependencies>(
         Context.getStringsPool()
     );
 
-    ParsedDependencies &Dest = *Context.ParsedDependencies;
+    ParsedDependencies &Dest = *Context.ParsedDeps;
 
     auto *Solver = &Context.Solver;
     with (auto A = DumpAction(Log.verbose(), "Loading dependencies info")) {
@@ -951,6 +957,79 @@ public:
     }
   }
 
+  void buildDependenciesGraph() {
+    if (!Solver->isValid())
+      return;
+
+    auto DGraph = DependenciesGraph::build(
+        Context.getParsedDependencies(),
+        Log.verbose()
+    );
+    Context.DepsGraph = DGraph;
+
+    if (DGraph->isInvalid()) {
+      Log.error() << "Failed to solve dependencies. Unable to find root nodes.\n";
+      if (!Solver->Verbose) {
+        Log.error()
+        << "Loaded dependencies:\n";
+        dump(Log.error(), Context.getParsedDependencies());
+      }
+      return;
+    }
+
+    Log.verbose()
+    << "Dependencies graph:\n";
+    DGraph->dump(Log.verbose(), Context.getStringsPool());
+  }
+
+  void solveGraph() {
+    const auto *DGraph = &Context.getDependenciesGraph();
+
+    // TODO Levitation: remove this way.
+    auto &Strings = Context.getStringsPool();
+
+    auto OnCyclesFound = [&] (
+          const SolvedDependenciesInfo::FullDependenciesList &Deps,
+          DependenciesGraph::NodeID::Type NID
+      ) {
+        Log.error()
+        << "Can't solve dependencies. Found cycle.\n"
+        << "Node '";
+        DGraph->dumpNodeShort(Log.error(), NID, Strings);
+        Log.error() << "' is about to be added second time into chain:\n";
+        SolvedDependenciesInfo::dumpDependencies(
+            Log.error(),
+            *DGraph,
+            Strings,
+            Deps
+        );
+        Log.error() << "\n";
+      };
+
+      Log.verbose() << "Solving dependencies...\n";
+
+      Context.SolvedDepsInfo = SolvedDependenciesInfo::build(
+          *DGraph, OnCyclesFound
+      );
+
+      const auto &SolvedInfo = *Context.SolvedDepsInfo;
+
+      if (!SolvedInfo.isValid()) {
+        Log.error() << "Failed to solve: " << SolvedInfo.getErrorMessage() << "\n";
+
+        if (!Solver->Verbose) {
+          Log.error() << "Dependencies:\n";
+          dump(Log.error(), Context.getParsedDependencies());
+        }
+
+        return;
+      }
+
+      Log.verbose()
+      << "Dependencies solved info:\n";
+      SolvedInfo.dump(Log.verbose(), Strings);
+  }
+
   static void dump(
       llvm::raw_ostream &out,
       unsigned Indent,
@@ -968,13 +1047,32 @@ public:
     }
   }
 
+
+  void writeResult() {
+    Log.verbose()
+    << "Writing dependencies...\n";
+
+    const auto &SolvedInfo = Context.getSolvedDependenciesInfo();
+
+    if (!writeResult(SolvedInfo)) {
+      Log.error()
+      << "failed to write solved depenendices.\n";
+      Log.error()
+      << Solver->getErrorMessage() << "\n";
+      return;
+    }
+  }
+
   using PathString = SmallString<256>;
   using DependenciesPaths = SmallVector<PathString, 16>;
 
   bool writeResult(
-      const DependenciesStringsPool &Strings,
       const SolvedDependenciesInfo &SolvedDependencies
   ) {
+
+    // TODO Levitation: remove this
+    const auto &Strings = Context.getStringsPool();
+
     const DependenciesGraph &DGraph = SolvedDependencies.getDependenciesGraph();
     for (auto &NodeIt : SolvedDependencies.getDependenciesMap()) {
       auto NID = NodeIt.first;
@@ -1158,78 +1256,9 @@ bool DependenciesSolver::solve() {
   DependenciesSolverImpl Impl(Context);
 
   Impl.collectParsedDependencies();
-
-  const DependenciesStringsPool &Strings = Context.getStringsPool();
-  const auto &parsedDependencies = Context.getParsedDependencies();
-
-  Log.verbose()
-  << "Loaded dependencies:\n";
-  Impl.dump(Log.verbose(), parsedDependencies);
-
-  auto DGraph = DependenciesGraph::build(parsedDependencies, Log.verbose());
-  if (DGraph->isInvalid()) {
-    Log.error() << "Failed to solve dependencies. Unable to find root nodes.\n";
-    if (!Verbose) {
-      Log.error()
-      << "Loaded dependencies:\n";
-      Impl.dump(Log.error(), parsedDependencies);
-    }
-    return false;
-  }
-
-  Log.verbose()
-  << "Dependencies graph:\n";
-  DGraph->dump(Log.verbose(), parsedDependencies.getStringsPool());
-
-  auto OnCyclesFound = [&] (
-      const SolvedDependenciesInfo::FullDependenciesList &Deps,
-      DependenciesGraph::NodeID::Type NID
-  ) {
-    Log.error()
-    << "Can't solve dependencies. Found cycle.\n"
-    << "Node '";
-    DGraph->dumpNodeShort(Log.error(), NID, Strings);
-    Log.error() << "' is about to be added second time into chain:\n";
-    SolvedDependenciesInfo::dumpDependencies(
-        Log.error(),
-        *DGraph,
-        Strings,
-        Deps
-    );
-    Log.error() << "\n";
-  };
-
-  Log.verbose() << "Solving dependencies...\n";
-
-  auto SolvedInfo = SolvedDependenciesInfo::build(
-      *DGraph, OnCyclesFound
-  );
-
-  if (!SolvedInfo.isValid()) {
-    Log.error() << "Failed to solve: " << SolvedInfo.getErrorMessage() << "\n";
-
-    if (!Verbose) {
-      Log.error() << "Dependencies:\n";
-      Impl.dump(Log.error(), parsedDependencies);
-    }
-
-    return false;
-  }
-
-  Log.verbose()
-  << "Dependencies solved info:\n";
-  SolvedInfo.dump(Log.verbose(), parsedDependencies.getStringsPool());
-
-  Log.verbose()
-  << "Writing dependencies...\n";
-
-  if (!Impl.writeResult(Strings, SolvedInfo)) {
-    Log.error()
-    << "failed to write solved depenendices.\n";
-    Log.error()
-    << getErrorMessage() << "\n";
-    return false;
-  }
+  Impl.buildDependenciesGraph();
+  Impl.solveGraph();
+  Impl.writeResult();
 
   Log.verbose()
   << "\nComplete!\n";
