@@ -1,0 +1,53 @@
+L-1
+
+TITLE: Templates Specialization merging
+
+DESCRIPTION: It is possible to produce implicit template specializations in
+different places. Which could be a dependencies for same AST, and it should be
+possible to merge such instantiations during dependency loading.
+
+STATUS: Open
+
+
+L-2
+
+TITLE: Add Enums support
+
+DESCRIPTION: Enable Enums instantiation.
+
+STATUS: Open
+
+
+L-3
+
+TITLE: Out of scope member functions instantiation.
+
+DESCRIPTION: Enable scope member functions instantiations. It should work
+for regular member functions and for template specializations as well.
+
+STATUS: Open
+
+
+L-4
+
+TITLE: Driver support
+
+DESCRIPTION: Enable build workflow support in driver. Driver should take on
+input source root directory and build root directory and either produce set of
+.o files or also link them and produce binary.
+
+STATUS: Open
+
+
+L-5
+
+TITLE: Manual dependency import
+
+DESCRIPTION: "Manual dependency import" feature allows user to setup
+dependencies by means of import directive. Parser perhaps still should
+produce whole AST. But if manual dependencies used it is not necessary to
+refer other classes via "global" keyword, for the is no instantiation stage.
+Manual dependencies import syntax should be as follows:
+#[dependency|definition-dependency] "path-relative-to-source-root.cppl"
+
+STATUS: Open
