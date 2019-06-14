@@ -2518,7 +2518,7 @@ void ASTDeclReader::mergeRedeclarable(Redeclarable<T> *DBase,
                                       RedeclarableResult &Redecl,
                                       DeclID TemplatePatternID) {
   // C++ Levitation extension:
-  // In this mode we allow merging namespaces
+  // In C++ Levitation mode we allow merging some decls as well.
   if (
     !Reader.getContext().getLangOpts().Modules &&
     !Reader.getContext().getLangOpts().LevitationMode
@@ -2589,6 +2589,15 @@ void ASTDeclReader::mergeTemplatePattern(RedeclarableTemplateDecl *D,
   llvm_unreachable("merged an unknown kind of redeclarable template");
 }
 
+template<typename T>
+bool isImplicitTemplateSpecialization(T *Decl) {
+  if (const auto *CTSD = dyn_cast<ClassTemplateSpecializationDecl>(Decl)) {
+    MemberSpecializationInfo *MSI = CTSD->getMemberSpecializationInfo();
+    return MSI->getTemplateSpecializationKind() == TSK_ImplicitInstantiation;
+  }
+  return false;
+}
+
 /// Attempts to merge the given declaration (D) with another declaration
 /// of the same entity.
 template<typename T>
@@ -2598,10 +2607,11 @@ void ASTDeclReader::mergeRedeclarable(Redeclarable<T> *DBase, T *Existing,
   auto *D = static_cast<T *>(DBase);
 
   // C++ Levitation extension:
-  // Per this mode only namespaces are allowed to be merged.
+  // Per this mode only namespaces and implicit template specializations
+  // are allowed to be merged.
   if (
     Reader.getContext().getLangOpts().LevitationMode &&
-    !isa<NamespaceDecl>(D)
+    !(isa<NamespaceDecl>(D) || isImplicitTemplateSpecialization(D))
   )
     return;
 

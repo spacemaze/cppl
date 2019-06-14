@@ -7,6 +7,7 @@ different places. Which could be a dependencies for same AST, and it should be
 possible to merge such instantiations during dependency loading.
 
 STATUS: In Progress
+BLOCKED BY: L-6
 
 
 L-2
@@ -49,5 +50,21 @@ produce whole AST. But if manual dependencies used it is not necessary to
 refer other classes via "global" keyword, for the is no instantiation stage.
 Manual dependencies import syntax should be as follows:
 #[dependency|definition-dependency] "path-relative-to-source-root.cppl"
+
+STATUS: Open
+
+
+L-6
+
+TITLE: ClassTemplateDecl should be instantiated.
+
+DESCRIPTION: During instantiation we should move it
+out of package namespace, or make a copy, and shadow previous
+declaration. Even though ClassTemplateDecl is dependent context
+itself it should belong to non-dependent namespace afterall.
+Otherwise every implicit or explicit instantiaton will be
+considered as dependent, due to wrong
+Template->getDeclContext()->isDependentContext().
+See TemplateName::isDependent.
 
 STATUS: Open

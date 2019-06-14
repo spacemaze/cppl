@@ -382,7 +382,7 @@ ASTMutationListener *Decl::getASTMutationListener() const {
 }
 
 bool Decl::isLevitationPackageDependent() const {
-  return getDeclContext()->isDependentContext();
+  return getDeclContext()->isPackageDependentContext();
 }
 
 unsigned Decl::getMaxAlignment() const {
