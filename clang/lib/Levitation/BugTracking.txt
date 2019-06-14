@@ -6,7 +6,7 @@ DESCRIPTION: It is possible to produce implicit template specializations in
 different places. Which could be a dependencies for same AST, and it should be
 possible to merge such instantiations during dependency loading.
 
-STATUS: Open
+STATUS: In Progress
 
 
 L-2
