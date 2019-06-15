@@ -1378,8 +1378,17 @@ Decl *TemplateDeclInstantiator::VisitClassTemplateDecl(ClassTemplateDecl *D) {
     // friend target decl?
   } else {
     Inst->setAccess(D->getAccess());
-    if (!PrevClassTemplate)
-      Inst->setInstantiatedFromMemberTemplate(D);
+    if (!PrevClassTemplate) {
+      // C++ Levitation:
+      // replaced "Inst->setInstantiatedFromMemberTemplate(D);"
+      // with more special conditions for C++ Levitation mode.
+      if (
+        !SemaRef.getLangOpts().LevitationMode ||
+        D->isCXXClassMember()
+      ) {
+        Inst->setInstantiatedFromMemberTemplate(D);
+      }
+    }
   }
 
   // Trigger creation of the type for the instantiation.
@@ -3560,7 +3569,11 @@ TemplateDeclInstantiator::InstantiateClassTemplatePartialSpecialization(
   if (SubstQualifier(PartialSpec, InstPartialSpec))
     return nullptr;
 
-  InstPartialSpec->setInstantiatedFromMember(PartialSpec);
+  // C++ Levitation:
+  // replaced simple "InstPartialSpec->setInstantiatedFromMember(PartialSpec);"
+  // with more special conditions for C++ Levitation mode.
+  if (!SemaRef.getLangOpts().LevitationMode || PartialSpec->isCXXClassMember())
+    InstPartialSpec->setInstantiatedFromMember(PartialSpec);
   InstPartialSpec->setTypeAsWritten(WrittenTy);
 
   // Check the completed partial specialization.

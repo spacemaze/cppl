@@ -2593,8 +2593,7 @@ void ASTDeclReader::mergeTemplatePattern(RedeclarableTemplateDecl *D,
 template<typename T>
 bool isImplicitTemplateSpecialization(T *Decl) {
   if (const auto *CTSD = dyn_cast<ClassTemplateSpecializationDecl>(Decl)) {
-    MemberSpecializationInfo *MSI = CTSD->getMemberSpecializationInfo();
-    return MSI->getTemplateSpecializationKind() == TSK_ImplicitInstantiation;
+    return CTSD->getSpecializationKind() == TSK_ImplicitInstantiation;
   }
   return false;
 }

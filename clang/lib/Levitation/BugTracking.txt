@@ -6,7 +6,7 @@ DESCRIPTION: It is possible to produce implicit template specializations in
 different places. Which could be a dependencies for same AST, and it should be
 possible to merge such instantiations during dependency loading.
 
-STATUS: In Progress
+STATUS: Fixed
 BLOCKED BY: L-6
 
 
@@ -67,7 +67,7 @@ considered as dependent, due to wrong
 Template->getDeclContext()->isDependentContext().
 See TemplateName::isDependent.
 
-STATUS: Open
+STATUS: Fixed
 
 
 L-7

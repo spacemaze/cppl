@@ -328,12 +328,10 @@ class PackageDependentClassesMarker
 
       // Methods which ignore package namespace enclosure
       void VisitClassTemplatePartialSpecializationDecl(ClassTemplatePartialSpecializationDecl *D) {
-        // We do nothing.
-        // Basically we just keep LevitationPackageDependent = false
+        MarkAction(D);
       }
       void VisitClassTemplateDecl(ClassTemplateDecl *D) {
-        // We do nothing.
-        // Basically we just keep LevitationPackageDependent = false
+        MarkAction(D);
       }
 
       void VisitNamespaceDecl(NamespaceDecl *D) {
@@ -524,42 +522,80 @@ public:
     return New;
   }
 
-  // FIXME levitation: I think we don't need this, but keep for now, for better
-  // commit diffs.
+  NamedDecl *VisitClassTemplateDecl(
+          ClassTemplateDecl *PackageDependent
+  ) {
+    DeclContext *Owner = getInstantiatedDC(PackageDependent->getDeclContext());
+    TemplateDeclInstantiator Instantiator(
+            *SemaObj,
+            Owner,
+            MultiLevelTemplateArgumentList()
+    );
+
+    auto *CTD = cast<ClassTemplateDecl>(
+        Instantiator.VisitClassTemplateDecl(PackageDependent)
+    );
+
+    // TemplateDeclInstantiator thinks we're instantiating member declarations,
+    // and due to this assumption it:
+    // 1. Does setInstantiatedFromMemberTemplate.
+    // 2. Postpones definition instantiation itself, till
+    // InstantiateClassMembers of parent. But there is no parent and no such call.
+    // So,
+    // 1. We altered behaviour of TemplateDeclInstantiator
+    // and don't call setInstantiatedFromMemberTemplate for non-members.
+    // 2. Run pattern instantiation explicitly.
+
+    auto *PackageDependentPattern = PackageDependent->getTemplatedDecl();
+    auto *NewPattern = CTD->getTemplatedDecl();
+
+    instantiateClass(
+        NewPattern,
+        PackageDependentPattern,
+        /*AffectDeclContext=*/false
+    );
+
+    return CTD;
+  }
+
   NamedDecl *VisitClassTemplatePartialSpecializationDecl(
           ClassTemplatePartialSpecializationDecl *PackageDependent
   ) {
-    auto &Context = SemaObj->getASTContext();
-    auto &TemplateArgs = PackageDependent->getTemplateArgs();
-    ClassTemplateDecl* Template = PackageDependent->getDescribedClassTemplate();
+    DeclContext *Owner = getInstantiatedDC(PackageDependent->getDeclContext());
 
-    TemplateArgumentListInfo ArgsAsWritten;
-    for (auto A : PackageDependent->getTemplateArgsAsWritten()->arguments()) {
-      ArgsAsWritten.addArgument(A);
-    }
-
-    ClassTemplatePartialSpecializationDecl *New = ClassTemplatePartialSpecializationDecl::Create(
-        Context,
-        PackageDependent->getTagKind(),
-        VisitContext.SemanticDC,
-        PackageDependent->getBeginLoc(),
-        PackageDependent->getLocation(),
-
-        // FIXME: we may probably bump into scope issue.
-        // But probably it will keep scope of previous decl.
-        PackageDependent->getTemplateParameters(),
-        Template,
-        TemplateArgs.asArray(),
-        ArgsAsWritten,
-        QualType(PackageDependent->getTypeForDecl(), 0),
-        getPreviousInstantiation(PackageDependent)
+    TemplateDeclInstantiator Instantiator(
+            *SemaObj,
+            Owner,
+            MultiLevelTemplateArgumentList()
     );
 
-    setAdditionalSpecializationProperties(New, PackageDependent);
+    auto *CTPSD = cast<ClassTemplatePartialSpecializationDecl>(
+        Instantiator
+        .VisitClassTemplatePartialSpecializationDecl(PackageDependent)
+    );
 
-    instantiateClass(New, PackageDependent);
+    assert(
+        !PackageDependent->getInstantiatedFromMemberClass() &&
+        "All member class declarations are not subject of explicit "
+        "package instantiation calls. Such decls should be instantiated "
+        "during their parent package instantiation process"
+    );
 
-    return New;
+    // TemplateDeclInstantiator thinks we're instantiating member declarations,
+    // and due to this assumption it:
+    // 1. Does setInstantiatedFromMember.
+    // 2. Postpones definition instantiation itself, till
+    // InstantiateClassMembers of parent. But there is no parent and no such call.
+    // So,
+    // 1. We altered behaviour of TemplateDeclInstantiator
+    // and don't call setInstantiatedFromMember for non-members.
+    // 2. Run pattern instantiation explicitly.
+
+    CTPSD->setInstantiatedFromMember(nullptr);
+
+    instantiateClass(PackageDependent, CTPSD);
+
+    return CTPSD;
   }
 
   NamedDecl *VisitCXXRecordDecl(CXXRecordDecl *PackageDependent) {
@@ -863,4 +899,6 @@ void Sema::InstantiatePackageClasses() {
       Instantiator.Visit(D);
     }
   }
+
+  PerformPendingInstantiations();
 }
