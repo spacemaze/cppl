@@ -894,9 +894,15 @@ void Sema::InstantiatePackageClasses() {
   PackageDeclsInstantiator Instantiator(this);
   Instantiator.Visit(PackageNamespace);
 
-  if (ToBeInstantiated.size()) {
-    for (auto *D : ToBeInstantiated) {
-      Instantiator.Visit(D);
+  {
+    // Create a local instantiation scope for this class template, which
+    // will contain the instantiations of the template parameters.
+    LocalInstantiationScope Scope(*this);
+
+    if (ToBeInstantiated.size()) {
+      for (auto *D : ToBeInstantiated) {
+        Instantiator.Visit(D);
+      }
     }
   }
 
