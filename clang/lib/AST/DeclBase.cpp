@@ -1079,9 +1079,9 @@ bool DeclContext::isStdNamespace() const {
   return II && II->isStr("std");
 }
 
-bool DeclContext::isDependentContext() const {
+bool DeclContext::isDependentContext(bool IgnorePackageness) const {
 
-  if (isFileContext()) {
+  if (!IgnorePackageness && isFileContext()) {
 
     // Levitation: on Build AST stage, we recognize
     // dependent packages by its "belongness" to package namespace.
@@ -1097,11 +1097,6 @@ bool DeclContext::isDependentContext() const {
 
   if (const auto *Record = dyn_cast<CXXRecordDecl>(this)) {
     if (Record->getDescribedClassTemplate())
-      return true;
-
-    // Levitation: on Build Obj stage, we recognize
-    // dependent packages directly by corresponding property.
-    if (Record->isLevitationPackageDependent())
       return true;
 
     if (Record->isDependentLambda())
@@ -1122,7 +1117,7 @@ bool DeclContext::isDependentContext() const {
   // DeclContext. A context within it (such as a lambda-expression)
   // should be considered dependent.
 
-  return getParent() && getParent()->isDependentContext();
+  return getParent() && getParent()->isDependentContext(IgnorePackageness);
 }
 
 // C++ Levitation extension:

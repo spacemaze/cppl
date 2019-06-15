@@ -527,7 +527,8 @@ void ASTDeclReader::ReadFunctionDefinition(FunctionDecl *FD) {
       case GVA_StrongExternal:
       case GVA_StrongODR:
       case GVA_DiscardableODR:
-        SkipDefinition = true;
+        if (!FD->isDependentContext(/*IgnorePackageness*/true))
+          SkipDefinition = true;
         break;
       default:
         // do nothing

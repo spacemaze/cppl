@@ -1861,7 +1861,15 @@ public:
 
   /// Determines whether this context is dependent on a
   /// template parameter.
-  bool isDependentContext() const;
+  /// C++ Levitation:
+  ///   If C++ Levitation mode is activated,
+  ///   Altered isDependentContext checks whether decl context belongs
+  ///   to package namespace or is package namespace.
+  ///   Such declaration context are also considered as dependent.
+  ///
+  ///   In order to get old behaviour within active Levitation mode
+  ///   set IgnorePackageness = true.
+  bool isDependentContext(bool IgnorePackageness = false) const;
 
   /// C++ Levitation extension:
   /// Determines whether current context is C++ Levitation package
