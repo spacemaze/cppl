@@ -9643,14 +9643,6 @@ static GVALinkage basicGVALinkageForFunction(const ASTContext &Context,
   if (!FD->isInlined())
     return External;
 
-  // TODO Levitation: add reference to C++ Levitation draft standard
-  // C++ Levitation:
-  if (Context.getLangOpts().LevitationMode &&
-      Context.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildAST) {
-    if (!FD->isInlineSpecified())
-      return External;
-  }
-
   if ((!Context.getLangOpts().CPlusPlus &&
        !Context.getTargetInfo().getCXXABI().isMicrosoft() &&
        !FD->hasAttr<DLLExportAttr>()) ||

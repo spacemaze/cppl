@@ -83,4 +83,4 @@ For this case:
   }
 it also produces external function, ignoring "inline" specifier.
 
-STATUS: Open
+STATUS: Fixed.

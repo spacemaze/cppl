@@ -8678,17 +8678,23 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     // C++ Levitation extension: altering of [class.mfct]p2:
     // A  member function may be defined (_dcl.fct.def_) in its class defini-
     // tion, in which case it is forced to be externally visible.
-
-    bool LevitationFunctionDefinition =
+    // also see ASTContext.cpp, basicGVALinkageForFunction, there are
+    // no alterations, but it gives you a hint what exactly "inline" term
+    // means for linkage.
+    bool LevitationExternalFunctionDefinition =
         getLangOpts().LevitationMode &&
-        getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildAST;
+        getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildAST &&
+        !NewFD->isInlineSpecified();
 
     if (isa<CXXMethodDecl>(NewFD) && DC == CurContext &&
         D.isFunctionDefinition() &&
-        !LevitationFunctionDefinition) {
+        !LevitationExternalFunctionDefinition) {
       // C++ [class.mfct]p2:
       //   A member function may be defined (8.4) in its class definition, in
       //   which case it is an inline member function (7.1.2)
+      // FIXME Levitation: In fact it just sets IsInline, there is no
+      //   ImplicitlyInline flag by the way. Why not to change
+      //   name to setInline()?
       NewFD->setImplicitlyInline();
     }
 

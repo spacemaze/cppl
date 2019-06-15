@@ -204,7 +204,12 @@ public:
     LevitationMode = true;
     ModuleMgr.LevitationMode = true;
 
-    if (CompilerInst.getFrontendOpts().LevitationBuildDeclaration)
+    if (
+      CompilerInst.getFrontendOpts().LevitationBuildDeclaration ||
+
+      CompilerInst.getLangOpts().getLevitationBuildStage() ==
+        LangOptions::LBSK_BuildPreamble
+    )
       ReadDeclarationsOnly = true;
   }
 
