@@ -68,3 +68,19 @@ Template->getDeclContext()->isDependentContext().
 See TemplateName::isDependent.
 
 STATUS: Open
+
+
+L-7
+
+TITLE: Cancelation of 'implicit methods inlining' also forces explicit inline
+functions to be external.
+
+DESCRIPTION: Current implelentation of "forcing in-line methods definition" to
+be external, unless "inline" is provided explicitly works wrong.
+For this case:
+  struct dummy {
+    inline dummy &operator<<(const char*) {}
+  }
+it also produces external function, ignoring "inline" specifier.
+
+STATUS: Open
