@@ -27,6 +27,7 @@ DESCRIPTION: Enable scope member functions instantiations. It should work
 for regular member functions and for template specializations as well.
 
 STATUS: In progress.
+BLOCKED-BY: L-8
 
 
 L-4
@@ -84,3 +85,12 @@ For this case:
 it also produces external function, ignoring "inline" specifier.
 
 STATUS: Fixed.
+
+L-8
+
+TITLE: ASTReader, Support of top-level variables.
+
+DESCRIPTION: In ReadDeclarationsOnly mode, all top level variables
+should be marked as external, with omitted initialization section.
+
+STATUS: Open.

@@ -2598,6 +2598,28 @@ bool isImplicitTemplateSpecialization(T *Decl) {
   return false;
 }
 
+// C++ Levitation extension:
+bool levitationCanMerge(
+    const NamedDecl *Existing,
+    const NamedDecl *New
+) {
+
+  // Some fast cases first.
+
+  if (isa<NamespaceDecl>(Existing))
+    return true;
+
+  if (isImplicitTemplateSpecialization(Existing))
+    return true;
+
+  // Basically we can't merge package dependent declaration and
+  // it's instantiated analogue.
+  // All other cases are possible to be merged.
+  return Existing->isLevitationPackageDependent() ==
+         New->isLevitationPackageDependent();
+
+}
+
 /// Attempts to merge the given declaration (D) with another declaration
 /// of the same entity.
 template<typename T>
@@ -2609,11 +2631,14 @@ void ASTDeclReader::mergeRedeclarable(Redeclarable<T> *DBase, T *Existing,
   // C++ Levitation extension:
   // Per this mode only namespaces and implicit template specializations
   // are allowed to be merged.
-  if (
-    Reader.getContext().getLangOpts().LevitationMode &&
-    !(isa<NamespaceDecl>(D) || isImplicitTemplateSpecialization(D))
-  )
-    return;
+  if (Reader.getContext().getLangOpts().LevitationMode) {
+    if (const auto *ExistingND = dyn_cast<NamedDecl>(Existing))
+      if (const auto *NewND = dyn_cast<NamedDecl>(D)) {
+        if (!levitationCanMerge(ExistingND, NewND))
+          return;
+      }
+  }
+
 
   T *ExistingCanon = Existing->getCanonicalDecl();
   T *DCanon = D->getCanonicalDecl();
