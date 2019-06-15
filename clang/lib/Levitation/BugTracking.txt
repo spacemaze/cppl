@@ -21,12 +21,12 @@ STATUS: Open
 
 L-3
 
-TITLE: Out of scope member functions instantiation.
+TITLE: Out of scope members instantiation.
 
 DESCRIPTION: Enable scope member functions instantiations. It should work
 for regular member functions and for template specializations as well.
 
-STATUS: Open
+STATUS: In progress.
 
 
 L-4
