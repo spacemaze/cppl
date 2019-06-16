@@ -5341,6 +5341,22 @@ NamedDecl *Sema::FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
     return D;
   }
 
+  // C++ Levitation extension:
+  // Legacy implementation basically uses findInstantiationOf and
+  // isInstantiationOf methods. The latter doesn't know about
+  // levitation cases. For this case we can use special map of
+  // all package instantiated declarations.
+  // We perform legacy checks only in case if it wasn't directly
+  // instantiated by package instantiator.
+  // NOTE: Legacy checks should work for cases if it is some member
+  // class or function which belongs to decl created during package
+  // instantiation.
+  if (getLangOpts().LevitationMode) {
+    if (const auto *ND = dyn_cast<NamedDecl>(D))
+        if (auto *NewD = substLevitationPackageDependentDecl(ND))
+          return NewD;
+  }
+
   if (CXXRecordDecl *Record = dyn_cast<CXXRecordDecl>(D)) {
     if (!Record->isDependentContext())
       return D;
@@ -5354,6 +5370,7 @@ NamedDecl *Sema::FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
                = dyn_cast<ClassTemplatePartialSpecializationDecl>(Record))
       ClassTemplate = PartialSpec->getSpecializedTemplate()->getCanonicalDecl();
 
+    // C++ Levitation extension:
     if (!ClassTemplate && getLangOpts().LevitationMode) {
       if (auto *D = substLevitationPackageDependentDecl(Record))
         return cast<CXXRecordDecl>(D);

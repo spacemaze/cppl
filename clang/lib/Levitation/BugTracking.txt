@@ -102,4 +102,4 @@ TITLE: Broken support for ClassTemplateSpecializationDecl
 
 DESCRIPTION: Currently we're having crashed during codegen.
 
-STATUS: In progress.
+STATUS: Fixed.

@@ -11228,7 +11228,7 @@ public:
       const DeclarationNameInfo &Name
   );
 
-  Decl *substLevitationPackageDependentDecl(const Decl *D);
+  NamedDecl *substLevitationPackageDependentDecl(const NamedDecl *D);
 
   /// Entry point for levitation package classes instantiation mode.
   /// Should be called straight after Sema has been initialized, and in fact

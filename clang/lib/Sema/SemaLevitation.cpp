@@ -406,9 +406,10 @@ bool Sema::isShadowedLevitationDecl(const Decl *D) const {
     D->isLevitationPackageDependent();
 }
 
-Decl *Sema::substLevitationPackageDependentDecl(const Decl *D) {
-  if (getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
-      D->isLevitationPackageDependent()) {
+NamedDecl *Sema::substLevitationPackageDependentDecl(const NamedDecl *D) {
+  // Probably we don't need filtering by build stage.
+  // But then it makes no sense only at Build Object stage
+  if (getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile) {
     if (auto *Found = findLevitationPackageDependentInstantiationFor(D))
       return cast<NamedDecl>(Found);
   }
