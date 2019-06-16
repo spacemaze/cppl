@@ -3172,10 +3172,15 @@ TemplateDeclInstantiator::VisitClassTemplateSpecializationDecl(
   // As a MS extension, we permit class-scope explicit specialization
   // of member class templates.
   ClassTemplateDecl *ClassTemplate = D->getSpecializedTemplate();
-  assert(ClassTemplate->getDeclContext()->isRecord() &&
-         D->getTemplateSpecializationKind() == TSK_ExplicitSpecialization &&
-         "can only instantiate an explicit specialization "
-         "for a member class template");
+
+  // C++ Levitation extension:
+  // Allow instantiate implicit non-member instantiations as well.
+  if (!SemaRef.getLangOpts().LevitationMode) {
+    assert(ClassTemplate->getDeclContext()->isRecord() &&
+           D->getTemplateSpecializationKind() == TSK_ExplicitSpecialization &&
+           "can only instantiate an explicit specialization "
+           "for a member class template");
+  }
 
   // Lookup the already-instantiated declaration in the instantiation
   // of the class template.
@@ -3279,7 +3284,13 @@ TemplateDeclInstantiator::VisitClassTemplateSpecializationDecl(
       CanonType);
 
   InstD->setAccess(D->getAccess());
-  InstD->setInstantiationOfMemberClass(D, TSK_ImplicitInstantiation);
+
+  // C++ Levitation:
+  // replaced "Inst->setInstantiationOfMemberClass(D);"
+  // with more special conditions for C++ Levitation mode.
+  if (!SemaRef.getLangOpts().LevitationMode || D->isCXXClassMember())
+    InstD->setInstantiationOfMemberClass(D, TSK_ImplicitInstantiation);
+
   InstD->setSpecializationKind(D->getSpecializationKind());
   InstD->setTypeAsWritten(WrittenTy);
   InstD->setExternLoc(D->getExternLoc());
@@ -3287,11 +3298,25 @@ TemplateDeclInstantiator::VisitClassTemplateSpecializationDecl(
 
   Owner->addDecl(InstD);
 
+  // C++ Levitation extension:
+  // TODO Levitation: Consider introducing LevitationPackageInstantiationMode
+  // for TemplateDeclInstantiator class.
+  bool NeedInstantiateClass = true;
+  if (SemaRef.getLangOpts().LevitationMode) {
+    // In LevitationPackageInstantiationMode we just could return InstD
+    // So far we assume, that we never run package instantiation for
+    // anything except top level declarations of package namespaces.
+    // If this is our case, skip InstantiateClass call.
+    if (const auto *NS = dyn_cast<NamespaceDecl>(D->getDeclContext()))
+      if (NS->isLevitationPackage())
+        NeedInstantiateClass = false;
+  }
+
   // Instantiate the members of the class-scope explicit specialization eagerly.
   // We don't have support for lazy instantiation of an explicit specialization
   // yet, and MSVC eagerly instantiates in this case.
   // FIXME: This is wrong in standard C++.
-  if (D->isThisDeclarationADefinition() &&
+  if (D->isThisDeclarationADefinition() && NeedInstantiateClass &&
       SemaRef.InstantiateClass(D->getLocation(), InstD, D, TemplateArgs,
                                TSK_ImplicitInstantiation,
                                /*Complain=*/true))

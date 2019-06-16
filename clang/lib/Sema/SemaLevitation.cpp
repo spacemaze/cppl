@@ -467,7 +467,7 @@ public:
 
     auto &Context = PackageDependent->getASTContext();
 
-    NamespaceDecl *InstantiatedNamespace = NamespaceDecl::Create(
+    NamespaceDecl *New = NamespaceDecl::Create(
         Context,
         PackageDependent->getDeclContext(),
         false,
@@ -477,14 +477,16 @@ public:
         /*Previous Declaration = */PackageDependent->getMostRecentDecl()
     );
 
+    SemaObj->addLevitationPackageDependentInstatiation(PackageDependent, New);
+
     auto *LexicalDC = PackageDependent->getLexicalDeclContext();
 
-    InstantiatedNamespace->setLexicalDeclContext(LexicalDC);
-    LexicalDC->addDecl(InstantiatedNamespace);
+    New->setLexicalDeclContext(LexicalDC);
+    LexicalDC->addDecl(New);
 
-    mapDC(PackageDependent, InstantiatedNamespace);
+    mapDC(PackageDependent, New);
 
-    return InstantiatedNamespace;
+    return New;
   }
 
   NamedDecl *VisitEnumDecl(EnumDecl *PackageDependent) {
@@ -493,31 +495,36 @@ public:
   }
 
   NamedDecl *VisitClassTemplateSpecializationDecl(ClassTemplateSpecializationDecl *PackageDependent) {
+    DeclContext *Owner = getInstantiatedDC(PackageDependent->getDeclContext());
 
-    auto &TemplateArgs = PackageDependent->getTemplateArgs();
-
-    auto *Template = PackageDependent->getSpecializedTemplate();
-    auto *New = ClassTemplateSpecializationDecl::Create(
-        Context,
-        PackageDependent->getTagKind(),
-        VisitContext.SemanticDC,
-        PackageDependent->getBeginLoc(),
-        PackageDependent->getLocation(),
-        Template,
-        TemplateArgs.asArray(),
-        getPreviousInstantiation(PackageDependent)
+    TemplateDeclInstantiator Instantiator(
+            *SemaObj,
+            Owner,
+            MultiLevelTemplateArgumentList()
     );
 
-    if (Template->getTemplateParameters()->size() > 0) {
-      PackageDependent->setTemplateParameterListsInfo(
-          Context,
-          Template->getTemplateParameters()
-      );
-    }
+    auto *New = cast<ClassTemplateSpecializationDecl>(
+        Instantiator
+        .VisitClassTemplateSpecializationDecl(PackageDependent)
+    );
 
-    setAdditionalSpecializationProperties(New, PackageDependent);
+    // TODO Levitation: consider moving it out into parent Visit call.
+    SemaObj->addLevitationPackageDependentInstatiation(PackageDependent, New);
 
-    instantiateClass(New, PackageDependent);
+    assert(
+        !PackageDependent->getInstantiatedFromMemberClass() &&
+        "All member class declarations are not subject of explicit "
+        "package instantiation calls. Such decls should be instantiated "
+        "during their parent package instantiation process"
+    );
+
+    // TemplateDeclInstantiator thinks we're instantiating member declarations,
+    // and due to this assumption it calls setInstantiatedFromMember.
+    // We altered behaviour of TemplateDeclInstantiator, so it
+    // 1. Don't call setInstantiatedFromMember for non-members.
+    // 2. Doesn't call InstantiateClass for exactly this case. It should be called
+    // below.
+    instantiateClass(New, PackageDependent, /*AffectDeclContext=*/false);
 
     return New;
   }
@@ -532,9 +539,14 @@ public:
             MultiLevelTemplateArgumentList()
     );
 
-    auto *CTD = cast<ClassTemplateDecl>(
+    auto *New = cast<ClassTemplateDecl>(
         Instantiator.VisitClassTemplateDecl(PackageDependent)
     );
+
+    // TODO Levitation: consider moving it out into parent Visit call.
+    SemaObj->addLevitationPackageDependentInstatiation(PackageDependent, New);
+
+    assert(!New->getDeclContext()->isDependentContext());
 
     // TemplateDeclInstantiator thinks we're instantiating member declarations,
     // and due to this assumption it:
@@ -547,7 +559,7 @@ public:
     // 2. Run pattern instantiation explicitly.
 
     auto *PackageDependentPattern = PackageDependent->getTemplatedDecl();
-    auto *NewPattern = CTD->getTemplatedDecl();
+    auto *NewPattern = New->getTemplatedDecl();
 
     instantiateClass(
         NewPattern,
@@ -555,7 +567,7 @@ public:
         /*AffectDeclContext=*/false
     );
 
-    return CTD;
+    return New;
   }
 
   NamedDecl *VisitClassTemplatePartialSpecializationDecl(
@@ -569,10 +581,13 @@ public:
             MultiLevelTemplateArgumentList()
     );
 
-    auto *CTPSD = cast<ClassTemplatePartialSpecializationDecl>(
+    auto *New = cast<ClassTemplatePartialSpecializationDecl>(
         Instantiator
         .VisitClassTemplatePartialSpecializationDecl(PackageDependent)
     );
+
+    // TODO Levitation: consider moving it out into parent Visit call.
+    SemaObj->addLevitationPackageDependentInstatiation(PackageDependent, New);
 
     assert(
         !PackageDependent->getInstantiatedFromMemberClass() &&
@@ -590,12 +605,9 @@ public:
     // 1. We altered behaviour of TemplateDeclInstantiator
     // and don't call setInstantiatedFromMember for non-members.
     // 2. Run pattern instantiation explicitly.
+    instantiateClass(New, PackageDependent, /*AffectDeclContext=*/false);
 
-    CTPSD->setInstantiatedFromMember(nullptr);
-
-    instantiateClass(PackageDependent, CTPSD);
-
-    return CTPSD;
+    return New;
   }
 
   NamedDecl *VisitCXXRecordDecl(CXXRecordDecl *PackageDependent) {
