@@ -94,3 +94,12 @@ DESCRIPTION: In ReadDeclarationsOnly mode, all top level variables
 should be marked as external, with omitted initialization section.
 
 STATUS: Open.
+
+
+L-9
+
+TITLE: Broken support for ClassTemplateSpecializationDecl
+
+DESCRIPTION: Currently we're having crashed during codegen.
+
+STATUS: In progress.
