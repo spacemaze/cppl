@@ -44,9 +44,28 @@ static bool SubstQualifier(Sema &SemaRef, const DeclT *OldDecl, DeclT *NewDecl,
   if (!OldDecl->getQualifierLoc())
     return false;
 
-  assert((NewDecl->getFriendObjectKind() ||
-          !OldDecl->getLexicalDeclContext()->isDependentContext()) &&
-         "non-friend with qualified name defined in dependent context");
+  if (
+    SemaRef.getLangOpts().LevitationMode &&
+    SemaRef.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile
+  ) {
+    if (auto *M = dyn_cast<CXXMethodDecl>(NewDecl)) {
+      M->setQualifierInfo(NestedNameSpecifierLoc());
+      return false;
+    }
+  }
+
+  // C++ Levitation extension:
+  // Replaced assertion:
+  // - assert((NewDecl->getFriendObjectKind() ||
+  // -        !OldDecl->getLexicalDeclContext()->isDependentContext()) &&
+  // -       "non-friend with qualified name defined in dependent context");
+  // With one which ignores packageness
+  assert(
+     (NewDecl->getFriendObjectKind() ||
+     !OldDecl->getLexicalDeclContext()->isDependentContext(true)) &&
+     "non-friend with qualified name defined in dependent non-package context"
+  );
+
   Sema::ContextRAII SavedContext(
       SemaRef,
       const_cast<DeclContext *>(NewDecl->getFriendObjectKind()
@@ -1996,6 +2015,13 @@ Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
     CXXMethodDecl *D, TemplateParameterList *TemplateParams,
     Optional<const ASTTemplateArgumentListInfo *>
         ClassScopeSpecializationArgs) {
+
+  // C++ Levitation extension:
+  bool LevitationBuildObjectMode =
+      SemaRef.getLangOpts().LevitationMode &&
+      SemaRef.getLangOpts().getLevitationBuildStage() ==
+          LangOptions::LBSK_BuildObjectFile;
+
   FunctionTemplateDecl *FunctionTemplate = D->getDescribedFunctionTemplate();
   if (FunctionTemplate && !TemplateParams) {
     // We are creating a function template specialization from a function
@@ -2158,8 +2184,22 @@ Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
 
     Method->setLexicalDeclContext(Owner);
     Method->setObjectOfFriendDecl();
-  } else if (D->isOutOfLine())
+  }
+  else if (D->isOutOfLine() && !LevitationBuildObjectMode) {
+    // C++ Levitation extension:
+    // We intentionally skip LexicalDC customization. Because
+    // this is not how it works for FunctionDecl.
+    // FunctionDecl always belong to its declaration place.
+    // Whilst its declaration may belong to another place, which
+    // is supposed to be namespace. We shouldn't change this during
+    // instantiation.
+    //
+    // FIXME Levitation: There should be at least an assertion, that
+    // lexical declaration context is a namespace,
+    // otherwise FindInstantiatedDeclContext should be called
+    // for Method's lexical context.
     Method->setLexicalDeclContext(D->getLexicalDeclContext());
+  }
 
   // Attach the parameters
   for (unsigned P = 0; P < Params.size(); ++P)
