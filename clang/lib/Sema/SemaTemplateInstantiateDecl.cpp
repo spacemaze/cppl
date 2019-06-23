@@ -5371,9 +5371,20 @@ NamedDecl *Sema::FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
       ClassTemplate = PartialSpec->getSpecializedTemplate()->getCanonicalDecl();
 
     // C++ Levitation extension:
-    if (!ClassTemplate && getLangOpts().LevitationMode) {
-      if (auto *D = substLevitationPackageDependentDecl(Record))
-        return cast<CXXRecordDecl>(D);
+    if (
+      getLangOpts().LevitationMode &&
+      getLangOpts().getLevitationBuildStage() ==
+          LangOptions::LBSK_BuildObjectFile
+    ) {
+      assert(
+          !isa<ClassTemplatePartialSpecializationDecl>(Record) &&
+          "ClassTemplatePartialSpecializationDecl should be handled at "
+          "generic C++ Levitation case (see above). "
+          "We should be here only in case of ClassTemplateDecl's pattern."
+      );
+
+      if (auto *D = substLevitationPackageDependentDecl(ClassTemplate))
+        return cast<ClassTemplateDecl>(D)->getTemplatedDecl();
     }
 
     // Walk the current context to find either the record or an instantiation of
