@@ -387,7 +387,8 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
     // Don't print implicit specializations, as they are printed when visiting
     // corresponding templates.
     if (auto FD = dyn_cast<FunctionDecl>(*D))
-      if (FD->getTemplateSpecializationKind() == TSK_ImplicitInstantiation &&
+      if (!Context.getLangOpts().LevitationMode &&
+          FD->getTemplateSpecializationKind() == TSK_ImplicitInstantiation &&
           !isa<ClassTemplateSpecializationDecl>(DC))
         continue;
 
