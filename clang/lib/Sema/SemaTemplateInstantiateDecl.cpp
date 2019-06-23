@@ -2347,6 +2347,9 @@ Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
     }
   }
 
+  // TODO Levitation: We have code that enables proper out of scope functions
+  //  But unfortunately it's unstable and fails on compiling STL preamble.
+
   return Method;
 }
 
