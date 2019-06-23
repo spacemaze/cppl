@@ -91,6 +91,10 @@ public:
       LBSK_BuildObjectFile
   };
 
+  bool isLevitationMode(LevitationBuildStageKind Stage) const {
+    return LevitationMode && getLevitationBuildStage() == Stage;
+  }
+
   enum PragmaMSPointersToMembersKind {
     PPTMK_BestCase,
     PPTMK_FullGeneralitySingleInheritance,
