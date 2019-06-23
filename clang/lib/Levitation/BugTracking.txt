@@ -27,7 +27,7 @@ DESCRIPTION: Enable scope member functions instantiations. It should work
 for regular member functions and for template specializations as well.
 
 STATUS: In progress.
-BLOCKED-BY: L-8
+BLOCKED-BY: L-8, L-10
 
 
 L-4
@@ -103,3 +103,11 @@ TITLE: Broken support for ClassTemplateSpecializationDecl
 DESCRIPTION: Currently we're having crashed during codegen.
 
 STATUS: Fixed.
+
+L-10
+TITLE: Support for out of scope member function templates
+DESCRIPTION: Currently such decls are ignored during instantiation, since
+it was supposed they always belong to namespace which can't be
+dependent in legacy mode.
+
+STATUS: In progress.

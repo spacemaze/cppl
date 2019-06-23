@@ -49,7 +49,8 @@ static bool SubstQualifier(Sema &SemaRef, const DeclT *OldDecl, DeclT *NewDecl,
     SemaRef.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile
   ) {
     if (auto *M = dyn_cast<CXXMethodDecl>(NewDecl)) {
-      M->setQualifierInfo(NestedNameSpecifierLoc());
+      if (!(M->getTemplateSpecializationInfo()))
+        M->setQualifierInfo(NestedNameSpecifierLoc());
       return false;
     }
   }
@@ -1562,9 +1563,25 @@ TemplateDeclInstantiator::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
     return nullptr;
 
   FunctionDecl *Instantiated = nullptr;
-  if (CXXMethodDecl *DMethod = dyn_cast<CXXMethodDecl>(D->getTemplatedDecl()))
+  if (CXXMethodDecl *DMethod = dyn_cast<CXXMethodDecl>(D->getTemplatedDecl())) {
     Instantiated = cast_or_null<FunctionDecl>(VisitCXXMethodDecl(DMethod,
                                                                  InstParams));
+    // C++ Levitation extension, build object mode:
+    // if we instantiating member template, go over all specializations
+    // and instantiate them as well.
+    if (
+      SemaRef.getLangOpts().isLevitationMode(LangOptions::LBSK_BuildObjectFile)
+    ) {
+      for (DeclaratorDecl *Spec : D->specializations()) {
+        auto *MS = cast<CXXMethodDecl>(Spec->getMostRecentDecl());
+
+        instantiateCXXTemplateMethodSpecialization(
+            MS->getTemplateSpecializationInfo(),
+            Instantiated->getDescribedFunctionTemplate()
+        );
+      }
+    }
+  }
   else
     Instantiated = cast_or_null<FunctionDecl>(VisitFunctionDecl(
                                                           D->getTemplatedDecl(),
@@ -2011,16 +2028,204 @@ Decl *TemplateDeclInstantiator::VisitFunctionDecl(FunctionDecl *D,
   return Function;
 }
 
+// C++ Levitation extension
+// Below is stripped version of VisitCXXMethodDecl,
+// specialized for member function template specialization.
+CXXMethodDecl* TemplateDeclInstantiator::instantiateCXXTemplateMethodSpecialization(
+    clang::FunctionTemplateSpecializationInfo *FTSI,
+    FunctionTemplateDecl *NewFunctionTemplate
+) {
+  CXXMethodDecl *D = cast<CXXMethodDecl>(FTSI->getFunction());
+
+  assert(NewFunctionTemplate && "Function template must be present");
+
+  assert(
+      SemaRef.getLangOpts().isLevitationMode(
+          LangOptions::LBSK_BuildObjectFile
+      ) &&
+      "Only levitation build object mode is supported"
+  );
+
+  auto *PackageDependentLexicalDC = D->getLexicalDeclContext();
+  auto *InstantiatedLexicalDC = SemaRef.FindInstantiatedContext(
+      FTSI->getTemplate()->getLocation(),
+      PackageDependentLexicalDC,
+      TemplateArgs
+  );
+
+  DeclContext *LevitationOwner = InstantiatedLexicalDC;
+
+  bool MergeWithParentScope = /*(TemplateParams != nullptr) ||*/
+    !(isa<Decl>(Owner) &&
+      cast<Decl>(Owner)->isDefinedOutsideFunctionOrMethod());
+  LocalInstantiationScope Scope(SemaRef, MergeWithParentScope);
+
+  ExplicitSpecifier InstantiatedExplicitSpecifier =
+      instantiateExplicitSpecifier(SemaRef, TemplateArgs,
+                                   ExplicitSpecifier::getFromDecl(D), D);
+  if (InstantiatedExplicitSpecifier.isInvalid())
+    return nullptr;
+
+  SmallVector<ParmVarDecl *, 4> Params;
+  TypeSourceInfo *TInfo = SubstFunctionType(D, Params);
+  if (!TInfo)
+    return nullptr;
+  QualType T = adjustFunctionTypeForInstantiation(SemaRef.Context, D, TInfo);
+
+  NestedNameSpecifierLoc QualifierLoc = D->getQualifierLoc();
+  if (QualifierLoc) {
+    QualifierLoc = SemaRef.SubstNestedNameSpecifierLoc(QualifierLoc,
+                                                 TemplateArgs);
+    if (!QualifierLoc)
+      return nullptr;
+  }
+
+  DeclContext *DC = Owner;
+
+  // Build the instantiated method declaration.
+  CXXRecordDecl *Record = cast<CXXRecordDecl>(DC);
+  CXXMethodDecl *Method = nullptr;
+
+  SourceLocation StartLoc = D->getInnerLocStart();
+  DeclarationNameInfo NameInfo
+    = SemaRef.SubstDeclarationNameInfo(D->getNameInfo(), TemplateArgs);
+  if (CXXConstructorDecl *Constructor = dyn_cast<CXXConstructorDecl>(D)) {
+    Method = CXXConstructorDecl::Create(
+        SemaRef.Context, Record, StartLoc, NameInfo, T, TInfo,
+        InstantiatedExplicitSpecifier, Constructor->isInlineSpecified(), false,
+        Constructor->isConstexpr());
+    Method->setRangeEnd(Constructor->getEndLoc());
+  } else if (CXXDestructorDecl *Destructor = dyn_cast<CXXDestructorDecl>(D)) {
+    Method = CXXDestructorDecl::Create(SemaRef.Context, Record,
+                                       StartLoc, NameInfo, T, TInfo,
+                                       Destructor->isInlineSpecified(),
+                                       false);
+    Method->setRangeEnd(Destructor->getEndLoc());
+  } else if (CXXConversionDecl *Conversion = dyn_cast<CXXConversionDecl>(D)) {
+    Method = CXXConversionDecl::Create(
+        SemaRef.Context, Record, StartLoc, NameInfo, T, TInfo,
+        Conversion->isInlineSpecified(), InstantiatedExplicitSpecifier,
+        Conversion->isConstexpr(), Conversion->getEndLoc());
+  } else {
+    StorageClass SC = D->isStatic() ? SC_Static : SC_None;
+    Method = CXXMethodDecl::Create(SemaRef.Context, Record, StartLoc, NameInfo,
+                                   T, TInfo, SC, D->isInlineSpecified(),
+                                   D->isConstexpr(), D->getEndLoc());
+  }
+
+  if (D->isInlined())
+    Method->setImplicitlyInline();
+
+  if (QualifierLoc)
+    Method->setQualifierInfo(QualifierLoc);
+
+  // Record this function template specialization.
+  // Will be done during CheckFunctionTemplateSpecialization
+  // Note that Specialization args will also be set at same place
+  //  ArrayRef<TemplateArgument> EmptyInnermost;
+  //  Method->setFunctionTemplateSpecialization(NewFunctionTemplate,
+  //                       TemplateArgumentList::CreateCopy(SemaRef.Context,
+  //                                                        EmptyInnermost),
+  //                                            /*InsertPos=*/nullptr);
+
+  Method->setLexicalDeclContext(InstantiatedLexicalDC);
+
+  // Attach the parameters
+  for (unsigned P = 0; P < Params.size(); ++P)
+    Params[P]->setOwningFunction(Method);
+  Method->setParams(Params);
+
+  if (InitMethodInstantiation(Method, D))
+    Method->setInvalidDecl();
+
+  LookupResult Previous(SemaRef, NameInfo, Sema::LookupOrdinaryName,
+                        Sema::ForExternalRedeclaration);
+
+  bool IsExplicitSpecialization = false;
+
+  // TODO Levitation: perhaps we should assert that
+  //   we have non-null getTemplateSpecializationArgsAsWritten.
+  if (
+    const ASTTemplateArgumentListInfo *Info =
+         D->getTemplateSpecializationArgsAsWritten()
+  ) {
+    SemaRef.LookupQualifiedName(Previous, DC);
+
+    TemplateArgumentListInfo ExplicitArgs(Info->getLAngleLoc(),
+                                          Info->getRAngleLoc());
+    if (SemaRef.Subst(Info->getTemplateArgs(), Info->getNumTemplateArgs(),
+                      ExplicitArgs, TemplateArgs))
+      return nullptr;
+
+    // FIXME Levitation: Previous is empty, but it should find
+    // function template it specializes.
+    // So check below fails.
+    Previous.addDecl(NewFunctionTemplate);
+    if (SemaRef.CheckFunctionTemplateSpecialization(Method,
+                                                    &ExplicitArgs,
+                                                    Previous))
+      Method->setInvalidDecl();
+
+    IsExplicitSpecialization = true;
+  }
+
+  SemaRef.CheckFunctionDeclaration(nullptr, Method, Previous,
+                                   IsExplicitSpecialization);
+
+  if (D->isPure())
+    SemaRef.CheckPureMethod(Method, SourceRange());
+
+  // Propagate access.
+  Method->setAccess(D->getAccess());
+
+  // TODO Levitation: not sure we need it
+  if (NewFunctionTemplate)
+    NewFunctionTemplate->setAccess(Method->getAccess());
+
+  SemaRef.CheckOverrideControl(Method);
+
+  // If a function is defined as defaulted or deleted, mark it as such now.
+  assert (
+      !D->isExplicitlyDefaulted() && !D->isDeletedAsWritten() &&
+      "Member specialization shouldn't be defaulted or deleted."
+  );
+
+  // If this is an explicit specialization, mark the implicitly-instantiated
+  // template specialization as being an explicit specialization too.
+  // FIXME: Is this necessary?
+  if (IsExplicitSpecialization)
+    SemaRef.CompleteMemberSpecialization(Method, Previous);
+
+  LevitationOwner->addDecl(Method);
+
+  // PR17480: Honor the used attribute to instantiate member function
+  // definitions
+  if (Method->hasAttr<UsedAttr>()) {
+    if (const auto *A = dyn_cast<CXXRecordDecl>(Owner)) {
+      SourceLocation Loc;
+      if (const MemberSpecializationInfo *MSInfo =
+              A->getMemberSpecializationInfo())
+        Loc = MSInfo->getPointOfInstantiation();
+      else if (const auto *Spec = dyn_cast<ClassTemplateSpecializationDecl>(A))
+        Loc = Spec->getPointOfInstantiation();
+      SemaRef.MarkFunctionReferenced(Loc, Method);
+    }
+  }
+
+  return Method;
+}
+
 Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
     CXXMethodDecl *D, TemplateParameterList *TemplateParams,
     Optional<const ASTTemplateArgumentListInfo *>
         ClassScopeSpecializationArgs) {
 
   // C++ Levitation extension:
-  bool LevitationBuildObjectMode =
-      SemaRef.getLangOpts().LevitationMode &&
-      SemaRef.getLangOpts().getLevitationBuildStage() ==
-          LangOptions::LBSK_BuildObjectFile;
+  bool LevitationBuildObjectMode = SemaRef.getLangOpts().isLevitationMode(
+      LangOptions::LBSK_BuildObjectFile
+  );
+
+  DeclContext *LevitationOwner = Owner;
 
   FunctionTemplateDecl *FunctionTemplate = D->getDescribedFunctionTemplate();
   if (FunctionTemplate && !TemplateParams) {
@@ -2199,6 +2404,23 @@ Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
     // otherwise FindInstantiatedDeclContext should be called
     // for Method's lexical context.
     Method->setLexicalDeclContext(D->getLexicalDeclContext());
+  } else if (D->isOutOfLine() && LevitationBuildObjectMode) {
+    // C++ Levitation extension:
+    // The exception to previous note are specializations of
+    // function templates. Legacy mode never deal with such
+    // things during instantiation.
+    // Such decls are always out of line by its nature.
+    if (auto *FTSI = D->getTemplateSpecializationInfo()) {
+      auto *PackageDependentLexicalDC = D->getLexicalDeclContext();
+      auto *InstantiatedLexicalDC = SemaRef.FindInstantiatedContext(
+          FTSI->getTemplate()->getLocation(),
+          PackageDependentLexicalDC,
+          TemplateArgs
+      );
+
+      Method->setLexicalDeclContext(InstantiatedLexicalDC);
+      LevitationOwner = InstantiatedLexicalDC;
+    }
   }
 
   // Attach the parameters
@@ -2329,8 +2551,10 @@ Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
   // Otherwise, add the declaration.  We don't need to do this for
   // class-scope specializations because we'll have matched them with
   // the appropriate template.
-  } else {
+  } else if (!LevitationBuildObjectMode) {
     Owner->addDecl(Method);
+  } else {
+    LevitationOwner->addDecl(Method);
   }
 
   // PR17480: Honor the used attribute to instantiate member function
