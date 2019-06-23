@@ -65,7 +65,8 @@ public:
 
   void DeclRead(serialization::DeclID ID, const Decl *D) override {
 
-    llvm::outs() << "PCH DECL, ID = " << ID << ": "
+    llvm::outs() << "PCH DECL " << D
+                 << ", ID = " << ID << ": "
                  << D->getDeclKindName();
 
     if (const NamedDecl *ND = dyn_cast<NamedDecl>(D)) {
