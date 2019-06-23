@@ -334,9 +334,12 @@ class PackageDependentClassesMarker
       void VisitClassTemplateDecl(ClassTemplateDecl *D) {
         MarkAction(D);
       }
+      void VisitCXXMethodDecl(CXXMethodDecl *D) {
+        // Skip.
+      }
 
       void VisitNamespaceDecl(NamespaceDecl *D) {
-        // Do nothing.
+        // Skip.
       }
 
       // Unsupported decls fall here.
@@ -568,7 +571,10 @@ public:
     );
 
     // TODO Levitation: consider moving it out into parent Visit call.
-    SemaObj->addLevitationPackageDependentInstatiation(PackageDependent, New);
+    auto *CanonicalPackageDependent = PackageDependent->getCanonicalDecl();
+    SemaObj->addLevitationPackageDependentInstatiation(
+        CanonicalPackageDependent, New
+    );
 
     assert(!New->getDeclContext()->isDependentContext());
 
