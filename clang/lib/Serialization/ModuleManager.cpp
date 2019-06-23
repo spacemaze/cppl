@@ -58,6 +58,16 @@ ModuleFile *ModuleManager::lookupByModuleName(StringRef Name) const {
   return nullptr;
 }
 
+ModuleFile *ModuleManager::lookupByDeclID(DeclID ID) const {
+  for (auto i : Modules) {
+    auto *M = i.second;
+    if (ID - NUM_PREDEF_DECL_IDS >= M->BaseDeclID &&
+        ID - NUM_PREDEF_DECL_IDS < M->BaseDeclID + M->LocalNumDecls)
+      return M;
+  }
+  return nullptr;
+}
+
 ModuleFile *ModuleManager::lookup(const FileEntry *File) const {
   auto Known = Modules.find(File);
   if (Known == Modules.end())

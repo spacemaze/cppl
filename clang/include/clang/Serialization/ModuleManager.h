@@ -185,6 +185,8 @@ public:
   /// Returns the module associated with the given module name.
   ModuleFile *lookupByModuleName(StringRef ModName) const;
 
+  ModuleFile *lookupByDeclID(DeclID ID) const;
+
   /// Returns the module associated with the given module file.
   ModuleFile *lookup(const FileEntry *File) const;
 

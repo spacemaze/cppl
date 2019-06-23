@@ -9562,6 +9562,38 @@ std::string ASTReader::getOwningModuleNameForDiagnostic(const Decl *D) {
   return {};
 }
 
+bool levitationShouldSkipBody(
+   ASTReader *Reader, FunctionDecl *FD, bool ReadDeclarationsOnly
+) {
+  auto *M = Reader->getModuleManager().lookupByDeclID(FD->getGlobalID());
+  assert(
+    M &&
+    "As long as we're in reader, each decl should be "
+    "associated with module"
+  );
+
+  ReadDeclarationsOnly |=
+      M->Kind == serialization::MK_LevitationDependency;
+
+  if (ReadDeclarationsOnly) {
+    // Skip definition if function has external linkage, and thus
+    // can be detached from declaration
+    switch (Reader->getContext().GetGVALinkageForFunction(FD)) {
+      case GVA_AvailableExternally:
+      case GVA_StrongExternal:
+      case GVA_StrongODR:
+      case GVA_DiscardableODR:
+        if (!FD->isDependentContext(/*IgnorePackageness*/true))
+          return true;
+        break;
+      default:
+        // do nothing
+        break;
+    }
+  }
+  return false;
+}
+
 void ASTReader::finishPendingActions() {
   while (!PendingIdentifierInfos.empty() || !PendingFunctionTypes.empty() ||
          !PendingIncompleteDeclChains.empty() || !PendingDeclChains.empty() ||
@@ -9720,6 +9752,11 @@ void ASTReader::finishPendingActions() {
                                PBEnd = PendingBodies.end();
        PB != PBEnd; ++PB) {
     if (FunctionDecl *FD = dyn_cast<FunctionDecl>(PB->first)) {
+
+      // C++ Levitation extension
+      if (levitationShouldSkipBody(this, FD, ReadDeclarationsOnly))
+        continue;
+
       // For a function defined inline within a class template, force the
       // canonical definition to be the one inside the canonical definition of
       // the template. This ensures that we instantiate from a correct view
