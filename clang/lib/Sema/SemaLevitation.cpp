@@ -305,6 +305,7 @@ class PackageDependentClassesMarker
     // PackageDependentDecls visitor for marking decls as
     // dependent and for instantiating them.
     class PackageDependentDeclsVisitor : public DeclVisitor<PackageDependentDeclsVisitor> {
+      typedef DeclVisitor<PackageDependentDeclsVisitor> ParentTy;
       MarkActionTy &MarkAction;
 
     public:
@@ -342,7 +343,29 @@ class PackageDependentClassesMarker
       // That should never happen, every unsupported case
       // should be handled by parser with proper diagnostics.
       void VisitNamedDecl(NamedDecl *D) {
+        llvm::errs() << "Unsupported declaration.\n";
+        D->dump(llvm::errs());
         llvm_unreachable("Not supported");
+      }
+
+      void Visit(Decl *D) {
+        if (auto *ND = dyn_cast<NamedDecl>(D)) {
+
+          // If it is an out of scope member class definition, skip it,
+          // it should be instantiated as a member, during
+          // InstaniateClassMembers stage.
+          if (
+            !isMemberDecl(ND) ||
+            D->hasAttr<ExcludeFromExplicitInstantiationAttr>()
+          )
+            this->ParentTy::Visit(D);
+        }
+      }
+    private:
+      bool isMemberDecl(NamedDecl *ND) const {
+        return
+          ND->isCXXClassMember() ||
+          isa<CXXMethodDecl>(ND);
       }
     };
 
@@ -369,13 +392,13 @@ public:
 
       PackageDependentDeclsVisitor DependentDeclsMarker(MarkAction);
       for (auto *D : NS->decls())
-         DependentDeclsMarker.Visit(D);
+        DependentDeclsMarker.Visit(D);
 
     return true;
   }
 
 private:
-  bool belongsToMainFile(Decl *NS) {
+  bool belongsToMainFile(Decl *NS) const {
     auto &SourceManager = NS->getASTContext().getSourceManager();
     auto NSFileID = SourceManager.getFileID(NS->getLocation());
     return NSFileID == SourceManager.getMainFileID();
@@ -872,14 +895,14 @@ void Sema::InstantiatePackageClasses() {
   if (!ExternalSource)
     return;
 
-  SmallVector<NamedDecl*, 8> LevitationPackageDependentDecls;
+  SmallVector<NamedDecl*, 8> ToBeInstantiated;
 
   PackageDependentClassesMarker Search([&] (NamedDecl *ND) {
-    LevitationPackageDependentDecls.push_back(ND);
+    ToBeInstantiated.push_back(ND);
   });
   Search.TraverseDecl(Context.getTranslationUnitDecl());
 
-  if (LevitationPackageDependentDecls.empty())
+  if (ToBeInstantiated.empty())
     return;
 
   assert(
@@ -888,21 +911,6 @@ void Sema::InstantiatePackageClasses() {
   );
 
   NamespaceDecl *PackageNamespace = *Search.getPackageNamespaces().begin();
-
-  SmallVector<NamedDecl*, 8> ToBeInstantiated;
-  SmallVector<NamedDecl*, 8> OutOfScopeMemberDecls;
-
-  for (auto *D : LevitationPackageDependentDecls) {
-    // If it is an out of scope member class definition, skip it,
-    // it should be instantiated as a member, during
-    // InstaniateClassMembers stage.
-    if (D->getDeclContext()->isRecord() &&
-        !D->hasAttr<ExcludeFromExplicitInstantiationAttr>()) {
-      OutOfScopeMemberDecls.push_back(D);
-    }
-
-    ToBeInstantiated.push_back(D);
-  }
 
   PackageDeclsInstantiator Instantiator(this);
   Instantiator.Visit(PackageNamespace);
