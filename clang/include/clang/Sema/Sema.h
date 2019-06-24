@@ -11128,7 +11128,19 @@ private:
   /// Value - is its instantiated version.
   llvm::DenseMap<const Decl*, Decl*> PackageDependentDeclInstantiations;
 
+  /// Reversed map of instantiations of package dependent declarations.
+  /// Key - is its instantiated version.
+  /// Value - is dependent declaration.
+  llvm::DenseMap<Decl*, const Decl*> PackageDependentDeclInstantiationsRev;
+
   Decl* findLevitationPackageDependentInstantiationFor(const Decl *D);
+
+  const Decl* findLevitationPackageDependentDecl(const Decl *Instantiation);
+
+  void postFunctionTemplateDefinitionInstantiation(
+      const FunctionTemplateDecl *FTD,
+      SourceLocation PointOfInstantiation
+  );
 
 public:
 
@@ -11172,6 +11184,10 @@ public:
 
   const levitation::DependenciesMap &getLevitationDefinitionDependencies() {
     return LevitationDefinitionDependencies;
+  }
+
+  bool isLevitationMode(LangOptions::LevitationBuildStageKind Mode) {
+    return getLangOpts().isLevitationMode(Mode);
   }
 
 // TODO Levitation:

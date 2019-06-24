@@ -2780,31 +2780,8 @@ Sema::InstantiateClassMembers(SourceLocation PointOfInstantiation,
                                       TemplateArgs);
       }
     } else if (auto *FT = dyn_cast<FunctionTemplateDecl>(D)) {
-      if (
-        getLangOpts().isLevitationMode(LangOptions::LBSK_BuildObjectFile)
-      ) {
-        // FIXME Levitation:
-        // Later InstantiateFunctionDefinition will request its
-        // pattern which will be null, since same pointer is used
-        // to store its FunctionTemplateSpecializationInfo.
-        // We need another place to store link to pattern.
-        // reversed map to Sema::PackageDependentDeclInstantiations
-        //
-        //  if (
-        //    CXXMethodDecl *DMethod = dyn_cast<CXXMethodDecl>(FT->getTemplatedDecl())
-        //  ) {
-        //    PendingLocalImplicitInstantiations.push_back(
-        //        {DMethod, PointOfInstantiation}
-        //    );
-        //    for (DeclaratorDecl *Spec : FT->specializations()) {
-        //      PendingLocalImplicitInstantiations.push_back(
-        //          {
-        //              cast<CXXMethodDecl>(Spec->getMostRecentDecl()),
-        //              PointOfInstantiation
-        //          }
-        //      );
-        //    }
-        //  }
+      if (isLevitationMode(LangOptions::LBSK_BuildObjectFile)) {
+        postFunctionTemplateDefinitionInstantiation(FT, PointOfInstantiation);
       }
     }
   }

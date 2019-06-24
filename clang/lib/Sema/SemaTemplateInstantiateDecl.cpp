@@ -1569,15 +1569,18 @@ TemplateDeclInstantiator::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
     // C++ Levitation extension, build object mode:
     // if we instantiating member template, go over all specializations
     // and instantiate them as well.
-    if (
-      SemaRef.getLangOpts().isLevitationMode(LangOptions::LBSK_BuildObjectFile)
-    ) {
+    if (SemaRef.isLevitationMode(LangOptions::LBSK_BuildObjectFile)) {
+      SemaRef.addLevitationPackageDependentInstatiation(
+          D->getTemplatedDecl(), Instantiated
+      );
       for (DeclaratorDecl *Spec : D->specializations()) {
-        auto *MS = cast<CXXMethodDecl>(Spec->getMostRecentDecl());
-
-        instantiateCXXTemplateMethodSpecialization(
-            MS->getTemplateSpecializationInfo(),
+        auto *PackageDependent = cast<CXXMethodDecl>(Spec->getMostRecentDecl());
+        auto *New = instantiateCXXTemplateMethodSpecialization(
+            PackageDependent->getTemplateSpecializationInfo(),
             Instantiated->getDescribedFunctionTemplate()
+        );
+        SemaRef.addLevitationPackageDependentInstatiation(
+            PackageDependent, New
         );
       }
     }
@@ -2040,9 +2043,7 @@ CXXMethodDecl* TemplateDeclInstantiator::instantiateCXXTemplateMethodSpecializat
   assert(NewFunctionTemplate && "Function template must be present");
 
   assert(
-      SemaRef.getLangOpts().isLevitationMode(
-          LangOptions::LBSK_BuildObjectFile
-      ) &&
+      SemaRef.isLevitationMode(LangOptions::LBSK_BuildObjectFile) &&
       "Only levitation build object mode is supported"
   );
 
@@ -2221,7 +2222,7 @@ Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
         ClassScopeSpecializationArgs) {
 
   // C++ Levitation extension:
-  bool LevitationBuildObjectMode = SemaRef.getLangOpts().isLevitationMode(
+  bool LevitationBuildObjectMode = SemaRef.isLevitationMode(
       LangOptions::LBSK_BuildObjectFile
   );
 
@@ -4401,15 +4402,26 @@ void Sema::InstantiateFunctionDefinition(SourceLocation PointOfInstantiation,
       isa<CXXDeductionGuideDecl>(Function))
     return;
 
+  // C++ Levitation extension:
+  const FunctionDecl *LevitationPackageInstantiation =
+      isLevitationMode(LangOptions::LBSK_BuildObjectFile) ?
+      cast_or_null<FunctionDecl>(
+        findLevitationPackageDependentDecl(Function)
+      ) :
+      nullptr;
+
   // Never instantiate an explicit specialization except if it is a class scope
   // explicit specialization.
   TemplateSpecializationKind TSK =
       Function->getTemplateSpecializationKindForInstantiation();
-  if (TSK == TSK_ExplicitSpecialization)
+  if (TSK == TSK_ExplicitSpecialization && !LevitationPackageInstantiation)
     return;
 
   // Find the function body that we'll be substituting.
-  const FunctionDecl *PatternDecl = Function->getTemplateInstantiationPattern();
+  const FunctionDecl *PatternDecl = LevitationPackageInstantiation ?
+      LevitationPackageInstantiation :
+      Function->getTemplateInstantiationPattern();
+
   assert(PatternDecl && "instantiating a non-template");
 
   const FunctionDecl *PatternDef = PatternDecl->getDefinition();

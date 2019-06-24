@@ -450,7 +450,11 @@ void Sema::addLevitationPackageDependentInstatiation(
     PackageDependent, Instantiation
   });
 
-  if (!insertRes.second)
+  auto insertRevRes = PackageDependentDeclInstantiationsRev.insert({
+    Instantiation, PackageDependent
+  });
+
+  if (!insertRes.second || !insertRevRes.second)
     llvm_unreachable("Package dependent declaration can't be instatiated twice");
 }
 
@@ -459,6 +463,34 @@ Decl* Sema::findLevitationPackageDependentInstantiationFor(const Decl* D) {
   if (Found != PackageDependentDeclInstantiations.end())
     return Found->second;
   return nullptr;
+}
+
+const Decl* Sema::findLevitationPackageDependentDecl(
+    const Decl *Instantiation
+) {
+  auto Found = PackageDependentDeclInstantiationsRev.find(Instantiation);
+  if (Found != PackageDependentDeclInstantiationsRev.end())
+    return Found->second;
+  return nullptr;
+}
+
+void Sema::postFunctionTemplateDefinitionInstantiation(
+    const FunctionTemplateDecl *FTD,
+    SourceLocation PointOfInstantiation
+) {
+  if (
+    auto *DMethod = dyn_cast<CXXMethodDecl>(FTD->getTemplatedDecl())
+  ) {
+    PendingLocalImplicitInstantiations.emplace_back(
+        DMethod, PointOfInstantiation
+    );
+    for (DeclaratorDecl *Spec : FTD->specializations()) {
+      PendingLocalImplicitInstantiations.emplace_back(
+          cast<CXXMethodDecl>(Spec->getMostRecentDecl()),
+          PointOfInstantiation
+      );
+    }
+  }
 }
 
 class PackageDeclsInstantiator : public DeclVisitor<PackageDeclsInstantiator, NamedDecl*> {
