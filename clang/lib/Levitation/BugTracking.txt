@@ -110,7 +110,7 @@ DESCRIPTION: Currently such decls are ignored during instantiation, since
 it was supposed they always belong to namespace which can't be
 dependent in legacy mode.
 
-STATUS: In progress.
+STATUS: Fixed.
 
 L-11
 TITLE: Bug, crash, when failed to read one of dependencies.
