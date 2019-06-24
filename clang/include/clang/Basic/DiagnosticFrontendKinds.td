@@ -291,6 +291,9 @@ def err_levitation_dependency_missed : Error<
 def err_levitation_failed_to_read_pch : Error<
   "Failed to read C++ Levitation precompiled file '%0'">;
 
+def err_levitation_failed_to_load_ast_files : Error<
+  "Failed to load AST files.">;
+
 def err_fe_levitation_dependency_file_io_troubles : Error<
   "Failed to create C++ Levitation dependencies file due to IO errors.">;
 

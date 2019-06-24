@@ -233,23 +233,28 @@ public:
   }
 
   void readPreamble(StringRef Preamble) {
+    if (hasErrors())
+      return;
 
-    auto Res = read(Preamble, serialization::MK_Preamble);
+    ReadResult = read(Preamble, serialization::MK_Preamble);
 
-    if (Res != ASTReader::Success)
-      OnFail(Diags, Preamble, Res);
+    if (ReadResult != ASTReader::Success) {
+      OnFail(Diags, Preamble, ReadResult);
+    }
   }
 
   void readDependency(StringRef Dependency) {
+    if (hasErrors())
+      return;
 
     serialization::ModuleKind Kind = serialization::MK_LevitationDependency;
 
-    ASTReadResult Res = Dependency == MainFile ?
+    ReadResult = Dependency == MainFile ?
         readMainFile() :
         read(Dependency, Kind);
 
-    if (Res != ASTReader::Success)
-      OnFail(Diags, Dependency, Res);
+    if (ReadResult != ASTReader::Success)
+      OnFail(Diags, Dependency, ReadResult);
   }
 
 private:
@@ -283,6 +288,8 @@ private:
   }
 
   void endRead(const OpenedReaderContext &OpenedContext) {
+    if (hasErrors())
+      return;
 
     // Read main file after all dependencies.
     if (MainFile.size() && !mainFileLoaded())
@@ -438,6 +445,15 @@ static void diagFailedToRead(
   (void)Res;
 }
 
+static void diagFailedToLoadASTFiles(
+    DiagnosticsEngine &Diag,
+    ASTReader::ASTReadResult Res
+) {
+  Diag.Report(diag::err_levitation_failed_to_load_ast_files);
+  (void)Res;
+}
+
+
 void LevitationBuildObjectAction::loadASTFiles() {
 
   CompilerInstance &CI = getCompilerInstance();
@@ -483,7 +499,7 @@ void LevitationBuildObjectAction::loadASTFiles() {
   }
 
   if (Reader->hasErrors())
-    diagFailedToRead(CI.getDiagnostics(), MainFile, Reader->getStatus());
+    diagFailedToLoadASTFiles(CI.getDiagnostics(), Reader->getStatus());
 }
 
 void LevitationBuildObjectAction::setupDeserializationListener(
