@@ -2031,6 +2031,45 @@ Decl *TemplateDeclInstantiator::VisitFunctionDecl(FunctionDecl *D,
   return Function;
 }
 
+bool substTemplateArgumentList(
+    TemplateArgumentListInfo &Output,
+    Sema &SemaRef,
+    clang::FunctionTemplateSpecializationInfo *FTSI,
+    const MultiLevelTemplateArgumentList &TemplateArgs
+) {
+  if (auto *Info = FTSI->TemplateArgumentsAsWritten) {
+    Output.setLAngleLoc(Info->getLAngleLoc());
+    Output.setRAngleLoc(Info->getRAngleLoc());
+
+    if (SemaRef.Subst(
+        Info->getTemplateArgs(),
+        Info->getNumTemplateArgs(),
+        Output,
+        TemplateArgs
+    ))
+      return true;
+
+  } else if (auto *Args = FTSI->TemplateArguments) {
+
+    SmallVector<TemplateArgumentLoc, 8> FakeArgLocs;
+    FakeArgLocs.reserve(Args->size());
+
+    for (auto &Arg : Args->asArray()) {
+      FakeArgLocs.emplace_back(Arg, (TypeSourceInfo*)nullptr);
+    }
+
+    if (SemaRef.Subst(
+        FakeArgLocs.begin(),
+        FakeArgLocs.size(),
+        Output,
+        TemplateArgs
+    ))
+      return true;
+  }
+
+  return false;
+}
+
 // C++ Levitation extension
 // Below is stripped version of VisitCXXMethodDecl,
 // specialized for member function template specialization.
@@ -2086,22 +2125,20 @@ CXXMethodDecl* TemplateDeclInstantiator::instantiateCXXTemplateMethodSpecializat
   // Build the instantiated method declaration.
   CXXRecordDecl *Record = cast<CXXRecordDecl>(DC);
   CXXMethodDecl *Method = nullptr;
-
   SourceLocation StartLoc = D->getInnerLocStart();
   DeclarationNameInfo NameInfo
     = SemaRef.SubstDeclarationNameInfo(D->getNameInfo(), TemplateArgs);
   if (CXXConstructorDecl *Constructor = dyn_cast<CXXConstructorDecl>(D)) {
+
     Method = CXXConstructorDecl::Create(
         SemaRef.Context, Record, StartLoc, NameInfo, T, TInfo,
         InstantiatedExplicitSpecifier, Constructor->isInlineSpecified(), false,
         Constructor->isConstexpr());
+
     Method->setRangeEnd(Constructor->getEndLoc());
+
   } else if (CXXDestructorDecl *Destructor = dyn_cast<CXXDestructorDecl>(D)) {
-    Method = CXXDestructorDecl::Create(SemaRef.Context, Record,
-                                       StartLoc, NameInfo, T, TInfo,
-                                       Destructor->isInlineSpecified(),
-                                       false);
-    Method->setRangeEnd(Destructor->getEndLoc());
+    llvm_unreachable("Destructor can not be a template.");
   } else if (CXXConversionDecl *Conversion = dyn_cast<CXXConversionDecl>(D)) {
     Method = CXXConversionDecl::Create(
         SemaRef.Context, Record, StartLoc, NameInfo, T, TInfo,
@@ -2120,15 +2157,6 @@ CXXMethodDecl* TemplateDeclInstantiator::instantiateCXXTemplateMethodSpecializat
   if (QualifierLoc)
     Method->setQualifierInfo(QualifierLoc);
 
-  // Record this function template specialization.
-  // Will be done during CheckFunctionTemplateSpecialization
-  // Note that Specialization args will also be set at same place
-  //  ArrayRef<TemplateArgument> EmptyInnermost;
-  //  Method->setFunctionTemplateSpecialization(NewFunctionTemplate,
-  //                       TemplateArgumentList::CreateCopy(SemaRef.Context,
-  //                                                        EmptyInnermost),
-  //                                            /*InsertPos=*/nullptr);
-
   Method->setLexicalDeclContext(InstantiatedLexicalDC);
 
   // Attach the parameters
@@ -2141,37 +2169,25 @@ CXXMethodDecl* TemplateDeclInstantiator::instantiateCXXTemplateMethodSpecializat
 
   LookupResult Previous(SemaRef, NameInfo, Sema::LookupOrdinaryName,
                         Sema::ForExternalRedeclaration);
-
-  bool IsExplicitSpecialization = false;
+  Previous.addDecl(NewFunctionTemplate);
+  SemaRef.LookupQualifiedName(Previous, DC);
 
   // TODO Levitation: perhaps we should assert that
   //   we have non-null getTemplateSpecializationArgsAsWritten.
+  TemplateArgumentListInfo ExplicitArgs;
+
+  if (substTemplateArgumentList(ExplicitArgs, SemaRef, FTSI, TemplateArgs))
+    return nullptr;
+
+  // Note: Check below also calls
+  // setFunctionTemplateSpecialization(...)
   if (
-    const ASTTemplateArgumentListInfo *Info =
-         D->getTemplateSpecializationArgsAsWritten()
-  ) {
-    SemaRef.LookupQualifiedName(Previous, DC);
-
-    TemplateArgumentListInfo ExplicitArgs(Info->getLAngleLoc(),
-                                          Info->getRAngleLoc());
-    if (SemaRef.Subst(Info->getTemplateArgs(), Info->getNumTemplateArgs(),
-                      ExplicitArgs, TemplateArgs))
-      return nullptr;
-
-    // FIXME Levitation: Previous is empty, but it should find
-    // function template it specializes.
-    // So check below fails.
-    Previous.addDecl(NewFunctionTemplate);
-    if (SemaRef.CheckFunctionTemplateSpecialization(Method,
-                                                    &ExplicitArgs,
-                                                    Previous))
-      Method->setInvalidDecl();
-
-    IsExplicitSpecialization = true;
-  }
+    SemaRef.CheckFunctionTemplateSpecialization(Method, &ExplicitArgs, Previous)
+  )
+    Method->setInvalidDecl();
 
   SemaRef.CheckFunctionDeclaration(nullptr, Method, Previous,
-                                   IsExplicitSpecialization);
+                                   /*IsExplicitSpecialization*/true);
 
   if (D->isPure())
     SemaRef.CheckPureMethod(Method, SourceRange());
@@ -2194,8 +2210,7 @@ CXXMethodDecl* TemplateDeclInstantiator::instantiateCXXTemplateMethodSpecializat
   // If this is an explicit specialization, mark the implicitly-instantiated
   // template specialization as being an explicit specialization too.
   // FIXME: Is this necessary?
-  if (IsExplicitSpecialization)
-    SemaRef.CompleteMemberSpecialization(Method, Previous);
+  SemaRef.CompleteMemberSpecialization(Method, Previous);
 
   LevitationOwner->addDecl(Method);
 
