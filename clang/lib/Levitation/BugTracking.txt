@@ -129,3 +129,27 @@ namespace std {
     extern std::dummy cout;
 }
 STATUS: Fixed.
+
+L-13
+TITLE: Redeclaration detection improvement
+DESCRIPTION:
+// preamble.cpp
+
+struct Dummy {
+     template <typename T>
+     inline void f() {};
+  };
+
+  extern Dummy d;
+
+// EOF
+
+preamble --> B --> C --> D
+          `---------^
+
+1. When we parse B, it creates implicit instantiation of Dummy::f<int>()
+2. When we parse C, it also creates implicit instantiation of Dummy::f<int>()
+3. When we instantiate C it already has package instantiated version of f<int>,
+and it has non-instantiated version of its own f<int>. So it creates
+another package-instantiated f<int>. But it could find out that we always have it in
+dependencies.
