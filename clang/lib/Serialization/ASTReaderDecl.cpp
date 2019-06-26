@@ -964,7 +964,14 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
       if (InsertPos)
         CommonPtr->Specializations.InsertNode(FTInfo, InsertPos);
       else {
-        assert(Reader.getContext().getLangOpts().Modules &&
+        // C++ Levitation extension
+        const auto &LangOpts = Reader.getContext().getLangOpts();
+
+        bool MergingEnabled =
+                LangOpts.Modules ||
+                LangOpts.isLevitationMode(LangOptions::LBSK_BuildObjectFile);
+
+        assert(MergingEnabled &&
                "already deserialized this template specialization");
         mergeRedeclarable(FD, ExistingInfo->getFunction(), Redecl);
       }

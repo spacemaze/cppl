@@ -116,3 +116,16 @@ L-11
 TITLE: Bug, crash, when failed to read one of dependencies.
 DESCRIPTION:
 STATUS: Fixed.
+
+L-12
+TITLE: Bug, crash, during second load of same template specialization.
+DESCRIPTION: Crashing if we use preamble as follows:
+namespace std {
+    struct dummy {
+        template <typename T> inline std::dummy &operator<<(T)         {
+            return *this;
+        }
+        template<> inline std::dummy &operator<<<const char *>(const char *)    };
+    extern std::dummy cout;
+}
+STATUS: Fixed.
