@@ -9562,23 +9562,32 @@ std::string ASTReader::getOwningModuleNameForDiagnostic(const Decl *D) {
   return {};
 }
 
-bool levitationShouldSkipBody(
-   ASTReader *Reader, FunctionDecl *FD, bool ReadDeclarationsOnly
-) {
-  auto *M = Reader->getModuleManager().lookupByDeclID(FD->getGlobalID());
+bool ASTReader::levitationReadDeclarationsOnly(const Decl *CurDecl) const {
+  // FIXME Levitation: why there is no const getModuleManager version?
+  const auto *M =
+      const_cast<ASTReader*>(this)->getModuleManager()
+      .lookupByDeclID(CurDecl->getGlobalID());
   assert(
     M &&
     "As long as we're in reader, each decl should be "
     "associated with module"
   );
 
-  ReadDeclarationsOnly |=
+  return
+      ForceReadDeclarationsOnly ||
       M->Kind == serialization::MK_LevitationDependency;
+}
 
-  if (ReadDeclarationsOnly) {
+bool ASTReader::levitationShouldSkipBody(const FunctionDecl *FD) const {
+  if (levitationReadDeclarationsOnly(FD)) {
     // Skip definition if function has external linkage, and thus
     // can be detached from declaration
-    switch (Reader->getContext().GetGVALinkageForFunction(FD)) {
+    GVALinkage Linkage =
+        // FIXME Levitation: why there is no const getContext version?
+        const_cast<ASTReader*>(this)->getContext()
+        .GetGVALinkageForFunction(FD);
+
+    switch (Linkage) {
       case GVA_AvailableExternally:
       case GVA_StrongExternal:
       case GVA_StrongODR:
@@ -9754,7 +9763,7 @@ void ASTReader::finishPendingActions() {
     if (FunctionDecl *FD = dyn_cast<FunctionDecl>(PB->first)) {
 
       // C++ Levitation extension
-      if (levitationShouldSkipBody(this, FD, ReadDeclarationsOnly))
+      if (levitationShouldSkipBody(FD))
         continue;
 
       // For a function defined inline within a class template, force the

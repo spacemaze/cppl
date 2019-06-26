@@ -210,7 +210,7 @@ public:
       CompilerInst.getLangOpts().getLevitationBuildStage() ==
         LangOptions::LBSK_BuildPreamble
     )
-      ReadDeclarationsOnly = true;
+      ForceReadDeclarationsOnly = true;
   }
 
   using OpenedScope = levitation::ScopeExit<std::function<void()>>;

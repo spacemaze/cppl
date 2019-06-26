@@ -912,7 +912,23 @@ private:
   PendingLevitationPackageInstantiations;
 
   /// Force to read declarations only. Skip reading function bodies.
-  bool ReadDeclarationsOnly = false;
+  bool ForceReadDeclarationsOnly = false;
+
+  /// Determines whether we should read only declarations from AST file.
+  /// ASTReader's user can force such mode, or it activated automatically
+  /// when we're reading levitation dependency or preamble.
+  /// \param CurDecl declaration we're currently working with. Is used
+  /// to determine current module file.
+  /// \return true of only declarations should be read.
+  bool levitationReadDeclarationsOnly(const Decl *CurDecl) const;
+
+  /// Determines whether we skip reading function body. It is based
+  /// on results of levitationReadDeclarationsOnly and function linkage.
+  /// If in addition to above, function body is something we can link
+  /// externally, then it is skipped.
+  /// \param FD function declaration
+  /// \return true if we should skip body.
+  bool levitationShouldSkipBody(const FunctionDecl *FD) const;
 
   //
   // end of C++ Levitation Mode
