@@ -1407,8 +1407,29 @@ ASTDeclReader::RedeclarableResult ASTDeclReader::VisitVarDeclImpl(VarDecl *VD) {
       Reader.getContext().setBlockVarCopyInit(VD, CopyExpr, Record.readInt());
   }
 
-  if (VD->getStorageDuration() == SD_Static && Record.readInt())
-    Reader.DefinitionSource[VD] = Loc.F->Kind == ModuleKind::MK_MainFile;
+  // C++ Levitation extension
+  bool LevitationBuildObject = Reader
+          .getContext()
+          .getLangOpts()
+          .isLevitationMode(LangOptions::LBSK_BuildObjectFile);
+
+  bool Static = VD->getStorageDuration() == SD_Static;
+
+  if (!LevitationBuildObject) {
+    // Legacy code
+    if (Static && Record.readInt()) {
+      Reader.DefinitionSource[VD] = Loc.F->Kind == ModuleKind::MK_MainFile;
+    }
+  }
+  else {
+    if (Static) {
+      // ModulesCodegen param is mandatory to be read for static vars.
+      // see ASTWriterDecl, VisitVarDecl
+      Record.readInt();
+
+      Reader.DefinitionSource[VD] = !Reader.levitationReadDeclarationsOnly(VD);
+    }
+  }
 
   enum VarKind {
     VarNotTemplate = 0, VarTemplate, StaticDataMemberSpecialization
