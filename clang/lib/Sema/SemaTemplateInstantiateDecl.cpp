@@ -1100,6 +1100,8 @@ Decl *TemplateDeclInstantiator::VisitStaticAssertDecl(StaticAssertDecl *D) {
 }
 
 Decl *TemplateDeclInstantiator::VisitEnumDecl(EnumDecl *D) {
+  // FIXME Levitation: all TemplateDeclInstantiator alterations should be
+  //   part of another class, perhaps even PackageDeclsInstantiator itself.
   EnumDecl *PrevDecl = nullptr;
   if (EnumDecl *PatternPrev = getPreviousDeclForInstantiation(D)) {
     NamedDecl *Prev = SemaRef.FindInstantiatedDecl(D->getLocation(),
@@ -1109,10 +1111,29 @@ Decl *TemplateDeclInstantiator::VisitEnumDecl(EnumDecl *D) {
     PrevDecl = cast<EnumDecl>(Prev);
   }
 
+  // C++ Levitation extension:
+  bool LevitationInstantiatePackageDependentEnum =
+      SemaRef.isLevitationMode(LangOptions::LBSK_BuildObjectFile) &&
+      D->isLevitationPackageDependent();
+
   EnumDecl *Enum =
       EnumDecl::Create(SemaRef.Context, Owner, D->getBeginLoc(),
                        D->getLocation(), D->getIdentifier(), PrevDecl,
                        D->isScoped(), D->isScopedUsingClassTag(), D->isFixed());
+
+  std::unique_ptr<Sema::InstantiatingTemplate> Inst;
+
+  // C++ Levitation:
+  if (LevitationInstantiatePackageDependentEnum)
+    // One will say: this is almost hack.
+    // Another one will say: damn, this is too rude to be just a hack!
+    // Anyways, we need to provide sema with CodeSynthesisContext, in order
+    // to run "subst" methods properly.
+    // And CodeSynthesisContext::TemplateInstantiation is most suitable thing.
+    Inst.reset(new Sema::InstantiatingTemplate(
+        SemaRef, D->getLocation(), Enum
+    ));
+
   if (D->isFixed()) {
     if (TypeSourceInfo *TI = D->getIntegerTypeSourceInfo()) {
       // If we have type source information for the underlying type, it means it
@@ -1134,7 +1155,18 @@ Decl *TemplateDeclInstantiator::VisitEnumDecl(EnumDecl *D) {
 
   SemaRef.InstantiateAttrs(TemplateArgs, D, Enum);
 
-  Enum->setInstantiationOfMemberEnum(D, TSK_ImplicitInstantiation);
+  // C++ Levitation:
+  // Legacy code:
+  // - Enum->setInstantiationOfMemberEnum(D, TSK_ImplicitInstantiation);
+  // setInstantiationOfMemberEnum should not be set if we're dealing
+  // with package dependent top-level enum.
+  if (
+    !LevitationInstantiatePackageDependentEnum ||
+    D->isCXXClassMember()
+  ) {
+    Enum->setInstantiationOfMemberEnum(D, TSK_ImplicitInstantiation);
+  }
+
   Enum->setAccess(D->getAccess());
   // Forward the mangling number from the template to the instantiated decl.
   SemaRef.Context.setManglingNumber(Enum, SemaRef.Context.getManglingNumber(D));
@@ -1171,7 +1203,15 @@ Decl *TemplateDeclInstantiator::VisitEnumDecl(EnumDecl *D) {
   // DR1484 clarifies that enumeration definitions inside of a template
   // declaration aren't considered entities that can be separately instantiated
   // from the rest of the entity they are declared inside of.
-  if (isDeclWithinFunction(D) ? D == Def : Def && !Enum->isScoped()) {
+  //
+  // C++ Levitation extension:
+  // Definitions of top-level package-dependent enums are also subject of
+  // instantiation.
+  bool InstantiateDefinition =
+      (isDeclWithinFunction(D) ? D == Def : Def && !Enum->isScoped()) ||
+      LevitationInstantiatePackageDependentEnum;
+
+  if (InstantiateDefinition) {
     SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, Enum);
     InstantiateEnumDefinition(Enum, Def);
   }

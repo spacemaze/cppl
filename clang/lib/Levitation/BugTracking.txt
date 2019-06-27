@@ -16,7 +16,7 @@ TITLE: Add Enums support
 
 DESCRIPTION: Enable Enums instantiation.
 
-STATUS: Open
+STATUS: Fixed.
 
 
 L-3

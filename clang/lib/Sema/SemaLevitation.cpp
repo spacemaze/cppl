@@ -323,8 +323,8 @@ class PackageDependentClassesMarker
 
         MarkAction(D);
       }
-      void VisitEnumRecordDecl(EnumDecl *D) {
-        llvm_unreachable("Support is not implemented.");
+      void VisitEnumDecl(EnumDecl *D) {
+        MarkAction(D);
       }
 
       // Methods which ignore package namespace enclosure
@@ -549,8 +549,31 @@ public:
   }
 
   NamedDecl *VisitEnumDecl(EnumDecl *PackageDependent) {
-    // TODO levitation: is not implemented.
-    return nullptr;
+
+    DeclContext *Owner = getInstantiatedDC(PackageDependent->getDeclContext());
+
+    TemplateDeclInstantiator Instantiator(
+            *SemaObj,
+            Owner,
+            MultiLevelTemplateArgumentList()
+    );
+
+    auto *New = cast<EnumDecl>(
+        Instantiator
+        .VisitEnumDecl(PackageDependent)
+    );
+
+    // TODO Levitation: consider moving it out into parent Visit call.
+    SemaObj->addLevitationPackageDependentInstatiation(PackageDependent, New);
+
+    assert(
+        !PackageDependent->getInstantiatedFromMemberEnum() &&
+        "All member class declarations are not subject of explicit "
+        "package instantiation calls. Such decls should be instantiated "
+        "during their parent package instantiation process"
+    );
+
+    return New;
   }
 
   NamedDecl *VisitClassTemplateSpecializationDecl(ClassTemplateSpecializationDecl *PackageDependent) {
