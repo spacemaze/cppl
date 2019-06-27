@@ -154,4 +154,34 @@ and it has non-instantiated version of its own f<int>. So it creates
 another package-instantiated f<int>. But it could find out that we always have it in
 dependencies.
 
-Status: Open.
+STATUS: Open.
+
+L-14
+TITLE: Refactor PackageInstantiator
+DESCRIPTION: PackageInstantiator and PackageDependentClassesMarker can be merged into
+single visitor.
+STATUS: Open.
+
+L-15
+TITLE: Extend PackageInstantiator with alterations of TemplateDeclInstantiator
+DESCRIPTION: We added plenty of alterations into TemplateDeclInstantiator, and probably
+it would be good to move them out into PackageInstantiator scope.
+STATUS: Open.
+BLOCKED-BY: L-14
+
+L-16
+TITLE: Make tests llvm compatible
+DESCRIPTION: Currently we have tests under separate git repo, and they are
+bash scripted. I propose to create bash mode which would generate llvm-compatible tests.
+STATUS: Open
+
+L-17
+TITLE: Create C++ Levitation Specification, ver 1.
+DESCRIPTION: Currently we have some draft and notes in notebook. Of course we need spec.
+Ver 1 should include:
+* Packages organization description
+* Package instantiation description
+(for packages with round-trip deps are dependent contexts)
+* Manual dependency import mode description
+* Supported top-level declarations list
+* Rules of out-of-package reference expressions.
