@@ -145,7 +145,7 @@ struct Dummy {
 // EOF
 
 preamble --> B --> C --> D
-          `---------^
+          `--------^
 
 1. When we parse B, it creates implicit instantiation of Dummy::f<int>()
 2. When we parse C, it also creates implicit instantiation of Dummy::f<int>()
