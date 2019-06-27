@@ -862,7 +862,14 @@ void DeclPrinter::VisitVarDecl(VarDecl *D) {
     }
   }
 
-  printDeclType(T, D->getName());
+  // FIXME Levitation:
+  // Declaration type printing has been fixed.
+  // Legacy code:
+  // - printDeclType(T, D->getName());
+  StringRef Name = D->isOutOfLine() ?
+       StringRef(D->getQualifiedNameAsString()) : D->getName();
+  printDeclType(T, Name);
+
   Expr *Init = D->getInit();
   if (!Policy.SuppressInitializers && Init) {
     bool ImplicitInit = false;
