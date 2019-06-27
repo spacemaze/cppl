@@ -73,6 +73,10 @@ public:
       llvm::outs() << " - ";
       ND->printQualifiedName(llvm::outs());
     }
+    if (D->getLocation().isValid()) {
+      llvm::outs() << ", ";
+      D->getLocation().print(llvm::outs(), D->getASTContext().getSourceManager());
+    }
     llvm::outs() << "\n";
 
     DelegatingDeserializationListener::DeclRead(ID, D);
