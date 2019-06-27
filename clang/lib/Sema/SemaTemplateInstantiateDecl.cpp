@@ -4746,8 +4746,19 @@ void Sema::BuildVariableInstantiation(
   if (OldVar->isLocalExternDecl()) {
     NewVar->setLocalExternDecl();
     NewVar->setLexicalDeclContext(Owner);
-  } else if (OldVar->isOutOfLine())
-    NewVar->setLexicalDeclContext(OldVar->getLexicalDeclContext());
+  } else if (OldVar->isOutOfLine()) {
+    // C++ Levitation extension:
+    if (!isLevitationMode(LangOptions::LBSK_BuildObjectFile))
+      // Legacy code
+      NewVar->setLexicalDeclContext(OldVar->getLexicalDeclContext());
+    else {
+      auto *OldLDC = OldVar->getLexicalDeclContext();
+      auto *InstLDC = FindInstantiatedContext(
+          OldVar->getLocation(), OldLDC, TemplateArgs
+      );
+      NewVar->setLexicalDeclContext(InstLDC);
+    }
+  }
   NewVar->setTSCSpec(OldVar->getTSCSpec());
   NewVar->setInitStyle(OldVar->getInitStyle());
   NewVar->setCXXForRangeDecl(OldVar->isCXXForRangeDecl());
