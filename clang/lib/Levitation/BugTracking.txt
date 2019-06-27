@@ -26,7 +26,7 @@ TITLE: Out of scope members instantiation.
 DESCRIPTION: Enable scope member functions instantiations. It should work
 for regular member functions and for template specializations as well.
 
-STATUS: In progress.
+STATUS: Fixed.
 BLOCKED-BY: L-8, L-10
 
 
@@ -93,7 +93,7 @@ TITLE: ASTReader, Support of top-level variables.
 DESCRIPTION: In ReadDeclarationsOnly mode, all top level variables
 should be marked as external, with omitted initialization section.
 
-STATUS: In progress.
+STATUS: Fixed.
 
 
 L-9
@@ -153,3 +153,5 @@ preamble --> B --> C --> D
 and it has non-instantiated version of its own f<int>. So it creates
 another package-instantiated f<int>. But it could find out that we always have it in
 dependencies.
+
+Status: Open.
