@@ -9763,7 +9763,10 @@ void ASTReader::finishPendingActions() {
     if (FunctionDecl *FD = dyn_cast<FunctionDecl>(PB->first)) {
 
       // C++ Levitation extension
-      if (levitationShouldSkipBody(FD))
+      bool LevitationBuildObject = ContextObj->getLangOpts().isLevitationMode(
+          LangOptions::LBSK_BuildObjectFile
+      );
+      if (LevitationBuildObject && levitationShouldSkipBody(FD))
         continue;
 
       // For a function defined inline within a class template, force the
