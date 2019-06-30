@@ -185,3 +185,21 @@ Ver 1 should include:
 * Manual dependency import mode description
 * Supported top-level declarations list
 * Rules of out-of-package reference expressions.
+
+L-18
+TITLE: Add parser diagnostics for unsupported declarations
+DESCRIPTION: Currently if toolchain meet unsupported declaration it crashes
+with llvm_unreachable.
+STATUS: Open
+
+L-19
+TITLE: Add package-dependent top-level variables support
+STATUS: Open
+
+L-20
+TITLE: levitation-deps, when there is no dependencies, it fails with "found isolated cycles" error
+STATUS: Open
+
+L-21
+TITLE: levitation-deps, if absolute source path is written into ldeps, it thinks it doesn't exist
+STATUS: In progress
