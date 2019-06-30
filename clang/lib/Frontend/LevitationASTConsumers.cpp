@@ -168,9 +168,12 @@ namespace {
     }
   };
 
-  DependencyPath makeRelative(StringRef &F, StringRef Parent) {
+  DependencyPath makeRelative(StringRef &F, StringRef ParentRel) {
 
     DependencyPath Relative(F);
+
+    DependencyPath Parent = ParentRel;
+    llvm::sys::fs::make_absolute(Parent);
 
     StringRef Separator = llvm::sys::path::get_separator();
 
@@ -184,15 +187,19 @@ namespace {
 
   class ASTDependenciesProcessor : public SemaObjHolderConsumer {
     CompilerInstance &CI;
-    DependencyPath CurrentInputFile;
+    DependencyPath CurrentInputFileRel;
   public:
-    ASTDependenciesProcessor(CompilerInstance &ci, StringRef currentInputFile)
+    ASTDependenciesProcessor(CompilerInstance &ci, DependencyPath&& currentInputFileRel)
       : CI(ci),
-        CurrentInputFile(makeRelative(
-            currentInputFile,
-            CI.getFrontendOpts().LevitationSourcesRootDir
-        ))
-    {}
+        CurrentInputFileRel(std::move(currentInputFileRel))
+    {
+      if (llvm::sys::path::is_absolute(CurrentInputFileRel)) {
+        llvm::errs()
+        << "Invalid path:\n"
+        << "    " << CurrentInputFileRel.str() << "\n";
+        llvm_unreachable("Input file path should be relative (to source dir parameter)");
+      }
+    }
 
     void HandleTranslationUnit(ASTContext &Context) override {
 
@@ -209,7 +216,7 @@ namespace {
       PackageDependencies Dependencies {
         Validator.validate(SemaObj->getLevitationDeclarationDependencies()),
         Validator.validate(SemaObj->getLevitationDefinitionDependencies()),
-        CurrentInputFile
+        CurrentInputFileRel
       };
 
       auto F = createFile();
@@ -263,7 +270,12 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
     CompilerInstance &CI,
     StringRef InFile
 ) {
-  return llvm::make_unique<ASTDependenciesProcessor>(CI, InFile);
+  auto InFileRel = makeRelative(
+      InFile,
+      CI.getFrontendOpts().LevitationSourcesRootDir
+  );
+
+  return llvm::make_unique<ASTDependenciesProcessor>(CI, std::move(InFileRel));
 }
 
 std::unique_ptr<ASTConsumer> CreatePackageInstantiator() {
