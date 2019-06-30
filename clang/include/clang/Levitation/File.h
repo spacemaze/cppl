@@ -5,6 +5,7 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 #include <memory>
 
 namespace llvm {
@@ -51,6 +52,10 @@ class File {
     FileScope open() {
       // Write to a temporary file and later rename it to the actual file, to avoid
       // possible race conditions.
+
+      StringRef Dir = llvm::sys::path::parent_path(TargetFileName);
+      llvm::sys::fs::create_directories(Dir);
+
       TempPath = TargetFileName;
       TempPath += "-%%%%%%%%";
       int fd;
