@@ -929,6 +929,13 @@ public:
     const auto &Source =
         *PackageData.Strings->getItem(PackageData.PackageFilePathID);
 
+    if (llvm::sys::path::is_absolute(Source)) {
+      Log.error()
+          << "Source should not be absolute:\n"
+          << "    " << Source;
+      return false;
+    }
+
     if (sourceExists(Source))
       Dest.add(PackageData);
     else
