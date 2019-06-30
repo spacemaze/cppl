@@ -1,0 +1,23 @@
+package namespace P1 {
+  template<typename T>
+  struct A {
+    template <typename U>
+    void f();
+    
+    template <typename U>
+    A& operator<<(U v);
+  };
+
+  template<typename T>
+  template<typename U>
+  void A<T>::f() {
+    levitation::Test::context() << "P1::A<T>::f<U>()";
+  }
+
+  template<typename T>
+  template<typename U>
+  A<T> &A<T>::operator<<(U v) {
+    levitation::Test::context() << "P1::A<T>::operator<<(U)";
+    return *this;
+  }
+}

@@ -1,0 +1,6 @@
+package namespace P1 {
+  enum class A : char {
+    V0 = 'A',
+    V1 = 'B'
+  };
+}

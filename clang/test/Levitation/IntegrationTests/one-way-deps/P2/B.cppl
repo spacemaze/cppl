@@ -1,0 +1,9 @@
+package namespace P2 {
+  class B {    
+  public:
+    static int main() {
+      global::P1::A::f();
+      return 0;
+    }
+  };
+}

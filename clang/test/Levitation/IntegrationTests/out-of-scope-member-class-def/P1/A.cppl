@@ -1,0 +1,11 @@
+package namespace P1 {
+  struct A {
+    struct AA;
+  };
+
+  struct A::AA {
+    static void f() {
+      levitation::Test::context() << "P1::A::AA::f()";
+    }
+  };
+}

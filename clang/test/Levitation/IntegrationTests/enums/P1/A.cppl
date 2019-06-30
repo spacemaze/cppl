@@ -1,0 +1,6 @@
+package namespace P1 {
+  enum A {
+    EnumValue0,
+    EnumValue7 = 7
+  };
+}

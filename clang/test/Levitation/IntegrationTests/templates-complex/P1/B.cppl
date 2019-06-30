@@ -1,0 +1,11 @@
+package namespace P1 {
+  struct B {
+    template <typename T>
+    void f() {}
+  };
+  
+  template<>
+  void B::f<typename global::P1::A>() {
+    levitation::Test::context() << "P1::B::f<P1::A>()";
+  }
+}

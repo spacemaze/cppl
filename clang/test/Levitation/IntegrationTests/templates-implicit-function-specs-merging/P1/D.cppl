@@ -1,0 +1,8 @@
+package namespace P1 {
+  struct D {
+    static void f() {
+      global::P1::B::f();
+      global::P1::C::f();
+    }
+  };
+}

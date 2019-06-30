@@ -1,0 +1,13 @@
+int main() {
+  with (
+    auto TestScope = levitation::Test::context()
+        .expect(0)
+        .expect(7)
+    .open()
+  ) {
+    levitation::Test::context()
+        << P1::EnumValue0
+        << P1::EnumValue7;
+  }
+  return levitation::Test::result();
+}

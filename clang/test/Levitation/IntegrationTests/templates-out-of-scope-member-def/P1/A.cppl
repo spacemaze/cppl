@@ -1,0 +1,15 @@
+package namespace P1 {
+  template<typename T>
+  struct A {
+    struct AA;
+  };
+  
+  // Bug: generates duplicates of AA
+  template<typename T>
+  struct A<T>::AA {
+    static void f() {
+      levitation::Test::context() << "P1::A::AA::f()";
+    }
+  };
+
+}

@@ -1,0 +1,18 @@
+int main() {
+// CHECK: ABBC
+  with (
+    auto TestScope = levitation::Test::context()
+        .expect('A')
+        .expect('B')
+        .expect('B')
+        .expect('C')
+    .open()
+  ) {
+    levitation::Test::context()
+    << (char) P1::A::V0
+    << (char) P1::A::V1
+    << (char) P1::B::V0
+    << (char) P1::B::V1;
+  }
+  return levitation::Test::result();
+}

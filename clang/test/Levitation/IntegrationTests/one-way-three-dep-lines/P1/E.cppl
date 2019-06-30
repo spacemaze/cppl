@@ -1,0 +1,9 @@
+package namespace P1 {
+  struct E : public global::P1::C {
+    typename global::P1::C c;
+    static void f() {
+      levitation::Test::context() << "P1::E::f() was called.";
+      global::P1::C::f();
+    }
+  };
+}

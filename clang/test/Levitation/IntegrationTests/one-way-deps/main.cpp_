@@ -1,0 +1,3 @@
+int main() {
+  return P2::B::main();
+}

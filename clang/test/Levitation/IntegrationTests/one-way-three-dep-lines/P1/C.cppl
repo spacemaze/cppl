@@ -1,0 +1,9 @@
+struct C2 {};
+
+namespace P1 {
+  struct C {
+    static void f() {
+      levitation::Test::context() << "P1::C::f() was called.";
+    }
+  };
+}

@@ -1,0 +1,6 @@
+int main() {
+// CHECK: P1::B::f()
+// CHECK-NEXT: P1::A<int>::f()
+  P1::B::f();
+  return 0;
+}

@@ -1,0 +1,7 @@
+int main() {
+// CHECK: P1::B::f<P1::A>()
+  P1::B b;
+  b.f<P1::A>();
+
+  return 0;
+}

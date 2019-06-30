@@ -1,0 +1,6 @@
+package namespace P1 {
+  enum class B : char {
+    V0 = (char)((int)global::P1::A::V0 + 1),
+    V1 = (char)((int)global::P1::A::V1 + 1)
+  };
+}

@@ -1,0 +1,4 @@
+int main() {
+  P1::D::f();
+  return 0;
+}

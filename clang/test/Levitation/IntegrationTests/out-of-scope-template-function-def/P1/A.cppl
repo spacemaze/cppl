@@ -1,0 +1,49 @@
+#include <assert.h>
+
+package namespace P1 {
+  struct A {
+    A() {
+      assert(0);
+    }
+
+    template <typename T>
+    explicit A(T p) {}
+    template <typename T>
+    void f();
+
+    template <typename U>
+    A& operator<<(U v);
+
+  };
+
+  template<>
+  A::A(float p) {
+    levitation::Test::context() << "P1::A::A(float)";
+  }
+
+  template<>
+  A::A(double p) {
+    levitation::Test::context() << "P1::A::A(double)";
+  }
+  
+  template<typename T>
+  void A::f() {
+    assert(0);
+  }
+
+  template<>
+  void A::f<float>() {
+    levitation::Test::context() << "P1::A::f<float>()";
+  }
+
+  template<>
+  void A::f<double>() {
+    levitation::Test::context() << "P1::A::f<double>()";
+  }
+  
+  template<typename U>
+  A &A::operator<<(U v) {
+    levitation::Test::context() << "P1::A<T>::operator<<(U)";
+    return *this;
+  }
+}

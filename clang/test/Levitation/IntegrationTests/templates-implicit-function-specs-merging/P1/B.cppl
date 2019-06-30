@@ -1,0 +1,5 @@
+package namespace P1 {
+  struct B {
+    static inline void f() { d.f<int>(); }
+  };
+}

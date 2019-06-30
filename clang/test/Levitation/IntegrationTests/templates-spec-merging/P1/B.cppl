@@ -1,0 +1,10 @@
+package namespace P1 {
+  struct B {
+    typename global::P1::template A<int> a; // implicit template instantiation
+    static void f() {
+      static B b;
+      levitation::Test::context() << "P1::B::f()";
+      b.a.f();
+    }
+  };
+}

@@ -1,0 +1,5 @@
+int main() {
+// CHECK: P1::A::AA::f()
+  P1::A::AA::f();
+  return 0;
+}

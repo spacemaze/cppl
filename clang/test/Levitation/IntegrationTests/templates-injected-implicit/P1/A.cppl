@@ -1,0 +1,40 @@
+#if 1
+namespace P1 {
+  template<typename T>
+  struct A {
+    void f() {
+      levitation::Test::context() << "P1::A::f()";
+    }
+  };
+
+  template<>
+  struct A<int> {
+    static void f() {
+      levitation::Test::context() << "P1::A<int>::f()";
+      A<float> af; // produces ill formed AST, fails at codegen.
+      af.f();
+    }
+  };
+}
+
+#else
+
+package namespace P1 {
+  template<typename T>
+  struct A {
+    void f() {
+      levitation::Test::context() << "P1::A::f()";
+    }
+  };
+
+  template<>
+  struct A<int> {
+    static void f() {
+      levitation::Test::context() << "P1::A<int>::f()";
+      A<float> af; // produces ill formed AST, fails at codegen.
+      af.f();
+    }
+  };
+}
+
+#endif

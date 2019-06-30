@@ -1,0 +1,8 @@
+package namespace P1 {
+  struct C {
+    static inline void f() {
+      (void)typename global::P1::B();
+      d.f<int>();
+    }
+  };
+}

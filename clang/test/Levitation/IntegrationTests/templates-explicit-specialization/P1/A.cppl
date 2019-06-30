@@ -1,0 +1,13 @@
+package namespace P1 {
+  template<typename T>
+  struct A {
+    static void f();
+  };
+  
+  template<>
+  struct A<int> {
+    void f() {
+      levitation::Test::context() << "P1::A<int>::f()";
+    }
+  };
+}

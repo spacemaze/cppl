@@ -1,0 +1,9 @@
+package namespace P1 {
+  struct C {
+    static void f() {
+      typename global::P1::A a;
+      levitation::Test::context() << "P1::C::f()";
+      a.template f<int>();
+    }
+  };
+}

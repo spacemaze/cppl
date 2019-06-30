@@ -1,0 +1,9 @@
+package namespace P1 {
+  struct D {
+    static void f() {
+      levitation::Test::context() << "P1::D::f()";
+      global::P1::B::f();
+      global::P1::C::f();
+    }
+  };
+}
