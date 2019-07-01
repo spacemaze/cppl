@@ -11,6 +11,10 @@ function generate {
   cp build.sh $OUTPUT_DIR/$1
 }
 
+function generate_main {
+  bash build.sh generate-main $OUTPUT_DIR $1
+}
+
 function execute {
   bash build.sh execute
 }
@@ -18,6 +22,7 @@ function execute {
 WHAT_WE_ARE_DOING=
 
 if [ "$1" == "$BUILD_MODE_GENERATE" ]; then
+
   OUTPUT_DIR=$2
 
   if [[ "${OUTPUT_DIR:0:1}" != "/" ]] ; then
@@ -46,6 +51,25 @@ if [ "$1" == "$BUILD_MODE_GENERATE" ]; then
 
   RUN_TEST_CMD=generate
   WHAT_WE_ARE_DOING="Generating"
+
+elif [ "$1" == "$BUILD_MODE_GENERATE_MAIN" ]; then
+
+  OUTPUT_DIR=$2
+
+  if [[ "${OUTPUT_DIR:0:1}" != "/" ]] ; then
+    OUTPUT_DIR=$PWD/$OUTPUT_DIR
+  fi
+
+  if [ -z $OUTPUT_DIR ]; then
+    echoIfError "Output directory parameter should not be empty"
+    echoIfError "Generate mode command format: tests-all.sh generate <output-dir>"
+    exit 1
+  fi
+
+  createDir "Tests output" $OUTPUT_DIR
+
+  RUN_TEST_CMD=generate_main
+  WHAT_WE_ARE_DOING="Generating $MAIN_SRC files for"
 
 else
   RUN_TEST_CMD=execute

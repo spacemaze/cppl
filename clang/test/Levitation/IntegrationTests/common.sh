@@ -452,10 +452,10 @@ function setBuildModeGenerate {
 
   if [ -f $MAIN_SRC_IN ]; then
     MAIN_SRC_ORIGIN_PATH=$PROJECT_DIR/$MAIN_SRC_IN
-  elif [ -f $MAIN_SRC ]; then
-    MAIN_SRC_ORIGIN_PATH=$PROJECT_DIR/$MAIN_SRC
+#  elif [ -f $MAIN_SRC ]; then
+#    MAIN_SRC_ORIGIN_PATH=$PROJECT_DIR/$MAIN_SRC
   else
-    echoIfInfo "Neither '$MAIN_SRC' nor '$MAIN_SRC_IN' exists in test '$TEST_NAME'."
+    echoIfInfo "'$MAIN_SRC_IN' doesn't exist in test '$TEST_NAME'."
   fi
 }
 
