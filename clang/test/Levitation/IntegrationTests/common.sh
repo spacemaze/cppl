@@ -103,6 +103,7 @@ fi
 
 BUILD_MODE_EXECUTE=execute
 BUILD_MODE_GENERATE=generate
+BUILD_MODE_GENERATE_MAIN=generate-main
 
 if [ -z "$BUILD_MODE" ]; then
   BUILD_MODE=$BUILD_MODE_EXECUTE
@@ -113,6 +114,7 @@ GENERATE_OUTPUT_DIR=
 GENERATED_TEST_NAME=
 GENERATED_OUTPUT=
 GENERATED_OUTPUT_COMMANDS=
+GENERATE_ONLY_MAIN=0
 
 # FLAGS will be set during setupFlags
 FLAGS=
@@ -541,7 +543,8 @@ function registerSource {
 
 
 function registerModule {
-  if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ]; then
+  if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ] && \
+     [ "$GENERATE_ONLY_MAIN" == "0" ]; then
     echoIfDump "Registering module $MODULE..."
     MODULE_SOURCE=$(getModulePath $MODULE)
     MODULE_SOURCE_REL=$(getModuleDestinationRel $MODULE)
@@ -559,7 +562,7 @@ function registerPreamble {
 
 function buildPreamble {
 
-    registerPreamble
+    # registerPreamble
 
     echoIfDebug "Building preamble AST $PREAMBLE_SRC => $PREAMBLE_PCH"
 
@@ -777,7 +780,10 @@ function emitScript {
   if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ]; then
     appendFile "$GENERATED_OUTPUT_COMMANDS" "$GENERATED_OUTPUT"
     appendFile "$MAIN_SRC_ORIGIN_PATH" "$GENERATED_OUTPUT"
-    copyFile "$MAIN_SRC_ORIGIN_PATH" "$GENERATE_OUTPUT_DIR/$MAIN_SRC_IN"
+
+    if [ "$GENERATE_ONLY_MAIN" == "0" ]; then
+      copyFile "$MAIN_SRC_ORIGIN_PATH" "$GENERATE_OUTPUT_DIR/$MAIN_SRC_IN"
+    fi
   fi
 }
 
@@ -815,7 +821,9 @@ function initTests {
   echoIfDump "Command line arguments:"
   echoIfDump "$@"
 
-  if [ "$1" == "$BUILD_MODE_GENERATE" ]; then
+  if [ "$1" == "$BUILD_MODE_GENERATE" ] || \
+     [ "$1" == "$BUILD_MODE_GENERATE_MAIN" ]; then
+
     echoIfDump "Generating llvm-lit tests..."
 
     OUTPUT_DIR=$2
@@ -825,11 +833,12 @@ function initTests {
 
     setBuildModeGenerate $OUTPUT_DIR $TEST_NAME
 
-    if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ]; then
-      rm $GENERATED_OUTPUT 2>/dev/null
-      rm $GENERATED_OUTPUT_COMMANDS 2>/dev/null
+    if [ "$1" == "$BUILD_MODE_GENERATE_MAIN" ]; then
+      GENERATE_ONLY_MAIN=1
     fi
 
+    rm $GENERATED_OUTPUT 2>/dev/null
+    rm $GENERATED_OUTPUT_COMMANDS 2>/dev/null
 
     echo   "// This is a generated file. Don't edit it." \
     >> $GENERATED_OUTPUT
