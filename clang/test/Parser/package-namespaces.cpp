@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -xc++ -std=c++17 -levitation-build-ast -levitation-deps-output-file=/dev/null -verify -levitation-sources-root-dir=. %s -o /dev/null
+// RUN: %clang_cc1 -xc++ -std=c++17 -levitation-build-ast -verify %s -o /dev/null
 
 // Example of correct construction
 package namespace A::B {}
