@@ -1,5 +1,6 @@
 // This is a generated file. Don't edit it.
-// Use bash.sh or test-all.sh to generate it again.
+// Edit main.cpp.in and use bash.sh or test-all.sh
+// to generate it again.
 // ------------------------------------------------
 
 // RUN:  %clang -cc1 -std=c++17 -xc++ -levitation-build-preamble -DCOMPILE_PCH %S/preamble.hpp -o %T/preamble.pch
@@ -23,6 +24,10 @@
 // Compiling 'P1/D'...
 // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -flevitation-build-object -emit-obj -levitation-dependency=%T/P1_B.ast -levitation-dependency=%T/P1_B.decl-ast -levitation-dependency=%T/P1_C.ast -levitation-dependency=%T/P1_C.decl-ast %T/P1_D.ast -o %T/P1_D.o
 // Compiling source 'main.cpp'...
-// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -emit-obj -levitation-dependency=%T/P1_B.ast -levitation-dependency=%T/P1_B.decl-ast -levitation-dependency=%T/P1_C.ast -levitation-dependency=%T/P1_C.decl-ast -levitation-dependency=%T/P1_D.ast -levitation-dependency=%T/P1_D.decl-ast %S/main.cpp_ -o %T/main.o
+// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -emit-obj -levitation-dependency=%T/P1_B.ast -levitation-dependency=%T/P1_B.decl-ast -levitation-dependency=%T/P1_C.ast -levitation-dependency=%T/P1_C.decl-ast -levitation-dependency=%T/P1_D.ast -levitation-dependency=%T/P1_D.decl-ast %S/main.cpp -o %T/main.o
 // RUN:  %clangxx %T/main.o %T/preamble.o %T/P1_B.o %T/P1_C.o %T/P1_D.o -o %T/app.out
 // RUN:  %T/app.out
+int main() {
+  P1::D::f();
+  return 0;
+}

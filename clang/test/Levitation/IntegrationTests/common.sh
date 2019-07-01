@@ -60,14 +60,15 @@ FILECHECK=
 # CXX="CXX"
 NEWLINE="echo"
 CAT=cat
+CP=cp
 
 TEMP_DIR=/tmp
 
 # Build dir for execute mode
 BUILD_DIR_EXECUTE=build
 
-
 BUILD_DIR=$BUILD_DIR_EXECUTE
+
 PROJECT_DIR=.
 
 APP_NAME_EXECUTE=app.out
@@ -75,6 +76,12 @@ APP_NAME_GENERATE=app.out # same-same
 APP_NAME=
 
 TESTS_DIR=$PROJECT_DIR/..
+
+MAIN_SRC=main.cpp
+MAIN_SRC_IN=$MAIN_SRC.in
+
+# MAIN_SRC_ORIGIN_PATH will be set during setBuildModeXXXX calls
+MAIN_SRC_ORIGIN_PATH=
 
 if [ -z "$PREAMBLE_PROJECT_DIR" ]; then
   PREAMBLE_PROJECT=.
@@ -343,17 +350,37 @@ function createBuildDir {
     fi
 }
 
-function appendFile {
-    echoIfDump "Appending $2 to $1..."
-    $CAT $2 >> $1
+function createDirFor {
+  for FILE in "$@"
+  do
+    DIR=$(dirname "${FILE}")
+    createDir "Directory for '$FILE'" $DIR
+  done
 }
 
-function createDirFor {
-    for FILE in "$@"
-    do
-        DIR=$(dirname "${FILE}")
-        createDir "Directory for '$FILE'" $DIR
-    done
+function copyFile {
+  SRC=$1
+  DEST=$2
+
+  if [ -z "$SRC" ] || ! [ -f $SRC ]; then
+    return 0;
+  fi
+
+  echoIfDump "Copying $SRC to $DEST..."
+  # createDirFor $DEST
+  $CP $SRC $DEST
+}
+
+function appendFile {
+  SRC=$1
+  DEST=$2
+
+  if [ -z "$SRC" ] || ! [ -f $SRC ]; then
+    return 0;
+  fi
+
+  echoIfDump "Appending $SRC to $DEST..."
+  $CAT $SRC >> $DEST
 }
 
 function setupFlags {
@@ -409,7 +436,7 @@ function setBuildModeGenerate {
 
   LINKER_FLAGS=$LINKER_FLAGS_GENERATE
 
-  GENERATED_OUTPUT=$GENERATE_OUTPUT_DIR/$GENERATED_TEST_NAME.cpp
+  GENERATED_OUTPUT=$GENERATE_OUTPUT_DIR/$MAIN_SRC
 
   createDirFor $GENERATED_OUTPUT
 
@@ -420,6 +447,14 @@ function setBuildModeGenerate {
   PREAMBLE_SRC=%S/$PREAMBLE_FILE_LIT
 
   APP_NAME=%T/$APP_NAME_GENERATE
+
+  if [ -f $MAIN_SRC_IN ]; then
+    MAIN_SRC_ORIGIN_PATH=$PROJECT_DIR/$MAIN_SRC_IN
+  elif [ -f $MAIN_SRC ]; then
+    MAIN_SRC_ORIGIN_PATH=$PROJECT_DIR/$MAIN_SRC
+  else
+    echoIfInfo "Neither '$MAIN_SRC' nor '$MAIN_SRC_IN' exists in test '$TEST_NAME'."
+  fi
 }
 
 function getSourceRootCommandLineParam {
@@ -441,14 +476,14 @@ function getModulePathRel {
   fi
 }
 
-function getModuleRegisteredPathRel {
+function getModuleDestinationRel {
   MODULE=$1
 
   EXT="$([[ "$MODULE" = *.* ]] && echo ".${MODULE##*.}" || echo '')"
 
   if [ -z "$EXT" ]; then
       printf $MODULE.cppl
-  elif [ "$EXT" == ".cpp" ]; then
+  elif [ "$EXT" == ".cpp" ] && [ $MODULE != $MAIN_SRC ]; then
       printf ${MODULE%.*}.cpp_
   else
       printf $MODULE
@@ -464,7 +499,7 @@ function getSrcFileName {
   if [ "$BUILD_MODE" == "$BUILD_MODE_EXECUTE" ]; then
     printf "$(getModulePath $MODULE)"
   else
-    printf "%%S/$(getModuleRegisteredPathRel $MODULE)"
+    printf "%%S/$(getModuleDestinationRel $MODULE)"
   fi
 }
 
@@ -509,7 +544,7 @@ function registerModule {
   if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ]; then
     echoIfDump "Registering module $MODULE..."
     MODULE_SOURCE=$(getModulePath $MODULE)
-    MODULE_SOURCE_REL=$(getModuleRegisteredPathRel $MODULE)
+    MODULE_SOURCE_REL=$(getModuleDestinationRel $MODULE)
     registerSource $MODULE_SOURCE $MODULE_SOURCE_REL
   fi
 }
@@ -672,17 +707,21 @@ function compileSrc {
     dumpIfNotEmpty "Dependencies:" $DEPS
 
     if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ]; then
-        echo "// Compiling source '$MODULE'..." >> $GENERATED_OUTPUT_COMMANDS
+      echo "// Compiling source '$MODULE'..." >> $GENERATED_OUTPUT_COMMANDS
     fi
 
     DEP_FLAGS=""
     for DEP in $(echo $DEPS | sed "s/,/ /g")
     do
-        DEP_FLAGS="$DEP_FLAGS -levitation-dependency=$(getBuildedFileName $DEP.ast)"
-        DEP_FLAGS="$DEP_FLAGS -levitation-dependency=$(getBuildedFileName $DEP.decl-ast)"
+      DEP_FLAGS="$DEP_FLAGS -levitation-dependency=$(getBuildedFileName $DEP.ast)"
+      DEP_FLAGS="$DEP_FLAGS -levitation-dependency=$(getBuildedFileName $DEP.decl-ast)"
     done
 
-    registerModule $MODULE
+    # Main file will be generated, and shall not be registered
+    # as regular module.
+    if [ "$MODULE" != "$MAIN_SRC" ]; then
+      registerModule $MODULE
+    fi
 
     SRCFILE="$(getSrcFileName $MODULE)"
     OBJECT_FILE="$(getBuildedFileName $MODULE_WITHOUT_EXT.o)"
@@ -693,6 +732,10 @@ function compileSrc {
 
     runCommand $CXX $FLAGS $DEP_FLAGS $SRCFILE "-o" $OBJECT_FILE
     echoIfDebug
+}
+
+function compileMainSrc {
+    compileSrc $MAIN_SRC:$@
 }
 
 function link {
@@ -725,18 +768,16 @@ function solveDependencies {
       SRCROOT=$(getSourceRootCommandLineParam)
     fi
 
-    if [ -f main.cpp ]; then
-      MAINFILE="$(getSrcFileName main.cpp)"
-    else
-      MAINFILE="$(getSrcFileName main.cpp_)"
-    fi
+    MAINFILE="$(getSrcFileName $MAIN_SRC)"
 
     runCommand $LEVITATION_DEPS -src-root=$SRCROOT -build-root=$BUILD_DIR -main-file=$MAINFILE --verbose
 }
 
 function emitScript {
   if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ]; then
-    appendFile $GENERATED_OUTPUT $GENERATED_OUTPUT_COMMANDS
+    appendFile "$GENERATED_OUTPUT_COMMANDS" "$GENERATED_OUTPUT"
+    appendFile "$MAIN_SRC_ORIGIN_PATH" "$GENERATED_OUTPUT"
+    copyFile "$MAIN_SRC_ORIGIN_PATH" "$GENERATE_OUTPUT_DIR/$MAIN_SRC_IN"
   fi
 }
 
@@ -789,11 +830,21 @@ function initTests {
       rm $GENERATED_OUTPUT_COMMANDS 2>/dev/null
     fi
 
-    echo "// This is a generated file. Don't edit it." \
+
+    echo   "// This is a generated file. Don't edit it." \
     >> $GENERATED_OUTPUT
-    echo "// Use bash.sh or test-all.sh to generate it again." \
-    >> $GENERATED_OUTPUT
-    echo "// ------------------------------------------------" \
+
+    if ! [ -z "$MAIN_SRC_ORIGIN_PATH" ]; then
+      echo "// Edit $MAIN_SRC_IN and use bash.sh or test-all.sh" \
+      >> $GENERATED_OUTPUT
+      echo "// to generate it again." \
+      >> $GENERATED_OUTPUT
+    else
+      echo "// Use bash.sh or test-all.sh to generate it again." \
+      >> $GENERATED_OUTPUT
+    fi
+
+    echo   "// ------------------------------------------------" \
     >> $GENERATED_OUTPUT
     echo "" >> $GENERATED_OUTPUT
 

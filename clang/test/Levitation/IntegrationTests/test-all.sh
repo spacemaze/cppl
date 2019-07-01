@@ -1,6 +1,6 @@
 # Command line format:
-# test-all.sh generate <output-dir> <test name>
-# test-all.sh execute <test name>
+# test-all.sh generate <output-dir>
+# test-all.sh execute
 
 source common.sh
 
@@ -71,7 +71,7 @@ for d in * ; do
 done
 
 if [ "$1" == "$BUILD_MODE_GENERATE" ]; then
-  cp common.sh $OUTPUT_DIR
-  cp test-all.sh $OUTPUT_DIR
-  cp preamble.hpp $OUTPUT_DIR
+  copyFile common.sh $OUTPUT_DIR
+  copyFile test-all.sh $OUTPUT_DIR
+  copyFile preamble.hpp $OUTPUT_DIR
 fi
