@@ -1,13 +1,9 @@
 package namespace P1 {
   struct A {
-    struct AA;
+    static void f();
   };
   
-  // Bug: generates duplicates of AA
-  struct A::AA {
-    static void f() {
-      levitation::Test::context() << "P1::A::AA::f()";
-    }
+  void A::f() {
+    levitation::Test::context() << "P1::A::f()";
   };
-
 }

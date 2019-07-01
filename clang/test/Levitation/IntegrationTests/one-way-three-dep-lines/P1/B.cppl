@@ -1,9 +1,10 @@
 struct S {};
 package namespace P1 {
-  class B : public global::P1::A {    
+  class B {
+  typename global::P1::A a;
   public:
-    static void f() {
-      levitation::Test::context() << "P2::B::f() was called";
+    static void ff() {
+      levitation::Test::context() << "P1::B::ff()";
       global::P1::A::f();
     }
   };

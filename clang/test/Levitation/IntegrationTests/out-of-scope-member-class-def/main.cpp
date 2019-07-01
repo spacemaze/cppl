@@ -15,7 +15,12 @@
 // RUN:  %clangxx %T/main.o %T/P1_A.o -o %T/app.out
 // RUN:  %T/app.out
 int main() {
-// CHECK: P1::A::AA::f()
-  P1::A::AA::f();
-  return 0;
+  with (
+    auto TestScope = levitation::Test::context()
+        .expect("P1::A::AA::f()")
+    .open()
+  ) {
+    P1::A::AA::f();
+  }
+  return levitation::Test::result();
 }

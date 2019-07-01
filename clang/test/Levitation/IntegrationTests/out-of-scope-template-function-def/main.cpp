@@ -15,15 +15,20 @@
 // RUN:  %clangxx %T/main.o %T/P1_A.o -o %T/app.out
 // RUN:  %T/app.out
 int main() {
-  // CHECK: P1::A::A(float)
-  // CHECK: P1::A::A(double)
-  // CHECK: P1::A::f<float>()
-  // CHECK: P1::A::f<double>()
-  // CHECK: P1::A<T>::operator<<(U)
-  P1::A a((float)0.1);
-  P1::A b((double)0.1);
-  a.f<float>();
-  b.f<double>();
-  a << 1;
-  return 0;
+  with (
+    auto TestScope = levitation::Test::context()
+        .expect("P1::A::A(float)")
+        .expect("P1::A::A(double)")
+        .expect("P1::A::f<float>()")
+        .expect("P1::A::f<double>()")
+        .expect("P1::A<T>::operator<<(U)")
+    .open()
+  ) {
+    P1::A a((float)0.1);
+    P1::A b((double)0.1);
+    a.f<float>();
+    b.f<double>();
+    a << 1;
+  }
+  return levitation::Test::result();
 }

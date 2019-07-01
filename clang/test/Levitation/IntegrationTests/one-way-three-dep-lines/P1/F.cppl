@@ -1,9 +1,9 @@
 package namespace P1 {
-  class F : public global::P1::B, public global::P1::A {    
+  class F : public global::P1::B, public global::P1::A {
   public:
-    static int main() {
-      levitation::Test::context() << "P2::F::main:";
-      global::P1::B::f();
+    static int f() {
+      levitation::Test::context() << "P1::F::f()";
+      global::P1::B::ff();
       global::P1::E::f();
       return 0;
     }
