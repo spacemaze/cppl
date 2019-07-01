@@ -1,4 +1,14 @@
 int main() {
-  P1::D::f();
-  return 0;
+  with (
+      auto TestScope = levitation::Test::context()
+          .expect("P1::D::f()")
+          .expect("P1::B::f()")
+          .expect("P1::A::f<int>()")
+          .expect("P1::C::f()")
+          .expect("P1::A::f<int>()")
+      .open()
+    ) {
+      P1::D::f();
+    }
+    return levitation::Test::result();
 }

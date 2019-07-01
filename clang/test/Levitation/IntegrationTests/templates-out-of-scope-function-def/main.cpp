@@ -14,27 +14,18 @@
 // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -emit-obj -levitation-dependency=%T/P1_A.ast -levitation-dependency=%T/P1_A.decl-ast %S/main.cpp -o %T/main.o
 // RUN:  %clangxx %T/main.o %T/P1_A.o -o %T/app.out
 // RUN:  %T/app.out
-namespace M {
-  template<typename T>
-  struct A {
-    static void f();
-  };
-
-  template<typename T>
-  void A<T>::f() {}
-}
-
 int main() {
-// CHECK: P1::A::A()
-// CHECK: P1::A::f()
-// CHECK: P1::A::operator<<(int)
-// CHECK: P1::A::~A()
-
-  P1::A<int> a;
-
-  a.f();
-  
-  a << 1;
-
-  return 0;
+  with (
+    auto TestScope = levitation::Test::context()
+        .expect("P1::A::A()")
+        .expect("P1::A::f()")
+        .expect("P1::A::operator<<(int)")
+        .expect("P1::A::~A()")
+    .open()
+  ) {
+    P1::A<int> a;
+    a.f();
+    a << 1;
+  }
+  return levitation::Test::result();
 }

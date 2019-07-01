@@ -28,6 +28,8 @@
 // RUN:  %clangxx %T/main.o %T/preamble.o %T/P1_B.o %T/P1_C.o %T/P1_D.o -o %T/app.out
 // RUN:  %T/app.out
 int main() {
+  // This test doesn't require any Test::context() checks.
+  // The app just should be compiled and ran.
   P1::D::f();
   return 0;
 }

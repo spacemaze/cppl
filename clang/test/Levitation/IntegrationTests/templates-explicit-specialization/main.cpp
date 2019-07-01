@@ -22,8 +22,13 @@
 // RUN:  %clangxx %T/main.o %T/P1_A.o %T/P1_B.o -o %T/app.out
 // RUN:  %T/app.out
 int main() {
-// CHECK: P1::B::f()
-// CHECK-NEXT: P1::A<int>::f()
-  P1::B::f();
-  return 0;
+  with (
+    auto TestScope = levitation::Test::context()
+        .expect("P1::B::f()")
+        .expect("P1::A<int>::f()")
+    .open()
+  ) {
+    P1::B::f();
+  }
+  return levitation::Test::result();
 }

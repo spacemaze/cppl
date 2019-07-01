@@ -1,4 +1,6 @@
 int main() {
+  // This test doesn't require any Test::context() checks.
+  // The app just should be compiled and ran.
   P1::D::f();
   return 0;
 }

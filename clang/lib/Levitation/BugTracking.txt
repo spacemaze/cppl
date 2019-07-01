@@ -217,4 +217,4 @@ levitation::Test::context() based checks.
 At current state some tests may be false positive, for they
 use levitation::Test::context() in .cppl files to be tested, but don't use
 it in main.cpp files.
-STATUS: In progress.
+STATUS: Fixed.

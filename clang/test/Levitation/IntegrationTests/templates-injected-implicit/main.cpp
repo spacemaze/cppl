@@ -15,6 +15,13 @@
 // RUN:  %clangxx %T/main.o %T/P1_A.o -o %T/app.out
 // RUN:  %T/app.out
 int main() {
-  P1::A<int>::f();
-  return 0;
+  with (
+    auto TestScope = levitation::Test::context()
+        .expect("P1::A<int>::f()")
+        .expect("P1::A::f()")
+    .open()
+  ) {
+    P1::A<int>::f();
+  }
+  return levitation::Test::result();
 }
