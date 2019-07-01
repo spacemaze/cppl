@@ -906,21 +906,12 @@ def defsym : Separate<["-"], "defsym">,
 
 let Flags = [CC1Option] in {
 
-def levitation_def_ast_file_extension
-: Joined<["-"], "levitation-def-ast-file-extension=">,
-HelpText<"Levitation definition AST output file.">;
-def levitation_decl_ast_file_extension
-: Joined<["-"], "levitation-decl-ast-file-extension=">,
-HelpText<"Levitation declaration AST output file.">;
 def levitation_dependencies_output_file
 : Joined<["-"], "levitation-deps-output-file=">,
 HelpText<"Levitation dependencies output file.">;
 def levitation_sources_root_dir
 : Joined<["-"], "levitation-sources-root-dir=">,
-HelpText<"Levitation sources root directory.">;
-def levitation_source_file_extension
-: Joined<["-"], "levitation-source-file-extension=">,
-HelpText<"Levitation source file extension with '.' symbol.">;
+HelpText<"Levitation sources root directory. Required if 'levitation-deps-output-file' is specified.">;
 
 // TODO Levitation: Consider it to move into Driver options.
 def flevitation_build_object
