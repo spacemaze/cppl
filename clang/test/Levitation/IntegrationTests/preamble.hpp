@@ -79,6 +79,7 @@ namespace levitation {
       enum struct MessageType {
           Empty,
           Text,
+          Char,
           Integer
       };
 
@@ -96,6 +97,10 @@ namespace levitation {
         : Type(Utils::MessageType::Text),
           Text(v)
         {}
+        Msg(char v)
+        : Type(Utils::MessageType::Char),
+          Char(v)
+        {}
         Msg(int v)
         : Type(Utils::MessageType::Integer),
           Integer(v)
@@ -104,6 +109,7 @@ namespace levitation {
         Utils::MessageType Type;
         union {
           const char *Text;
+          char Char;
           int Integer;
         };
 
