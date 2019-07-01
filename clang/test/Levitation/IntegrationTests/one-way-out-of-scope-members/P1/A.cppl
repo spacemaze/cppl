@@ -2,7 +2,9 @@ package namespace P1 {
   struct A {
     static const int v;
     static void f() {
-      levitation::Test::context() << "P1::A::v = " << v << "";
+      levitation::Test::context()
+      << "P1::A::v = "
+      << v;
     }
   };
 

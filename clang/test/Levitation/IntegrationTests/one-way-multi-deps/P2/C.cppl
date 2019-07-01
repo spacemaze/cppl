@@ -1,7 +1,7 @@
 namespace P2 {
   struct C {
     static int f() {
-      levitation::Test::context() << "P2::C::f() was called.";
+      levitation::Test::context() << "P2::C::f()";
       return 0;
     }
   };

@@ -209,3 +209,12 @@ TITLE: levitation-deps, main.o.d and main.o.fulld files are written into
 source directory instead of
 build.
 STATUS: Fixed.
+
+L-23
+TITLE: tests, add use levitation::Test::context()
+DESCRIPTION: We are in middle of moving from std::cout + Filecheck to
+levitation::Test::context() based checks.
+At current state some tests may be false positive, for they
+use levitation::Test::context() in .cppl files to be tested, but don't use
+it in main.cpp files.
+STATUS: In progress.

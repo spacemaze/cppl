@@ -1,7 +1,8 @@
 package namespace P2 {
   class B {    
   public:
-    static int main() {
+    static int f() {
+      levitation::Test::context() << "P2::B::f()";
       global::P1::A::f();
       return 0;
     }

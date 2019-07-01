@@ -21,7 +21,6 @@
 // RUN:  %clangxx %T/main.o %T/P1_A.o %T/P1_B.o -o %T/app.out
 // RUN:  %T/app.out
 int main() {
-// CHECK: ABBC
   with (
     auto TestScope = levitation::Test::context()
         .expect('A')
@@ -31,10 +30,10 @@ int main() {
     .open()
   ) {
     levitation::Test::context()
-    << (char) P1::A::V0
-    << (char) P1::A::V1
-    << (char) P1::B::V0
-    << (char) P1::B::V1;
+        << (char) P1::A::V0
+        << (char) P1::A::V1
+        << (char) P1::B::V0
+        << (char) P1::B::V1;
   }
   return levitation::Test::result();
 }

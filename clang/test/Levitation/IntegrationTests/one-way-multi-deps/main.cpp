@@ -28,7 +28,14 @@
 // RUN:  %clangxx %T/main.o %T/P1_A.o %T/P2_C.o %T/P2_B.o -o %T/app.out
 // RUN:  %T/app.out
 int main() {
-  // return P1::p1; 
-  return P2::B::main();
-  // return P3::p33;
+  with (
+    auto TestScope = levitation::Test::context()
+        .expect("P2::B::f()")
+        .expect("P1::A::f()")
+        .expect("P2::C::f()")
+    .open()
+  ) {
+    P2::B::f();
+  }
+  return levitation::Test::result();
 }
