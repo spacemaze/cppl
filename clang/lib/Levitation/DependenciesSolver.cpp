@@ -5,6 +5,7 @@
 #include "clang/Levitation/WithOperator.h"
 #include "clang/Levitation/File.h"
 #include "clang/Levitation/FileExtensions.h"
+#include "clang/Levitation/Path.h"
 #include "clang/Levitation/Serialization.h"
 #include "clang/Levitation/SimpleLogger.h"
 #include "clang/Levitation/StringsPool.h"
@@ -1000,7 +1001,11 @@ public:
     if (!Solver->isValid())
       return;
 
-    auto MainFileID = Context.StringsPool.addItem(Context.Solver.MainFile);
+    auto MainFileRel = levitation::Path::makeRelative<DependencyPath>(
+        Context.Solver.MainFile, Context.Solver.SourcesRoot
+    );
+
+    auto MainFileID = Context.StringsPool.addItem(std::move(MainFileRel));
 
     auto DGraph = DependenciesGraph::build(Context.getParsedDependencies(), MainFileID);
 

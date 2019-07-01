@@ -26,6 +26,7 @@
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/File.h"
 #include "clang/Levitation/FileExtensions.h"
+#include "clang/Levitation/Path.h"
 #include "clang/Levitation/Serialization.h"
 #include "llvm/Bitcode/BitstreamWriter.h"
 #include "llvm/Support/Path.h"
@@ -168,23 +169,6 @@ namespace {
     }
   };
 
-  DependencyPath makeRelative(StringRef &F, StringRef ParentRel) {
-
-    DependencyPath Relative(F);
-
-    DependencyPath Parent = ParentRel;
-    llvm::sys::fs::make_absolute(Parent);
-
-    StringRef Separator = llvm::sys::path::get_separator();
-
-    llvm::sys::path::replace_path_prefix(Relative, Parent, "");
-
-    if (Relative.startswith(Separator))
-      Relative = Relative.substr(Separator.size());
-
-    return Relative;
-  }
-
   class ASTDependenciesProcessor : public SemaObjHolderConsumer {
     CompilerInstance &CI;
     DependencyPath CurrentInputFileRel;
@@ -270,7 +254,7 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
     CompilerInstance &CI,
     StringRef InFile
 ) {
-  auto InFileRel = makeRelative(
+  auto InFileRel = levitation::Path::makeRelative<DependencyPath>(
       InFile,
       CI.getFrontendOpts().LevitationSourcesRootDir
   );
