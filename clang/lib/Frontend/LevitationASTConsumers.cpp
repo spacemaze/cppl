@@ -254,6 +254,9 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
     CompilerInstance &CI,
     StringRef InFile
 ) {
+  if (CI.getFrontendOpts().LevitationDependenciesOutputFile.empty())
+    return nullptr;
+
   auto InFileRel = levitation::Path::makeRelative<DependencyPath>(
       InFile,
       CI.getFrontendOpts().LevitationSourcesRootDir

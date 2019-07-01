@@ -160,6 +160,13 @@ public:
     return addRequired(std::move(Consumer));
   }
 
+  BuilderTy &addOptional(std::unique_ptr<ASTConsumer> &&Consumer) {
+    if (Consumer)
+      addRequired(std::move(Consumer));
+
+    return *this;
+  }
+
   std::unique_ptr<MultiplexConsumer> done() {
     return Successful ?
         llvm::make_unique<MultiplexConsumer>(std::move(Consumers)) :
@@ -368,7 +375,7 @@ std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
 
   return MultiplexConsumerBuilder()
       .addNotNull(CreateParserPostProcessor())
-      .addNotNull(CreateDependenciesASTProcessor(CI, InFile))
+      .addOptional(CreateDependenciesASTProcessor(CI, InFile))
       .addRequired(CreateGeneratePCHConsumer(CI, InFile))
   .done();
 }

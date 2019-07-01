@@ -1775,8 +1775,6 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
           Args.getAllArgValues(OPT_levitation_dependency);
   Opts.LevitationDependenciesOutputFile =
           Args.getLastArgValue(OPT_levitation_dependencies_output_file);
-  Opts.LevitationDependenciesOutputFile =
-          Args.getLastArgValue(OPT_levitation_dependencies_output_file);
   Opts.LevitationSourcesRootDir =
           Args.getLastArgValue(OPT_levitation_sources_root_dir);
 
@@ -3270,10 +3268,6 @@ static void parseLevitationBuildASTArgs(
 ) {
   const char* Stage = "Build C++ Levitation AST files";
 
-  if (FrontendOpts.LevitationDependenciesOutputFile.empty()) {
-    Diags.Report(diag::err_fe_levitation_missed_option)
-    << "-levitation-deps-output-file=" << Stage;
-  }
   if (FrontendOpts.LevitationBuildDeclaration) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-flevitation-build-decl" << Stage;
@@ -3282,10 +3276,19 @@ static void parseLevitationBuildASTArgs(
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-dependency" << Stage;
   }
-  if (FrontendOpts.LevitationSourcesRootDir.empty()) {
-    Diags.Report(diag::err_fe_levitation_missed_option)
-    << "-levitation-sources-root-dir" << Stage;
+
+  if (!FrontendOpts.LevitationDependenciesOutputFile.empty()) {
+    if (FrontendOpts.LevitationSourcesRootDir.empty()) {
+      Diags.Report(diag::err_fe_levitation_missed_option)
+      << "-levitation-sources-root-dir" << Stage;
+    }
+  } else {
+    if (!FrontendOpts.LevitationSourcesRootDir.empty()) {
+      Diags.Report(diag::err_fe_levitation_wrong_option)
+      << "-levitation-sources-root-dir" << Stage;
+    }
   }
+
   if (FrontendOpts.LevitationBuildObject) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-flevitation-build-object" << Stage;
