@@ -1,0 +1,11 @@
+int main() {
+  with (
+    auto TestScope = levitation::Test::context()
+        .expect("P1::A::f()")
+        .expect("P1::B::f()")
+    .open()
+  ) {
+    P1::A::f();
+  }
+  return levitation::Test::result();
+}
