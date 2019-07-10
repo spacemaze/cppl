@@ -63,7 +63,7 @@ just call `MyPackage::B::useA()` and then return `0`.
 ### Example 2
 
 Below is another example which demonstrates C++ Levitation Packages
-_automatic dependencies lookup_ feature.
+_automatic dependencies lookup mode_ feature (ADLM).
 Namely there is no need to add `#import` directives in the beginning of
 source file. There is a tradeoff though.
 
@@ -434,8 +434,8 @@ cmake -DLLVM_ENABLE_PROJECTS=clang \
 7. `make install`
 8. `alias c++l=<path-to-llvm-cppl.install>\bin\c++l`
 
-### How to build code
-_Related tasks: L-4, L-27_
+### How to build executable
+_Related tasks: L-4_
 
 In order to build C++ Levitation code user should provide compiler
 with following information:
@@ -462,8 +462,240 @@ Or even to
 
 `c++l`
 
-In this case project will compiled in single thread. And output will be
-saved as `a.out`.
+### Building library
+_Related tasks: L-4, L-27_
+
+Just like a traditional C++ compilers, `c++l` produces set of object
+files.
+
+Building library is a bit out of compilers competence.
+
+But, it is possible to inform compiler that we need object files
+to be saved somewhere for future use.
+
+As long as we walking with non-standard C++ source code,
+we also need to generate .h file with all exported declarations.
+
+Finally we obtain set of object files and regular C++ .h file with
+exported symbols. Having this at hands it is possible to create library
+with standard tools.
+
+For example building static library with gcc tools and Bash consists of
+2 steps (assuming current directory is project root, and compile in single
+thread):
+1. `c++l -cppl-nomain -cppl-h=my-project.h -cppl-c=lib-objects`
+2. `ar rcs my-project.a $(ls lib-objects/*.o)`
+
+The only difference to regular C++ approach is step 1. On this step
+we ask `c++l` to produce legacy object files and .h file.
+* `-cppl-nomain` tells compiler, that there is no main file. Theoretically
+it is still possible to declare `int main()` somewhere though.
+* `-cppl-h=<filename>` asks compiler to generate C++ header file, and save
+it with _'\<filename\>'_ name.
+* `-cppl-c=<directory>` asks compiler to produce object files and store them
+in directory with _'\<directory\>'_ name.
+
+On step 2 `ar` tool is instructed to create a static library `my-project.a`
+and include into it all objects from `lib-objects` directory. 
+
+## Theory of operation. Manual build
+In C++ Levitation build process consists of 5 general steps:
+
+0. Build preamble (optional)
+1. Initial parsing.
+2. Dependencies solving.
+3. Instantiation.
+4. Code generation.
+5. Linkage.
+
+### Preamble
+Preamble step is optional. Preamble supposed to contain code used by every
+file in project. On this step precompiled header (PCH) might be produced.
+For more details why it might be good to use PCH files read
+[on clang site](https://clang.llvm.org/docs/PCHInternals.html#using-precompiled-headers-with-clang)
+Preamble can be created with next command:
+```
+clang -cc1 -std=c++17 -xc++ -levitation-build-preamble <path-to-preamble-source> \
+    -o <path-to-precompiled-header>
+```
+* `-levitation-build-preamble \<path-to-preamble-source\>` instructs compiler
+to build preamble, where \<path-to-preamble-source\> is path to source
+file with common declarations. Usually it is _.hpp_ file with set of
+\#include directives. 
+* `-o \<path-to-precompiled-header\>` instructs compiler to save precompiled
+header in file with path '\<path-to-precompiled-header\>'
+
+### Initial parsing
+On this step compiler parses C++ Levitation source files and saves result
+as set .ast files. The latter represent binary form of abstract syntax
+tree (AST).
+
+On this stage compiler also gathers dependencies information and stores
+it in binary format as set of _.ldeps_ files.
+
+Each call of `c++l` will parse single source file and may produce
+one _.ldeps_ file.  
+
+Files can be parsed with next command:
+```
+clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ \
+    -levitation-build-ast \
+    -levitation-sources-root-dir=%S \
+    -levitation-deps-output-file=%T/P1_A.ldeps %S/P1/A.cppl \
+    -o %T/P1_A.ast
+```
+* `-levitation-preamble` - instructs compiler to use preamble
+* `-levitation-build-ast` - informs compiler that we're going to build
+initial AST files.
+* `-levitation-deps-output-file` - Optional. Is used to specify output dependencies file.
+* `-levitation-sources-root-dir` - Required for `-levitation-deps-output-file`.
+Is used to specify project root directory.
+
+There is a another special note about `-levitation-deps-output-file`.
+For regular parse stage it is required to produce dependencies. But it is
+not necessary in two cases though:
+1. Is user already knows dependencies. There is no need in dependencies solving.
+2. In test mode. Usually in tests compiler stages tested spearately from
+each other and thus there is also no need in dependencies information. 
+ 
+### Dependencies solving
+On this stage `levitation-deps` tool is called. It collects all _.ldeps_
+files in project directory and tries to build dependencies graph.
+
+If all dependencies are correct then graph is acyclic (DAG), and tool
+produces set of _.d_ and _.fulld_ text files.
+Each _.d_ or _.fulld_ file corresponds to particular output file those
+dependencies were found for.
+
+For example if we want to create declaration AST file _A.decl-ast_, then
+its dependencies will be present as pair of _A.decl-ast.d_ and
+_A.decl-ast.fulld_.
+* _.d_ files are text files. Each file is named after corresponding
+output file. Filename has format _\<output-file\>.d_.
+Each string in _.d_ file contains path to one of its direct dependencies.
+For example if `A.decl-ast` depends on `B.decl-ast` and `B.decl-ast` in
+turn depends on `C.decl-ast`, then `A.decl-ast.d` will contain path
+to `B.cppl` only. Note that in this case dependency is described by source file.
+
+* _.fulld_ files are text files as well. And each file also named after corresponding
+output file with similar naming format: _\<output-file\>.fulld_. Difference
+with _.d_ files is that _.fulld_ files contain all direct and indirect
+dependencies.
+For former example if `A.decl-ast` depends on `B.decl-ast` and `B.decl-ast` in
+turn depends on `C.decl-ast`, `A.decl-ast.fulld` will contain _four_ strings:
+path to `B.ast`, path to `B.decl-ast`, path to `C.ast` and path to `C.decl-ast`.
+
+_.d_ files are required for build system and allows to determine
+instantiation and code generation order.
+
+_.fulld_ files are required for _instantiation_ and _code generation_
+stage itself and used to provide current source with all required
+declarations it depends on.
+ 
+Dependencies can be solved by next command:
+```
+levitation-deps -src-root=<path project sources root> \
+    -build-root=<path to root build directory>
+    -main-file=<path to .cpp file with main function>   
+```
+
+### Instantiation
+
+On this stage parsed Declaration AST files (with _.decl-ast_ extension)
+are produced.
+Compiler should be informed about all other AST files current file
+depends on.
+
+Binary AST files created on _initial parsing_ stage (_.ast_ files) are
+used as input files.
+
+For each _.ast_ file compiler goes through next steps.
+1. Reads _.decl-ast_ files with declarations current AST file depends on.
+2. Reads _.ast_ file itself.
+3. Strips all non-inline method bodies.
+4. If source file uses _automatic dependencies lookup_ compiler instantiates
+package namespace. Namely it replaces all _'global::'_ specifiers with
+global namespace specifier ('::').
+5. Saves result into corresponding _.decl-ast_ file.
+
+Example of instantiation command:
+```
+clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch \
+    -flevitation-build-decl \
+    -levitation-dependency=<path to .ast or .decl-ast file>
+    -levitation-dependency=<another dependency>
+    ...
+    -emit-pch \    
+    <path to AST file to be instantiated> \
+    -o <path to output .decl-ast file>
+```
+* `-levitation-preamble` is optional and used to specify precompiled
+header.
+* `-flevitation-build-decl` informs compiler that it should run
+in instantiation mode.
+* Set of `-levitation-dependency` parameters specify dependencies
+represented by set of _.ast_ and _.decl-ast_ files.
+* `-emit-pch` instructs compiler to produce binary AST file.
+
+### Code generation
+This stage is similar to instantiation with only difference, that it
+doesn't strip non-inline method bodies and produces object (_.o_) file
+rather then binary AST file.
+
+Just like for previous stage compiler should be informed about all
+other AST files current file depends on.
+
+Binary AST files created on _initial parsing_ stage (_.ast_ files) are
+used as input files.
+
+For each _.ast_ file compiler goes through next steps.
+1. Reads _.decl-ast_ files with declarations current AST file depends on.
+2. Reads _.ast_ file itself.
+3. If source file uses _automatic dependencies lookup_ compiler instantiates
+package namespace. Namely it replaces all _'global::'_ specifiers with
+global namespace specifier ('::').
+4. Generates binary _.o_ file.
+
+Example of instantiation command:
+```
+clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch \
+    -flevitation-build-object \
+    -emit-obj \
+    -levitation-dependency=<path to .ast or .decl-ast file> \
+    ...
+    <path to input AST file> \
+    -o <path to output .o file>
+```
+* `-levitation-preamble` is optional and used to specify precompiled
+header.
+* `-flevitation-build-object` informs compiler that it should run
+in code generation mode. Basically it means that compiler won't strip
+non-inline method bodies.
+* Set of `-levitation-dependency` parameters specify dependencies
+represented by set of _.decl-ast_ files.
+* `-emit-obj` instructs compiler to produce binary object file.
+
+### Linkage
+
+Linkage is done in traditional (legacy) way.
+
+Having set of .o files linker just combines them into output executable.
+
+When building libraries, there is no Linkage step. One may say it is
+replaced by library creation step.
+
+### CMake sample
+CMake sample files with implemented manual build process are present
+in `<llvm-root>/levitation/cmake-sample` directory.
+
+In order to use it in your C++ Levitation project, copy end edit
+_CMakeLists-sample.txt_ and _build-cmake.sh_.
+
+As a long as cmake doesn't support dynamic dependencies build requires
+to run make in 3 steps:
+1. Parse and solve dependencies.
+2. Regenerate make files.
+3. Run _instantiation_, _code generation_ and _linkage_ stages.
 
 ## Appendix 1. Syntax
 ### \#import directive
@@ -494,10 +726,12 @@ C++ Levitation Packages is still in development. Current implementation
 status is shown in table below:
 
 | Feature       | Status        | Open tasks | Description |
-| ------------- |:-------------:|:----------:|------------:|
-| Automatic dependencies lookup mode | implemented |      - | This mode is fully supported |
-| Manual dependencies mode | not implemented |      L-5 | \#import directive is not implemented |
+| ------------- |:-------------:|:----------:|:------------|
+| Initial parsing stage | implemented for ADLM | L-5 | \#import directive is not supported yet. |
+| Dependencies solving  | implemented | | |
+| Instantiation stage | implemented for ADLM |      L-5 | It is possible to combine instantiation with code generation for one-way dependent sources |
+| Code generation stage | implemented for ADLM |      L-5 | It is possible to combine instantiation with code generation for one-way dependent sources |
+| Automatic dependencies lookup mode | implemented | | |
+| Manual dependencies mode | not implemented |      L-5 | \#import directive is not supported yet. |
 | Build controlled by driver | not implemented |      L-4 | Highest priority task. Is to be implemented in first place. |
 | Support of libraries creation | partially implemented |      L-27 | So far, user should run through -cc1 the compilation of object files, then add them to library. User also should manually create .h file. |
-
-## Appendix 3. Roadmap
