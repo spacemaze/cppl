@@ -411,7 +411,7 @@ package namespace MyPackage {
   };
 }
 ```
-This is a sad thing of course, and we hope to get rid of some o
+This is a sad thing of course, and we hope to get rid of some of
 disambiguators in future C++ Levitation versions.
 
 ## Getting started
@@ -498,6 +498,6 @@ status is shown in table below:
 | Automatic dependencies lookup mode | implemented |      - | This mode is fully supported |
 | Manual dependencies mode | not implemented |      L-5 | \#import directive is not implemented |
 | Build controlled by driver | not implemented |      L-4 | Highest priority task. Is to be implemented in first place. |
-| Support of libraries creation | partially implemented |      L-27 | So far, user should run through -cc1 compilation of object files, then add them to library. User also should manually create .h file. |
+| Support of libraries creation | partially implemented |      L-27 | So far, user should run through -cc1 the compilation of object files, then add them to library. User also should manually create .h file. |
 
 ## Appendix 3. Roadmap
