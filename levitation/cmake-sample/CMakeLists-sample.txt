@@ -1,0 +1,7 @@
+include (../.cmake-builer/main.cmake)
+cmake_minimum_required (VERSION 2.6)
+
+levitationProject("cross-deps")
+# set(LEVITATION_LOG_LEVEL ${LEVITATION_TRACE_LEVEL})
+
+setupLevitationTool("cross-deps")

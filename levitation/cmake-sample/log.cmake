@@ -1,0 +1,40 @@
+set(LEVITATION_ERROR_LEVEL 0)
+set(LEVITATION_WARNING_LEVEL 1)
+set(LEVITATION_INFO_LEVEL 2)
+set(LEVITATION_DEBUG_LEVEL 3)
+set(LEVITATION_TRACE_LEVEL 4)
+
+if (NOT (DEFINED LEVITATION_LOG_LEVEL))
+    set(LEVITATION_LOG_LEVEL ${LEVITATION_INFO_LEVEL})
+endif()
+
+macro(error msg)
+    if (NOT (LEVITATION_LOG_LEVEL LESS ${LEVITATION_ERROR_LEVEL}))
+        message(FATAL_ERROR "ERROR: ${msg}")
+    endif()
+endmacro()
+
+macro(warning msg)
+    if (NOT (LEVITATION_LOG_LEVEL LESS ${LEVITATION_WARNING_LEVEL}))
+        message(WARNING: "${msg}")
+    endif()
+endmacro()
+
+
+macro(info msg)
+    if (NOT (LEVITATION_LOG_LEVEL LESS ${LEVITATION_INFO_LEVEL}))
+        message(STATUS "${msg}")
+    endif()
+endmacro()
+
+macro(debug msg)
+    if (NOT (LEVITATION_LOG_LEVEL LESS ${LEVITATION_DEBUG_LEVEL}))
+        message("DEBUG: ${msg}")
+    endif()
+endmacro()
+
+macro(trace msg)
+    if (NOT (LEVITATION_LOG_LEVEL LESS ${LEVITATION_TRACE_LEVEL}))
+        message("TRACE: ${msg}")
+    endif()
+endmacro()
