@@ -173,7 +173,7 @@ L-16
 TITLE: Make tests llvm compatible
 DESCRIPTION: Currently we have tests under separate git repo, and they are
 bash scripted. I propose to create bash mode which would generate llvm-compatible tests.
-STATUS: Open
+STATUS: Fixed.
 
 L-17
 TITLE: Create C++ Levitation Specification, ver 1.
@@ -218,3 +218,55 @@ At current state some tests may be false positive, for they
 use levitation::Test::context() in .cppl files to be tested, but don't use
 it in main.cpp files.
 STATUS: Fixed.
+
+L-24
+TITLE: failed to compile out of scope method definition of class specialization
+DESCRIPTION: Next example:
+
+package namespace P1 {
+  template<typename T>
+  struct A {
+  };
+
+  template<>
+  struct A<int> {
+    void f();
+  };
+
+  void A<int>::f() {
+    levitation::Test::context() << "P1::A::f()";
+  }
+}
+
+should be compiled. But compiler exits with error:
+nested name specifier 'A<int>::' for declaration does not refer into a class,
+class template or class template partial specialization
+  void A<int>::f() {
+       ~~~~~~~~^
+
+STATUS: Open
+
+L-25:
+TITLE: Add parser diagnostics for several symbol definitions in same file.
+DESCRIPTION: It is possible to define only symbols with same name in same file in
+package namespace.
+It is also possible to predeclare symbols with names other than defined symbol
+in non-package namespace.
+We should fire error diagnostics if user added definition of symbol with name
+other than name of first symbol.
+RELATED: L-18, L-26
+STATUS: Open
+
+L-26:
+TITLE: Warn about definitions in non-package namespaces.
+DESCRIPTION: It is possible to define symbols in non-package namespace in levitation
+source files. But we should emit warning for it is bad practice and may be
+prohibited in future versions.
+RELATED: L-25, L-18
+STATUS: Open
+
+L-27:
+TITLE: Support of libraries
+DESCRIPTION: So far only executable compilation is supported. We should add support for
+libraries. The main problem is to implement library headers generation.
+STATUS: Open
