@@ -14,7 +14,8 @@ In _C++ Levitation_ mode the latter is still supported, but only as landing pad 
 Let's consider simple example program with one package
 and two classes.
 
-_File `MyPackage/A.cppl`_
+_**MyPackage/A.cppl**_
+
 ```cpp
 #include <iostream>
 package namespace MyPackage {
@@ -26,7 +27,9 @@ package namespace MyPackage {
   };
 }
 ```
-_File `MyPackage/B.cppl`_
+
+_**MyPackage/B.cppl**_
+
 ```cpp
 #import MyPackage::A
 package namespace MyPackage {
@@ -38,29 +41,30 @@ package namespace MyPackage {
   };
 }
 ```
-_File `main.cpp`_
+
+_**main.cpp**_
+
 ```cpp
 int main() {
   MyPackage::B::useA();
   return 0;
 }
 ```
+
 In this example we have introduced two classes `A` and `B`, both belong to
 same package `MyPackage`, and `B` calls static method of `A`, namely
 `MyPackage::A::sayHello()`. 
  
 In order to tell compiler that `B` depends on `A` declaration we added
-_\#import_ directive in top of `A.cppl`.
+`#import` directive in top of _A.cppl_.
 
-Compiler automatically informs `main.cpp` about all collected packages,
-so there is no need to use _\#import_ directive there. In our example we
+Compiler automatically informs _main.cpp_ about all collected packages,
+so there is no need to use `#import` directive there. In our example we
 just call `MyPackage::B::useA()` and then return `0`.
 
-_*Note:*_ _\#include_ directives are also supported. But whenever programmer
+**Note:** `#include` directives are also supported. But whenever programmer
 uses them, current package and all dependent packages will
 include whatever `#include` directive refers to.
-
-
 
 ### Example 2
 
@@ -78,7 +82,8 @@ yet unknown to compiler.
 _`automatic dependencies lookup` is enabled if and only if there are
 no `#import` directives in source file._
 
-_File `MyPackage/A.cppl`_
+_**MyPackage/A.cppl**_
+
 ```cpp
 #include <iostream>
 package namespace MyPackage {
@@ -90,7 +95,9 @@ package namespace MyPackage {
   };
 }
 ```
-_File `MyPackage/B.cppl`_
+
+_**MyPackage/B.cppl**_
+
 ```cpp
 package namespace MyPackage {
   class B {
@@ -101,7 +108,9 @@ package namespace MyPackage {
   };
 }
 ```
-_File `main.cpp`_
+
+_**main.cpp**_
+
 ```cpp
 int main() {
   MyPackage::B::useA();
@@ -113,6 +122,7 @@ Note that there is no need in `global` in `main.cpp`.
 ## _Inline_ methods
 In C++ Levitation all methods are considered as non-inline and
 externally visible, unless `inline` is not specified.
+
 ```cpp
 package namespace MyPackage {
   class A {
@@ -146,23 +156,24 @@ package namespace MyPackage {
 _Related tasks: L-28_
 
 Consider two classes `A` and `B`.
+
 * Class `A`  somehow refers to `B`.
 * While class `B` also refers to class `A`.
 
 In general this is a circular dependency and it is not allowed. And yet
 it is possible to support some special cases.
 
-_If `A` refers to `B` only through its non-inline method bodies, then
-class `B` can refer to `A` without any limitations._
+* If `A` refers to `B` only through its non-inline method bodies, then
+class `B` can refer to `A` without any limitations.
 
-If class `B` depends on `A` but some method bodies of
+* If class `B` depends on `A` but some method bodies of
 `A` uses declaration of `B` then we say that `B` has _round-trip_
 dependency with `A`.
 
 User can inform about such dependency by `#import` directive with
 `bodydep` attribute in dependency class.
 
-_*Note:*_ 'bodydep' is short from 'body dependency'
+**Note:** 'bodydep' is short from 'body dependency'
 
 The latter tells compiler that it should import symbol only for method
 bodies. It basically means that such symbol will be imported on
@@ -180,15 +191,16 @@ package namespace MyPackage {
   };
 }
 ``` 
-*Note:* Inline methods are parts of class declaration. So it is not
+**Note:** Inline methods are parts of class declaration. So it is not
 allowed to refer dependent class in _inline_ method bodies. 
 
-*Note:* There is still no need in `#import` directive if
+**Note:** There is still no need in `#import` directive if
 _automatic dependencies lookup_ is used.  
 
 ### Example
 
-_File `MyPackage/A.cppl`_
+_**MyPackage/A.cppl**_
+
 ```cpp
 #include <iostream>
 #import bodydep MyPackage::B;
@@ -204,7 +216,9 @@ package namespace MyPackage {
   }
 }
 ```
-_File `MyPackage/B.cppl`_
+
+_**MyPackage/B.cppl**_
+
 ```cpp
 #import MyPackage::A;
 package namespace MyPackage {
@@ -218,7 +232,9 @@ package namespace MyPackage {
   }
 }
 ```
-_File `main.cpp`_
+
+_**main.cpp**_
+
 ```cpp
 int main() {
   MyPackage::B::useA();
@@ -231,7 +247,8 @@ User informs compiler that class `A` uses class `B` only in non-inline
 function definitions by means of `#import` directive with `bodydep`
 attribute.
 
-Class `B` uses `A` in two places
+Class `B` uses `A` in two places:
+
  1. It calls its method
 `MyPackage::A::sayHello` in body of `useA`,
  2. It declares member field `MyPackage::A a`.
@@ -247,102 +264,109 @@ for compiler can't use `B` in declaration of `A`.
 > _Good laws are limitations of our worst to release our best._
 
 In C++ Levitation mode use of File System is restricted.
+
 1. Directories correspond to packages. For example, all declarations of
 package `com::MyOuterScope::MyPackage` should be located at path
 `<project-root>/MyOuterScope/MyPackage`.
 2. Source files should be named after contained declaration names. E.g.
-if source file contains package namespace with declaration of class 'A'
+if source file contains package namespace with declaration of class `A`
 it should be named 'A.cppl'.
 3. In each source file user can declare or define one of the next
 set of symbols:
-* Class or structure and its out-of-scope member definitions.
-```cpp
-package namespace P {
-  struct A {
-    void f();
-  };
-  void A::f() {
-  // do something
-  }
-}
-```
-* Template with its specializations and out-of-scope member definitions.
-```cpp
-package namespace P {
-  template<typename T, typename N>
-  struct A {
-    void f();
-  };
 
-  // Partial template specialization  
-  template<typename T>
-  struct A<T, int> {
-    void g();
-  };
+	* Class or structure and its out-of-scope member definitions.
+	
+	```cpp
+	package namespace P {
+	  struct A {
+	    void f();
+	  };
+	  void A::f() {
+	  // do something
+	  }
+	}
+	```
 
-  // Full template specialization
-  // Related tasks: L-24
-  template<>
-  struct A<int, int> {
-    void h();
-  };
-  
-  // Definition of method 'f' of generic template A<T, N> 
-  template <typename T, typename N>
-  void A<T, N>::f() {
-    // do something
-  }
-  
-  // Definition of method 'g' of partially specialized template A<T, int>
-  template <typename T>
-  void A<T, int>::f() {
-    // do something
-  }
-    
-  // Definition of method 'h' of fully specialized template A<int, int>
-  void A<int, int>::h() {
-    // do something
-  }
-}
-```
+	* Template with its specializations and out-of-scope member definitions.
+	
+	```cpp
+	package namespace P {
+	  template<typename T, typename N>
+	  struct A {
+	    void f();
+	  };
+	
+	  // Partial template specialization  
+	  template<typename T>
+	  struct A<T, int> {
+	    void g();
+	  };
+	
+	  // Full template specialization
+	  // Related tasks: L-24
+	  template<>
+	  struct A<int, int> {
+	    void h();
+	  };
+	  
+	  // Definition of method 'f' of generic template A<T, N> 
+	  template <typename T, typename N>
+	  void A<T, N>::f() {
+	    // do something
+	  }
+	  
+	  // Definition of method 'g' of partially specialized template A<T, int>
+	  template <typename T>
+	  void A<T, int>::f() {
+	    // do something
+	  }
+	    
+	  // Definition of method 'h' of fully specialized template A<int, int>
+	  void A<int, int>::h() {
+	    // do something
+	  }
+	}
+	```
+	
+	* Templates with parameter pack arguments
+	
+	```cpp
+	package namespace P {
+	  template<typename ...T>
+	  struct A {
+	    static void f();
+	  };
+	
+	  template <typename ...T>
+	  void A<T...>::f() {
+	    levitation::Test::context() << "P1::A::f()";
+	  }
+	}
+	```
+	
+	* Simple enums.
+	
+	```cpp
+	package namespace P {
+	  enum A {
+	    Value0, Value1
+	    //, ...
+	  };
+	}
+	```
+	
+	* Scoped enums
+	
+	```cpp
+	package namespace P {
+	  enum class A {
+	    Value0, Value1
+	    //, ...
+	  };
+	}
+	```
 
-* Templates with parameter pack arguments
-```cpp
-package namespace P {
-  template<typename ...T>
-  struct A {
-    static void f();
-  };
-
-  template <typename ...T>
-  void A<T...>::f() {
-    levitation::Test::context() << "P1::A::f()";
-  }
-}
-```
-
-* Simple enums.
-
-```cpp
-package namespace P {
-  enum A {
-    Value0, Value1
-    //, ...
-  };
-}
-```
-
-* Scoped enums
-```cpp
-package namespace P {
-  enum class A {
-    Value0, Value1
-    //, ...
-  };
-}
-```
-
-_*Note:*_ inline definitions are allowed for both regular
+**Note:** inline definitions are allowed for both regular
 structs and classes and for templates.
 But only those declared with `inline` specifier will be considered
 as inline methods.
@@ -374,6 +398,7 @@ package namespace P {
 ```
 
 Following types of symbols are _*not*_ supported:
+
 1. Top-level functions.
 2. Top-level variables.
 3. Top-level constants.
@@ -402,12 +427,12 @@ package namespace P {
 ## 'global' keyword
 As it was mentioned before, in _automatic dependencies lookup_
 mode package namespaces are considered as very specific templates with
-implicitly passed 'global' template parameter.
+implicitly passed `global` template parameter.
 
 The latter is used to access global namespace once all dependencies will
 be solved and compiler will add all required dependencies to the package.
 
-And yet user should treat 'global' as template parameter and should
+And yet user should treat `global` as template parameter and should
 provide compiler with all required
 [typename](https://en.cppreference.com/w/cpp/language/dependent_name#The_typename_disambiguator_for_dependent_names)
 and
@@ -433,16 +458,19 @@ disambiguators in future C++ Levitation versions.
 C++ Levitation Compiler implementation is based on LLVM Clang frontend.
  
 So far, the only way to obtain C++ Levitation Compiler is to get sources and build them.
-1. git clone \<url\> `llvm-cppl`
-2. Create directory for binaries, for example `llvm-cppl.build`
+
+1. `git clone <todo:url> llvm-cppl`
+2. Create directory for binaries, for example 'llvm-cppl.build'
 3. `cd llvm-cppl.build`
-4. Run cmake (assuming you want use `llvm-cppl.install` as directory
-with installed binaries, and _llvm-cppl_ is accessable as _../llvm-cppl_).
-```sh
-cmake -DLLVM_ENABLE_PROJECTS=clang \
-      -DCMAKE_INSTALL_PREFIX=llvm-cppl.install \
-      -G "Unix Makefiles" ../llvm-cppl`
-```
+4. Run _cmake_ (assuming you want use 'llvm-cppl.instal' as directory
+with installed binaries, and 'llvm-cppl' is accessable as '../llvm-cppl').
+
+	```sh
+	cmake -DLLVM_ENABLE_PROJECTS=clang \
+	      -DCMAKE_INSTALL_PREFIX=llvm-cppl.install \
+	      -G "Unix Makefiles" ../llvm-cppl
+	```
+
 5. `make`
 6. `make check-clang`
 7. `make install`
@@ -453,22 +481,22 @@ _Related tasks: L-4_
 
 In order to build C++ Levitation code user should provide compiler
 with following information:
+
 * Project root directory (by default it is current directory). 
-* Path to .cpp file with `main` function (by default it is `main.cpp`).
+* Path to .cpp file with `main` function (by default it is 'main.cpp').
 * Number of parallel jobs. Usually it is double of number of
 available CPU cores.
-* Name of output file, by default is `a.out`.
+* Name of output file, by default is 'a.out'.
 
-Consider we want to compile project located at directory `my-project`
-with `main` located at `my-project/my-project.cpp`.
+Consider we want to compile project located at directory 'my-project'
+with `main` located at 'my-project/my-project.cpp'.
 
 Assuming we have a quad-core CPU we should run command:
 
 `c++l -cppl-root="my-project" -cppl-main="my-project/my-project.cpp" -cppl-j=8 -o app.out`
 
-
-If user is not fine with long complicated command-lines, then could rename
-`my-project.cpp` to `main.cpp` and change directory to `my-project`.
+If user is not fine with long and complicated command-lines, then she could rename
+'my-project.cpp' to 'main.cpp' and change directory to 'my-project'.
 
 Then build command could be reduced to
 
@@ -495,18 +523,20 @@ to be saved somewhere for future use.
 As long as we working with non-standard C++ source code,
 we also need to generate .h file with all exported declarations.
 
-Finally we obtain set of object files and regular C++ .h file with
+Finally, we obtain set of object files and regular C++ .h file with
 exported symbols. Having this at hands it is possible to create library
 with standard tools.
 
-For example building static library with _gcc_ tools and _Bash_ consists of
+For example, building static library with _gcc_ tools and _Bash_ consists of
 2 steps (assuming current directory is project root, and compiler uses single
 thread):
+
 1. `c++l -cppl-h=my-project.h -cppl-c=lib-objects`
 2. `ar rcs my-project.a $(ls lib-objects/*.o)`
 
 The only difference to regular C++ approach is step 1. On this step
 we ask `c++l` to produce legacy object files and .h file.
+
 * `-cppl-h=<filename>` asks compiler to generate C++ header file, and save
 it with _'\<filename\>'_ name.
 * `-cppl-c=<directory>` asks compiler to produce object files and store them
@@ -546,16 +576,20 @@ file in project. On this step precompiled header (PCH) might be produced.
 For more details why it might be good to use PCH files read
 [on clang site](https://clang.llvm.org/docs/PCHInternals.html#using-precompiled-headers-with-clang)
 Preamble can be created with next command:
+
 ```
-clang -cc1 -std=c++17 -xc++ -levitation-build-preamble <path-to-preamble-source> \
+clang -cc1 -std=c++17 -xc++ -levitation-build-preamble \
+    <path-to-preamble-source> \
     -o <path-to-precompiled-header>
 ```
-* `-levitation-build-preamble \<path-to-preamble-source\>` instructs compiler
-to build preamble, where \<path-to-preamble-source\> is path to source
-file with common declarations. Usually it is _.hpp_ file with set of
-\#include directives. 
-* `-o \<path-to-precompiled-header\>` instructs compiler to save precompiled
-header in file with path '\<path-to-precompiled-header\>'
+
+* `-levitation-build-preamble` instructs compiler
+to build preamble.
+* `<path-to-preamble-source>` is path to source
+file with common declarations. Usually it is .hpp file with set of
+`#include` directives.
+* `-o <path-to-precompiled-header>` instructs compiler to save precompiled
+header in file with path '_\<path-to-precompiled-header\>_'
 
 ### Initial parsing
 On this step compiler parses C++ Levitation source files and saves result
@@ -576,14 +610,16 @@ parsed on later stages. In this case _.ldeps_ file will be created with
 `ADLM=0`.
 
 Files can be parsed with next command:
+
 ```
-clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ \
+clang -cc1 -std=c++17 -xc++ -levitation-preamble=<path to precompiled preamble> \
     -levitation-build-ast \
     -levitation-sources-root-dir=<path to project root> \
-    -levitation-deps-output-file=<path to output .ldeps file>
+    -levitation-deps-output-file=<path to output .ldeps file> \
     <path to input source file> \
     -o <path to output .ast file>
 ```
+
 * `-levitation-preamble` - instructs compiler to use preamble
 * `-levitation-build-ast` - informs compiler that we're going to build
 initial AST files.
@@ -594,25 +630,29 @@ Is used to specify project root directory.
 There is a another special note about `-levitation-deps-output-file`.
 For regular parse stage it is required to produce dependencies. But it is
 not necessary in two cases though:
+
 1. If user already knows dependencies. There is no need in dependencies solving.
 2. In test mode. Stage are tested spearately from
 each other and thus there is also no need in dependencies information. 
  
 ### Dependencies solving
-On this stage `levitation-deps` tool is called. It collects all _.ldeps_
-files in project directory and tries to build dependencies graph.
+On this stage `levitation-deps` tool is called. It collects all .ldeps files in project directory and tries to build dependencies graph.
 
-If all dependencies are correct then graph is acyclic (DAG), and tool
+If all dependencies are correct, then graph is acyclic (DAG), and tool
 produces set of _.d_ and _.fulld_ text files.
 Each _.d_ or _.fulld_ file corresponds to particular output file.
 
 For example for _A.cppl_ compiler first produces _A.ast_ files and then
 produces two output files, namely
 _A.o_ and _A.decl-ast_.
-`levitation-deps` launched straight after initial parser stage and
-creates for files, namely
-* A pair of _A.decl-ast.d_ and _A.decl-ast.fulld_.
-* And a pair of _A.o.d_ and _A.o.fulld_.
+
+`levitation-deps` is launched straight after initial parser stage and
+creates _four_ files, namely
+
+* _A.decl-ast.d_,
+* _A.decl-ast.fulld_,
+* _A.o.d_,
+* and _A.o.fulld_.
 
 #### _.d_ files
 Are required for build system and allows to determine
@@ -646,9 +686,10 @@ turn depends on `C.decl-ast`, then `A.decl-ast.fulld` will contain _four_ string
 * and path to `C.decl-ast`.
 
 Dependencies can be solved by next command:
+
 ```
 levitation-deps -src-root=<path project sources root> \
-    -build-root=<path to root build directory>
+    -build-root=<path to root build directory> \
     -main-file=<path to .cpp file with main function>   
 ```
 
@@ -663,6 +704,7 @@ Binary AST files created on _initial parsing_ stage (_.ast_ files) are
 used as input files.
 
 For each _.ast_ file compiler goes through next steps.
+
 1. Reads _.decl-ast_ files with declarations current AST file depends on.
 2. Reads _.ast_ file itself.
 3. Strips all non-inline method bodies.
@@ -671,16 +713,18 @@ global namespace specifier ('::').
 5. Saves result into corresponding _.decl-ast_ file.
 
 Example of instantiation command:
+
 ```
 clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch \
     -flevitation-build-decl \
-    -levitation-dependency=<path to .ast or .decl-ast file>
-    -levitation-dependency=<another dependency>
+    -levitation-dependency=<path to .ast or .decl-ast file> \
+    -levitation-dependency=<another dependency> \
     ...
     -emit-pch \    
     <path to AST file to be instantiated> \
     -o <path to output .decl-ast file>
 ```
+
 * `-levitation-preamble` is optional and used to specify precompiled
 header.
 * `-flevitation-build-decl` informs compiler that it should run
@@ -691,7 +735,7 @@ represented by set of _.ast_ and _.decl-ast_ files.
 
 ### Code generation
 This stage is similar to instantiation with only difference, that it
-doesn't strip non-inline method bodies and produces object (_.o_) file
+doesn't strip non-inline method bodies and produces object (.o) file
 rather then binary AST file.
 
 Just like for previous stage compiler should be informed about all
@@ -701,6 +745,7 @@ Binary AST files created on _initial parsing_ stage (_.ast_ files) are
 used as input files.
 
 For each _.ast_ file compiler goes through next steps.
+
 1. Reads _.decl-ast_ files with declarations current AST file depends on.
 2. Reads _.ast_ file itself.
 3. If source file uses _automatic dependencies lookup_ compiler instantiates
@@ -709,6 +754,7 @@ global namespace specifier ('::').
 4. Generates binary _.o_ file.
 
 Example of instantiation command:
+
 ```
 clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch \
     -flevitation-build-object \
@@ -718,6 +764,7 @@ clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch \
     <path to input AST file> \
     -o <path to output .o file>
 ```
+
 * `-levitation-preamble` is optional and used to specify precompiled
 header.
 * `-flevitation-build-object` informs compiler that it should run
@@ -772,6 +819,7 @@ _CMakeLists-sample.txt_ and _build-cmake.sh_.
 
 As a long as cmake doesn't support dynamic dependencies build requires
 to run make in 3 steps:
+
 1. Parse and solve dependencies.
 2. Regenerate make files.
 3. Run _instantiation_, _code generation_ and _linkage_ stages.
@@ -787,7 +835,7 @@ namespace-specifier:
   identifier
   namespace-specifier '::' namespace-specifier
 ```
-_*Note:*_: `#import` directives can be present only at the top of file.
+**Note:**: `#import` directives can be present only at the top of file.
 
 ### package namespace
 ```
@@ -798,7 +846,7 @@ ns_name:
   identifier
   ns_name '::' identifier  
 ```
-_*Note:*_: Only one package namespace is allowed per source file.
+**Note:** Only one package namespace is allowed per source file.
 
 ## Appendix 2. Implementation status
 C++ Levitation Packages is still in development. Current implementation
