@@ -244,6 +244,8 @@ Omitting `bodydep` attribute will cause compiler to exit with error,
 for compiler can't use `B` in declaration of `A`. 
 
 ## Project structure, limitations
+> _Good laws are limitations of our worst to release our best._
+
 In C++ Levitation mode use of File System is restricted.
 1. Directories correspond to packages. For example, all declarations of
 package `com::MyOuterScope::MyPackage` should be located at path
