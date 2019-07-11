@@ -270,3 +270,17 @@ TITLE: Support of libraries
 DESCRIPTION: So far only executable compilation is supported. We should add support for
 libraries. The main problem is to implement library headers generation.
 STATUS: Open
+
+L-28:
+TITLE: Support for single parser pass for round-trip sources
+DESCRIPTION: Round-trip sources have additional set dependencies for body
+definitions.
+Thus in case of manual dependencies we need very special way of how we
+parse it and save result.
+1. We load declaration dependencies.
+2. We parse declaration, and save all method definitions as LateParsedDeclaration objects.
+3. We save result as .decl-ast file.
+4. We load body dependencies
+5. We parse postponed method bodies and member initializers.
+6. We emit object file.
+STATUS: Open.

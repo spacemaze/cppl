@@ -5,11 +5,7 @@ support for C++.
 
 ## Basic concepts
 Levitation Packages is a replacement for _C/C++_ `#include` directives.
-In _C++ Levitation_ mode the latter is still supported, and user can
-include some files.
-
-Whenever user does it, current package and all dependent packages will
-include whatever `#include` directive refers to.
+In _C++ Levitation_ mode the latter is still supported, but only as landing pad for legacy C++ code.
 
 ## Simplest things
 
@@ -49,34 +45,42 @@ int main() {
   return 0;
 }
 ```
-In example we have introduced two classes `A` and `B`, both belong to
+In this example we have introduced two classes `A` and `B`, both belong to
 same package `MyPackage`, and `B` calls static method of `A`, namely
 `MyPackage::A::sayHello()`. 
  
 In order to tell compiler that `B` depends on `A` declaration we added
-\#import directive in top of `FileA.cppl`.
+_\#import_ directive in top of `A.cppl`.
 
 Compiler automatically informs `main.cpp` about all collected packages,
-so there is no need to use \#import directive there. In our example we
+so there is no need to use _\#import_ directive there. In our example we
 just call `MyPackage::B::useA()` and then return `0`.
+
+_*Note:*_ _\#include_ directives are also supported. But whenever programmer
+uses them, current package and all dependent packages will
+include whatever `#include` directive refers to.
+
+
 
 ### Example 2
 
-Below is another example which demonstrates C++ Levitation Packages
+Below is another example which demonstrates
 _automatic dependencies lookup mode_ feature (ADLM).
-Namely there is no need to add `#import` directives in the beginning of
+Namely it is not neccessary to add `#import` directives in the beginning of
 source file. There is a tradeoff though.
 
 In this case `package namespace` is considered as a very specific
-template with implicitly passed parameter `global`.
-`global` allows user to access symbols declared in another sources.
+template with implicitly passed parameter _'global'_.
+
+`global` allows user to access symbols declared in another source
+yet unknown to compiler.
 
 _`automatic dependencies lookup` is enabled if and only if there are
 no `#import` directives in source file._
 
 _File `MyPackage/A.cppl`_
 ```cpp
-\#include <iostream>
+#include <iostream>
 package namespace MyPackage {
   class A {
   public:
@@ -139,6 +143,8 @@ package namespace MyPackage {
 ```
 
 ## _Round-trip_ dependencies
+_Related tasks: L-28_
+
 Consider two classes `A` and `B`.
 * Class `A`  somehow refers to `B`.
 * While class `B` also refers to class `A`.
@@ -154,7 +160,9 @@ If class `B` depends on `A` but some method bodies of
 dependency with `A`.
 
 User can inform about such dependency by `#import` directive with
-`for_bodies` attribute in dependency class.
+`bodydep` attribute in dependency class.
+
+_*Note:*_ 'bodydep' is short from 'body dependency'
 
 The latter tells compiler that it should import symbol only for method
 bodies. It basically means that such symbol will be imported on
@@ -162,7 +170,7 @@ object file creation stage only.
 
 ```cpp
 // Related tasks: L-5
-#import for_bodies MyPackage::B;
+#import bodydep MyPackage::B;
 package namespace MyPackage {
   class A {
   public:
@@ -183,7 +191,7 @@ _automatic dependencies lookup_ is used.
 _File `MyPackage/A.cppl`_
 ```cpp
 #include <iostream>
-#import for_bodies MyPackage::B;
+#import bodydep MyPackage::B;
 package namespace MyPackage {
   class A {
   public:
@@ -220,7 +228,7 @@ int main() {
 
 In this example the body of `MyPackage::A::useB` refers to class `B`.
 User informs compiler that class `A` uses class `B` only in non-inline
-function definitions by means of `#import` directive with `for_bodies`
+function definitions by means of `#import` directive with `bodydep`
 attribute.
 
 Class `B` uses `A` in two places
@@ -232,7 +240,7 @@ The former means that declaration of `A` affects declaration of `B`.
 And thus the use of `B` in declaration of `A` or in inline methods of
 `A` is prohibited.
 
-Omitting `for_bodies` attribute will cause compiler to exit with error,
+Omitting `bodydep` attribute will cause compiler to exit with error,
 for compiler can't use `B` in declaration of `A`. 
 
 ## Project structure, limitations
@@ -240,7 +248,10 @@ In C++ Levitation mode use of File System is restricted.
 1. Directories correspond to packages. For example, all declarations of
 package `com::MyOuterScope::MyPackage` should be located at path
 `<project-root>/MyOuterScope/MyPackage`.
-2. In each package file user can declare or define one of the next
+2. Source files should be named after contained declaration names. E.g.
+if source file contains package namespace with declaration of class 'A'
+it should be named 'A.cppl'.
+3. In each source file user can declare or define one of the next
 set of symbols:
 * Class or structure and its out-of-scope member definitions.
 ```cpp
@@ -268,7 +279,7 @@ package namespace P {
   };
 
   // Full template specialization
-  // Related bugs: L-24
+  // Related tasks: L-24
   template<>
   struct A<int, int> {
     void h();
@@ -364,12 +375,13 @@ Following types of symbols are _*not*_ supported:
 1. Top-level functions.
 2. Top-level variables.
 3. Top-level constants.
-4. Macros. If programmer really need macros, then he should define them
+4. Macros. If programmer needs macros, then he should define them
 in separate header. Limited macros support is considered in future
 C++ Levitation Package versions though.
 
 Symbols with different names can't be defined in same file.
-Related tasks: L-18, L-25, L26
+
+_Related tasks: L-18, L-25, L26_
 
 ```cpp
 namespace P {
@@ -418,12 +430,12 @@ disambiguators in future C++ Levitation versions.
 ### Getting C++ Levitation Compiler
 C++ Levitation Compiler implementation is based on LLVM Clang frontend.
  
-So far, the only way to obtain it is to get sources and build them.
-1. git clone <url> `llvm-cppl`
+So far, the only way to obtain C++ Levitation Compiler is to get sources and build them.
+1. git clone \<url\> `llvm-cppl`
 2. Create directory for binaries, for example `llvm-cppl.build`
-3. `cd llvm-cppl`
-4. Run cmake, assuming you want use `llvm-cppl.install` as directory
-with installed binaries.
+3. `cd llvm-cppl.build`
+4. Run cmake (assuming you want use `llvm-cppl.install` as directory
+with installed binaries, and _llvm-cppl_ is accessable as _../llvm-cppl_).
 ```sh
 cmake -DLLVM_ENABLE_PROJECTS=clang \
       -DCMAKE_INSTALL_PREFIX=llvm-cppl.install \
@@ -443,15 +455,17 @@ with following information:
 * Path to .cpp file with `main` function (by default it is `main.cpp`).
 * Number of parallel jobs. Usually it is double of number of
 available CPU cores.
-* Name of output file, by default it is `a.out`.
+* Name of output file, by default is `a.out`.
 
 Consider we want to compile project located at directory `my-project`
 with `main` located at `my-project/my-project.cpp`.
-Assuming we have quad-core CPU we can compile it with following command:
+
+Assuming we have a quad-core CPU we should run command:
 
 `c++l -cppl-root="my-project" -cppl-main="my-project/my-project.cpp" -cppl-j=8 -o app.out`
 
-If user is not fine with long complicated command-lines he could rename
+
+If user is not fine with long complicated command-lines, then could rename
 `my-project.cpp` to `main.cpp` and change directory to `my-project`.
 
 Then build command could be reduced to
@@ -462,44 +476,57 @@ Or even to
 
 `c++l`
 
+In latter case compiler will use single thread compilation and saves
+executable as _a.out_.
+
 ### Building library
 _Related tasks: L-4, L-27_
 
 Just like a traditional C++ compilers, `c++l` produces set of object
 files.
 
-Building library is a bit out of compilers competence.
+Library creation is a bit out of compilers competence.
 
 But, it is possible to inform compiler that we need object files
 to be saved somewhere for future use.
 
-As long as we walking with non-standard C++ source code,
+As long as we working with non-standard C++ source code,
 we also need to generate .h file with all exported declarations.
 
 Finally we obtain set of object files and regular C++ .h file with
 exported symbols. Having this at hands it is possible to create library
 with standard tools.
 
-For example building static library with gcc tools and Bash consists of
-2 steps (assuming current directory is project root, and compile in single
+For example building static library with _gcc_ tools and _Bash_ consists of
+2 steps (assuming current directory is project root, and compiler uses single
 thread):
-1. `c++l -cppl-nomain -cppl-h=my-project.h -cppl-c=lib-objects`
+1. `c++l -cppl-h=my-project.h -cppl-c=lib-objects`
 2. `ar rcs my-project.a $(ls lib-objects/*.o)`
 
 The only difference to regular C++ approach is step 1. On this step
 we ask `c++l` to produce legacy object files and .h file.
-* `-cppl-nomain` tells compiler, that there is no main file. Theoretically
-it is still possible to declare `int main()` somewhere though.
 * `-cppl-h=<filename>` asks compiler to generate C++ header file, and save
 it with _'\<filename\>'_ name.
 * `-cppl-c=<directory>` asks compiler to produce object files and store them
-in directory with _'\<directory\>'_ name.
+in directory with _'\<directory\>'_ name. It also tells compiler,
+that there is no main file. Theoretically
+it is still possible to declare `int main()` somewhere though.
 
 On step 2 `ar` tool is instructed to create a static library `my-project.a`
 and include into it all objects from `lib-objects` directory. 
 
 ## Theory of operation. Manual build
-In C++ Levitation build process consists of 5 general steps:
+If only manual dependencies mode is used, then build process consists
+of several steps:
+
+0. Build preamble (optional)
+1. Parsing `#import` directives.
+2. Dependencies solving.
+3. Parse sources and emit binaries (_.o_ and _.decl-ast files_).
+4. Linkage.
+
+With _automatic dependencies lookup_ in game though
+build process consists of 5 general steps:
 
 0. Build preamble (optional)
 1. Initial parsing.
@@ -507,6 +534,9 @@ In C++ Levitation build process consists of 5 general steps:
 3. Instantiation.
 4. Code generation.
 5. Linkage.
+
+Note, that former "Parse and emit" step is expanded onto two steps, namely
+"3. Instantiation" and "4. Code generation".
 
 ### Preamble
 Preamble step is optional. Preamble supposed to contain code used by every
@@ -527,22 +557,30 @@ header in file with path '\<path-to-precompiled-header\>'
 
 ### Initial parsing
 On this step compiler parses C++ Levitation source files and saves result
-as set .ast files. The latter represent binary form of abstract syntax
+as set _.ast_ files. The latter represent binary form of abstract syntax
 tree (AST).
 
 On this stage compiler also gathers dependencies information and stores
-it in binary format as set of _.ldeps_ files.
+it in binary format as set of _.ldeps_ files. _.ldeps_ files also store
+ADLM flag, which tells whether _automatic dependencies lookup_ mode was
+enabled for corresponding file.
 
 Each call of `c++l` will parse single source file and may produce
 one _.ldeps_ file.  
+
+If parser meets `#import` directives then it exits straight after last
+`#import` directive. The rest of code will be
+parsed on later stages. In this case _.ldeps_ file will be created with
+`ADLM=0`.
 
 Files can be parsed with next command:
 ```
 clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ \
     -levitation-build-ast \
-    -levitation-sources-root-dir=%S \
-    -levitation-deps-output-file=%T/P1_A.ldeps %S/P1/A.cppl \
-    -o %T/P1_A.ast
+    -levitation-sources-root-dir=<path to project root> \
+    -levitation-deps-output-file=<path to output .ldeps file>
+    <path to input source file> \
+    -o <path to output .ast file>
 ```
 * `-levitation-preamble` - instructs compiler to use preamble
 * `-levitation-build-ast` - informs compiler that we're going to build
@@ -554,8 +592,8 @@ Is used to specify project root directory.
 There is a another special note about `-levitation-deps-output-file`.
 For regular parse stage it is required to produce dependencies. But it is
 not necessary in two cases though:
-1. Is user already knows dependencies. There is no need in dependencies solving.
-2. In test mode. Usually in tests compiler stages tested spearately from
+1. If user already knows dependencies. There is no need in dependencies solving.
+2. In test mode. Stage are tested spearately from
 each other and thus there is also no need in dependencies information. 
  
 ### Dependencies solving
@@ -564,34 +602,47 @@ files in project directory and tries to build dependencies graph.
 
 If all dependencies are correct then graph is acyclic (DAG), and tool
 produces set of _.d_ and _.fulld_ text files.
-Each _.d_ or _.fulld_ file corresponds to particular output file those
-dependencies were found for.
+Each _.d_ or _.fulld_ file corresponds to particular output file.
 
-For example if we want to create declaration AST file _A.decl-ast_, then
-its dependencies will be present as pair of _A.decl-ast.d_ and
-_A.decl-ast.fulld_.
-* _.d_ files are text files. Each file is named after corresponding
+For example for _A.cppl_ compiler first produces _A.ast_ files and then
+produces two output files, namely
+_A.o_ and _A.decl-ast_.
+`levitation-deps` launched straight after initial parser stage and
+creates for files, namely
+* A pair of _A.decl-ast.d_ and _A.decl-ast.fulld_.
+* And a pair of _A.o.d_ and _A.o.fulld_.
+
+#### _.d_ files
+Are required for build system and allows to determine
+instantiation and code generation order.
+
+Files have text format.
+
+Each file is named after corresponding
 output file. Filename has format _\<output-file\>.d_.
 Each string in _.d_ file contains path to one of its direct dependencies.
 For example if `A.decl-ast` depends on `B.decl-ast` and `B.decl-ast` in
 turn depends on `C.decl-ast`, then `A.decl-ast.d` will contain path
 to `B.cppl` only. Note that in this case dependency is described by source file.
 
-* _.fulld_ files are text files as well. And each file also named after corresponding
+#### _.fulld_ files
+Are required for _instantiation_ and _code generation_
+stage itself and used to provide current source with all required
+declarations it depends on.
+
+_.fulld_ files are text files as well.
+
+And each file also named after corresponding
 output file with similar naming format: _\<output-file\>.fulld_. Difference
 with _.d_ files is that _.fulld_ files contain all direct and indirect
 dependencies.
-For former example if `A.decl-ast` depends on `B.decl-ast` and `B.decl-ast` in
-turn depends on `C.decl-ast`, `A.decl-ast.fulld` will contain _four_ strings:
-path to `B.ast`, path to `B.decl-ast`, path to `C.ast` and path to `C.decl-ast`.
+For former example if `A.decl-ast` depends on `B.decl-ast`, and `B.decl-ast` in
+turn depends on `C.decl-ast`, then `A.decl-ast.fulld` will contain _four_ strings:
+* path to `B.ast`,
+* path to `B.decl-ast`,
+* path to `C.ast`
+* and path to `C.decl-ast`.
 
-_.d_ files are required for build system and allows to determine
-instantiation and code generation order.
-
-_.fulld_ files are required for _instantiation_ and _code generation_
-stage itself and used to provide current source with all required
-declarations it depends on.
- 
 Dependencies can be solved by next command:
 ```
 levitation-deps -src-root=<path project sources root> \
@@ -613,8 +664,7 @@ For each _.ast_ file compiler goes through next steps.
 1. Reads _.decl-ast_ files with declarations current AST file depends on.
 2. Reads _.ast_ file itself.
 3. Strips all non-inline method bodies.
-4. If source file uses _automatic dependencies lookup_ compiler instantiates
-package namespace. Namely it replaces all _'global::'_ specifiers with
+4. Istantiates package namespace. Namely it replaces all _'global::'_ specifiers with
 global namespace specifier ('::').
 5. Saves result into corresponding _.decl-ast_ file.
 
@@ -675,11 +725,38 @@ non-inline method bodies.
 represented by set of _.decl-ast_ files.
 * `-emit-obj` instructs compiler to produce binary object file.
 
+### Parse sources and emit binaries
+_(Replacement of stages "3. Instantiation" and "4. Code generation"
+for files with manual dependencies declaration.)_
+
+_Related tasks: L-28_
+
+If it is known that source file uses manual dependencies declaration, then
+initial parsing is basically skipped. For it is possible to combine parsing
+and binary emission stages, and thus improve compiler performance.
+
+Example of parse and emit command:
+```
+clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch \
+    -flevitation-parse-and-emit \
+    -levitation-dependency=<path to .ast or .decl-ast file>
+    ...
+    -levitation-body-dependency=<path to .ast or .decl-ast file>
+    ...
+    -levitation-decl-ast-output=<path to output .decl-ast file>
+    -emit-pch \
+    <path to source file to be compiled> \
+    -o <path to output object file>
+```
+
+Set of `-levitation-body-dependency` parameters specify set of dependencies
+required by non-inline method definitions only.
+
 ### Linkage
 
 Linkage is done in traditional (legacy) way.
 
-Having set of .o files linker just combines them into output executable.
+Having set of _.o_ files linker just combines them into output executable.
 
 When building libraries, there is no Linkage step. One may say it is
 replaced by library creation step.
@@ -701,7 +778,7 @@ to run make in 3 steps:
 ### \#import directive
 ```
 import-directive:
-  '#import' ['for_bodies'] path-to-symbol ';'
+  '#import' ['bodydep'] path-to-symbol ';'
 path-to-symbol:
   namespace-specifier '::' identifier
 namespace-specifier:
@@ -729,8 +806,9 @@ status is shown in table below:
 | ------------- |:-------------:|:----------:|:------------|
 | Initial parsing stage | implemented for ADLM | L-5 | \#import directive is not supported yet. |
 | Dependencies solving  | implemented | | |
-| Instantiation stage | implemented for ADLM |      L-5 | It is possible to combine instantiation with code generation for one-way dependent sources |
-| Code generation stage | implemented for ADLM |      L-5 | It is possible to combine instantiation with code generation for one-way dependent sources |
+| Instantiation stage | implemented | | |
+| Code generation stage | implemented | | |
+| Parse and build stage | not implemented | L-5, L-28 | It is possible to combine instantiation with code generation for one-way dependent sources |
 | Automatic dependencies lookup mode | implemented | | |
 | Manual dependencies mode | not implemented |      L-5 | \#import directive is not supported yet. |
 | Build controlled by driver | not implemented |      L-4 | Highest priority task. Is to be implemented in first place. |
