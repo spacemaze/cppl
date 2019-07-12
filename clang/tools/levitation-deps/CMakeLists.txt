@@ -3,11 +3,18 @@ set(LEVITATION_DEPS_TARGET levitation-deps)
 add_clang_executable(${LEVITATION_DEPS_TARGET} levitation-deps.cpp)
 
 target_link_libraries(
+    PRIVATE
     ${LEVITATION_DEPS_TARGET}
     clangLevitation
     clangAST
     clangBasic
     clangSerialization
+)
+
+set_target_properties(
+    ${LEVITATION_DEPS_TARGET}
+    PROPERTIES
+    LINKER_LANGUAGE CXX
 )
 
 if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
