@@ -1,4 +1,16 @@
-// TODO Levitation: Licensing
+//===--- C++ Levitation DeserializationListeners.h --------------*- C++ -*-===//
+//
+// Part of the C++ Levitation Project,
+// under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines C++ Levitation ASTDeserializationListener
+// implementations.
+//
+//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_FRONTEND_LEVITATION_DESERIALIZATIONLISTENERS_H
 #define LLVM_CLANG_FRONTEND_LEVITATION_DESERIALIZATIONLISTENERS_H

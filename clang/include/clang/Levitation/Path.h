@@ -1,4 +1,15 @@
-// TODO Levitation: Licensing
+//===--- Path.h - C++ Levitation File System Path utils ---------*- C++ -*-===//
+//
+// Part of the C++ Levitation Project,
+// under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+//  This file defines additional Path utilities for C++ Levitation project.
+//
+//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_LEVITATION_PATH_H
 #define LLVM_CLANG_LEVITATION_PATH_H

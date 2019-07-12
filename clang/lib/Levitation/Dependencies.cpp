@@ -1,10 +1,15 @@
-// TODO Levitation: Licensing
-//===--------------------------------------------------------------------===//
-// Dependency handling
+//===--- C++ Levitation Dependencies.cpp ------------------------*- C++ -*-===//
 //
-// Group of methods below implements
-// package dependencies detection and handling.
+// Part of the C++ Levitation Project,
+// under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
+//===----------------------------------------------------------------------===//
+//
+//  This file methods of C++ Levitation Dependencies data classes.
+//
+//===----------------------------------------------------------------------===//
 
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Basic/Diagnostic.h"
@@ -12,6 +17,9 @@
 
 namespace clang {
 namespace levitation {
+
+// Group of methods below implements
+// package dependencies detection and handling.
 
 void DependenciesMap::mergeDependency(PackageDependency &&Dep) {
   auto Res = try_emplace(Dep.getComponents(), std::move(Dep));

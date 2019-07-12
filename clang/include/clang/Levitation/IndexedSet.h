@@ -1,6 +1,15 @@
+//===--- C++ Levitation IndexedSet.h ------------------------*- C++ -*-===//
 //
-// Created by Stepan Dyatkovskiy on 6/7/19.
+// Part of the C++ Levitation Project,
+// under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
+//===----------------------------------------------------------------------===//
+//
+//  This file defines C++ Levitation IndexedSet.
+//
+//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_LEVITATION_INDEXEDSET_H
 #define LLVM_CLANG_LEVITATION_INDEXEDSET_H
@@ -10,6 +19,22 @@
 #include <map>
 
 namespace clang { namespace levitation {
+
+  /// IndexedSet is a semantic extension for regular sets concept.
+  /// In addition to regular set it adds association of each
+  /// set item with unique identifier number. And thus allows to access
+  /// items by IDs rather than set operators.
+  ///
+  /// The advantage is that ID type is known to IndexedSet user and thus
+  /// it is easier to serialize it and perform some other manipulations.
+  ///
+  /// \tparam IdTy type of identifier number, it should be integer
+  ///     or at least mimic integer type behaviour
+  ///    (by means of overloaded operators and so on).
+  /// \tparam ItemTy type of items to be stored in set.
+  ///
+  /// \tparam ItemRefTy type of item reference, if provided allows
+  ///    to reduce memory required by index collection.
   template <typename IdTy, typename ItemTy, typename ItemRefTy = ItemTy>
   class IndexedSet {
 

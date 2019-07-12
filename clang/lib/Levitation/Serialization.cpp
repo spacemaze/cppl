@@ -1,10 +1,17 @@
-// TODO Levitation: Licensing
-//===--------------------------------------------------------------------===//
-// Dependency handling
+//===--- C++ Levitation Serialization.cpp ------------------------*- C++ -*-===//
 //
-// Group of methods below implements
-// package dependencies detection and handling.
+// Part of the C++ Levitation Project,
+// under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
+//===----------------------------------------------------------------------===//
+//
+//  This file defines utils and methods for C++ Levitation serialization
+//  tools. It also contains several additional private classes required by
+//  implementation only.
+//
+//===----------------------------------------------------------------------===//
 
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/Serialization.h"
