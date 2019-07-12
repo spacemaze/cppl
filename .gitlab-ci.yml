@@ -7,7 +7,7 @@ build-cppl:
   script:
     - mkdir cppl.build
     - cd cppl.build
-    - cmake -DLLVM_ENABLE_PROJECTS=clang -DCMAKE_INSTALL_PREFIX=$PWD/install -G "Unix Makefiles" ..
+    - cmake -DLLVM_ENABLE_PROJECTS=clang -DCMAKE_INSTALL_PREFIX=$PWD/install -G "Unix Makefiles" ../llvm
     - make install
   only:
     - levitation-draft
