@@ -1,3 +1,5 @@
+[toc]
+
 # C++ Levitation Packages
 This is an extension to C++17, and it introduces original
 [modularity](https://en.wikipedia.org/wiki/Modular_programming)
@@ -267,7 +269,7 @@ In C++ Levitation mode use of File System is restricted.
 
 1. Directories correspond to packages. For example, all declarations of
 package `com::MyOuterScope::MyPackage` should be located at path
-`<project-root>/MyOuterScope/MyPackage`.
+`<project-root>/com/MyOuterScope/MyPackage`.
 2. Source files should be named after contained declaration names. E.g.
 if source file contains package namespace with declaration of class `A`
 it should be named 'A.cppl'.
@@ -366,8 +368,7 @@ set of symbols:
 	}
 	```
 
-**Note:** inline definitions are allowed for both regular
-structs and classes and for templates.
+**Note:** inline definitions are allowed for regular structs, classes and for templates.
 But only those declared with `inline` specifier will be considered
 as inline methods.
 
