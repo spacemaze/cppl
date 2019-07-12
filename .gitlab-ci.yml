@@ -1,0 +1,19 @@
+before_script:
+  - apt-get install python cmake -y
+
+build-cppl:
+  stage: build
+  script:
+    - mkdir cppl.build
+    - cd cppl.build
+    - cmake -DLLVM_ENABLE_PROJECTS=clang -DCMAKE_INSTALL_PREFIX=$PWD/install -G "Unix Makefiles" ..
+    - make install
+  only:
+    - levitation-draft
+
+test-cppl:
+  stage: test
+  script:
+    - make check-clang
+  only:
+    - levitation-draft
