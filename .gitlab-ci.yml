@@ -1,5 +1,6 @@
 before_script:
-  - apt-get install python cmake -y
+ - apt-get update --yes
+ - apt-get install --yes python cmake
 
 build-cppl:
   stage: build
