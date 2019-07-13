@@ -1,14 +1,16 @@
 before_script:
  - apt-get update --yes
- - apt-get install --yes python cmake
+ - apt-get install --yes python cmake clang
 
 build-cppl:
   stage: build
   script:
     - echo Number of CPU cores $(grep -c ^processor /proc/cpuinfo)
+    - export CC=/usr/bin/clang
+    - export CXX=/usr/bin/clang++
     - mkdir cppl.build
     - cd cppl.build
-    - cmake -DLLVM_ENABLE_PROJECTS=clang -DCMAKE_INSTALL_PREFIX=$PWD/install -G "Unix Makefiles" ../llvm
+    - cmake -DLLVM_ENABLE_PROJECTS=clang -DCMAKE_INSTALL_PREFIX=$PWD/install -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release ../llvm
     - make -j$(( $(grep -c ^processor /proc/cpuinfo)*2 )) install
   only:
     - levitation-draft
