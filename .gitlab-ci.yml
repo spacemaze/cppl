@@ -5,16 +5,17 @@ before_script:
 build-cppl:
   stage: build
   script:
+    - echo Number of CPU cores $(grep -c ^processor /proc/cpuinfo)
     - mkdir cppl.build
     - cd cppl.build
     - cmake -DLLVM_ENABLE_PROJECTS=clang -DCMAKE_INSTALL_PREFIX=$PWD/install -G "Unix Makefiles" ../llvm
-    - make install
+    - make -j$(( $(grep -c ^processor /proc/cpuinfo)*2 )) install
   only:
     - levitation-draft
 
 test-cppl:
   stage: test
   script:
-    - make check-clang
+    - make -j$(( $(grep -c ^processor /proc/cpuinfo)*2 )) check-clang
   only:
     - levitation-draft
