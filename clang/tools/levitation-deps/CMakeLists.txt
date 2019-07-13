@@ -3,8 +3,8 @@ set(LEVITATION_DEPS_TARGET levitation-deps)
 add_clang_executable(${LEVITATION_DEPS_TARGET} levitation-deps.cpp)
 
 target_link_libraries(
-    PRIVATE
     ${LEVITATION_DEPS_TARGET}
+    PRIVATE
     clangLevitation
     clangAST
     clangBasic
