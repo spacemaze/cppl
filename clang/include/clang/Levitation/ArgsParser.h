@@ -23,8 +23,8 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 
-namespace clang { namespace levitation {
-    enum class ArgsSeparator {
+namespace clang { namespace levitation { namespace args {
+  enum class ValueSeparator {
     Unknown,
     Equal
   };
@@ -95,7 +95,7 @@ namespace clang { namespace levitation {
       );
     }
 
-    template <ArgsSeparator Separator>
+    template <ValueSeparator S>
     bool parse() {
       if (Argc == 1) {
         printHelp(llvm::outs());
@@ -104,7 +104,7 @@ namespace clang { namespace levitation {
 
       // Skip first arg, for its command name itself.
       for (int i = 1; i != Argc;) {
-        tryParse<Separator>(i);
+        tryParse<S>(i);
       }
 
       bool HasMissedParameters = false;
@@ -128,7 +128,7 @@ namespace clang { namespace levitation {
       return true;
     }
 
-    template<ArgsSeparator S>
+    template<ValueSeparator S>
     bool tryParse(int &Offset) {
       llvm_unreachable("Not supported");
     }
@@ -199,7 +199,7 @@ namespace clang { namespace levitation {
   };
 
   template<>
-  bool ArgsParser::tryParse<ArgsSeparator::Equal>(int &Offset) {
+  bool ArgsParser::tryParse<ValueSeparator::Equal>(int &Offset) {
     llvm::StringRef Arg = Argv[Offset];
 
     llvm::StringRef Name;
@@ -225,6 +225,6 @@ namespace clang { namespace levitation {
     printHelp(llvm::errs());
     return false;
   }
-}} // end of clang::levitation namespace
+}}} // end of clang::levitation namespace
 
 #endif //LLVM_LEVITATION_ARGSSEPARATOR_H

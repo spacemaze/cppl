@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
   DependenciesSolver Solver;
 
   if (
-    ArgsParser(
+    args::ArgsParser(
         "C++ Levitation dependencies solver tool",
         argc, argv
     )
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
         [&](StringRef v) { Solver.setVerbose(true); }
     )
     .helpParameter("--help", "Shows this help text.")
-    .parse<ArgsSeparator::Equal>()
+    .parse<args::ValueSeparator::Equal>()
   ) {
 
     if (!Solver.solve())
