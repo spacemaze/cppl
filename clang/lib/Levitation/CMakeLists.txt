@@ -7,6 +7,8 @@ add_clang_library(
 
   Dependencies.cpp
   DependenciesSolver.cpp
+  Driver.cpp
+  DriverDefaults.cpp
   FileExtensions.cpp
   Serialization.cpp
 

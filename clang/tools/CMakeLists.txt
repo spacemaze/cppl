@@ -13,6 +13,7 @@ add_clang_subdirectory(c-index-test)
 
 add_clang_subdirectory(clang-rename)
 add_clang_subdirectory(clang-refactor)
+add_clang_subdirectory(levitation-cppl)
 add_clang_subdirectory(levitation-deps)
 
 if(CLANG_ENABLE_ARCMT)

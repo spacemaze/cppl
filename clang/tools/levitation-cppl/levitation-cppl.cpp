@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Levitation/CommandLineTool/ArgsParser.h"
+#include "clang/Levitation/CommandLineTool/CommandLineTool.h"
 #include "clang/Levitation/Driver.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/SimpleLogger.h"
@@ -48,66 +48,63 @@ int main(int argc, char **argv) {
   //    If -c is specified then it specifies output directory for object files,
   //    with a.dir by default.
 
-  if (
-    command_line_tool::ArgsParser(
-        "C++ Levitation Compiler",
-        argc, argv
-    )
-    .description(
-        "Is a C++ Levitation Compiler. Depending on mode it's "
-        "ran in, it can go through preamble compilation, "
-        "initial parsing, dependencies solving, instantiation "
-        "and code generation, and finally linker stages."
-    )
-    .optional(
-        "-root", "<directory>",
-        "Source root (project) directory.",
-        [&](StringRef v) { Driver.setSourcesRoot(v); }
-    )
-    .optional(
-        "-main", "<path>",
-        "Main source file.",
-        [&](StringRef v) { Driver.setMainSource(v); }
-    )
-    .optional(
-        "-preamble", "<path>",
-        "Path to preamble. If specified, then preamble compilation stage "
-        "will be enabled.",
-        [&](StringRef v) { Driver.setPreambleSource(v); }
-    )
-    .optional()
-        .name("-j")
-        .valueHint("<N>")
-        .description("Maximum jobs number.")
-        .action<int>([&](int v) { Driver.setJobsNumber(v); })
-    .done()
-    .optional()
-        .name("-o")
-        .valueHint("<directory>")
-        .description(
-            "Output file or directory. If -c is not specified,"
-            "then it specifies output executable file, with "
-            "'a.out' by default. If -c is specified then it "
-            "specifies output directory for object files,"
-            "with a.dir by default."
-        )
-        .action([&](StringRef v) { Driver.setOutput(v); })
-    .done()
-    .flag()
-        .name("--verbose")
-        .description("Enables verbose mode.")
-        .action([&](llvm::StringRef) { Driver.setVerbose(true); })
-    .done()
-    .helpParameter("--help", "Shows this help text.")
-    .parse<command_line_tool::ValueSeparator::Equal>()
-  ) {
+  auto Tool = CommandLineTool(argc, argv)
+      .description(
+          "Is a C++ Levitation Compiler. Depending on mode it's "
+          "ran in, it can go through preamble compilation, "
+          "initial parsing, dependencies solving, instantiation "
+          "and code generation, and finally linker stages."
+      )
+      .optional(
+          "-root", "<directory>",
+          "Source root (project) directory.",
+          [&](StringRef v) { Driver.setSourcesRoot(v); }
+      )
+      .optional(
+          "-main", "<path>",
+          "Main source file.",
+          [&](StringRef v) { Driver.setMainSource(v); }
+      )
+      .optional(
+          "-preamble", "<path>",
+          "Path to preamble. If specified, then preamble compilation stage "
+          "will be enabled.",
+          [&](StringRef v) { Driver.setPreambleSource(v); }
+      )
+      .optional()
+          .name("-j")
+          .valueHint("<N>")
+          .description("Maximum jobs number.")
+          .action<int>([&](int v) { Driver.setJobsNumber(v); })
+      .done()
+      .optional()
+          .name("-o")
+          .valueHint("<directory>")
+          .description(
+              "Output file or directory. If -c is not specified,"
+              "then it specifies output executable file, with "
+              "'a.out' by default. If -c is specified then it "
+              "specifies output directory for object files,"
+              "with a.dir by default."
+          )
+          .action([&](StringRef v) { Driver.setOutput(v); })
+      .done()
+      .flag()
+          .name("--verbose")
+          .description("Enables verbose mode.")
+          .action([&](llvm::StringRef) { Driver.setVerbose(true); })
+      .done()
+      .helpParameter("--help", "Shows this help text.")
+      .defaultParser<KeyValueParser>()
+      .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
+  .done();
+
+  return Tool.run([&] {
     if (!Driver.run())
       return RES_FAILED_TO_RUN;
 
     return RES_SUCCESS;
-  }
-
-  return RES_WRONG_ARGUMENTS;
+  });
 }
 
 bool parseJobsNumber(const char **Argv, int &Offset) {
