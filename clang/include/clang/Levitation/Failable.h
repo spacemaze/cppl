@@ -14,8 +14,11 @@
 #ifndef LLVM_CLANG_LEVITATION_FAILABLE_H
 #define LLVM_CLANG_LEVITATION_FAILABLE_H
 
+#include "clang/Levitation/StringBuilder.h"
+
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace clang { namespace levitation {
 
@@ -29,8 +32,16 @@ public:
     ErrorMessage = errorMessage;
   }
 
+  StringBuilder setFailure() {
+    return StringBuilder([&] (StringBuilder &Builder) {
+      ErrorMessage = Builder.str();
+    });
+  }
+
   bool isValid() const { return Valid; }
   llvm::StringRef getErrorMessage() const { return ErrorMessage; }
+
+  // TODO Levitation: getErrorMessages
 };
 
 }}
