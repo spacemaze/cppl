@@ -27,6 +27,22 @@ enum class Level {
   Verbose
 };
 
+/// Logger is a simple logger implementation.
+/// Example of use:
+///
+///   // main.cpp:
+///   int main(/*...*/) {
+///     // ...
+///     log::Logger::createLogger(log::Level::Warning);
+///     // ...
+///   }
+///
+///  // MySource.cpp
+///  void f() {
+///    auto &Log = log::Logger::get();
+///    Log.info() << "Hello world!\n";
+///  }
+
 class Logger {
   Level LogLevel;
   llvm::raw_ostream &Out;
@@ -43,7 +59,7 @@ protected:
 
 public:
 
-  static void createLogger(Level LogLevel) {
+  static void createLogger(Level LogLevel = Level::Error) {
 
     llvm::raw_ostream &Out = LogLevel > Level::Warning ?
         llvm::outs() : llvm::errs();
