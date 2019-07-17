@@ -4,7 +4,6 @@ before_script:
 
 build-cppl:
   stage: build
-  timeout: 360
   script:
     - echo Number of CPU cores $(grep -c ^processor /proc/cpuinfo)
     - export CC=/usr/bin/clang
@@ -18,7 +17,6 @@ build-cppl:
 
 test-cppl:
   stage: test
-  timeout: 360
   script:
     - make -j$(( $(grep -c ^processor /proc/cpuinfo)*2 )) check-clang
   only:
