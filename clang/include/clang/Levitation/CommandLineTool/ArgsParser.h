@@ -29,7 +29,7 @@
 
 #include <strstream>
 
-namespace clang { namespace levitation { namespace args {
+namespace clang { namespace levitation { namespace command_line_tool {
 
   class ArgsParser;
 
