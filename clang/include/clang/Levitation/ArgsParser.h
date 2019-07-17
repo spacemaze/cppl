@@ -1,4 +1,4 @@
-//===--- Dependencies.h - C++ ArgsParser class ---------------*- C++ -*-===//
+//===--- ArgsParser.h - C++ ArgsParser class --------------------*- C++ -*-===//
 //
 // Part of the C++ Levitation Project,
 // under the Apache License v2.0 with LLVM Exceptions.
@@ -15,6 +15,10 @@
 #ifndef LLVM_LEVITATION_ARGSSEPARATOR_H
 #define LLVM_LEVITATION_ARGSSEPARATOR_H
 
+#include "clang/Levitation/Failable.h"
+#include "clang/Levitation/SimpleLogger.h"
+#include "clang/Levitation/WithOperator.h"
+
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -23,16 +27,161 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <strstream>
+
 namespace clang { namespace levitation { namespace args {
+
+  class ArgsParser;
+
   enum class ValueSeparator {
     Unknown,
-    Equal
+    Equal,
+    Space
   };
 
-  using ArgHandleFn = std::function<void(llvm::StringRef)>;
+  using ValueParserFn = std::function<bool(const char **, int &)>;
 
-  class ArgsParser {
+  template <typename T>
+  using HandleFunctionTy = std::function<void(T)>;
+
+  class ValueHandler : public Failable {
+    using OnHandleStrValueFn = std::function<void(Failable &, llvm::StringRef)>;
+
+    OnHandleStrValueFn OnHandleStrValue;
+    ValueHandler(OnHandleStrValueFn &&OnHandleStr)
+    : OnHandleStrValue(std::move(OnHandleStr))
+    {}
+
+  public:
+    void Handle(llvm::StringRef v) {
+      OnHandleStrValue(*this, v);
+    }
+
+    template <typename T>
+    static ValueHandler *get(HandleFunctionTy<T> &&HandleFunction) {
+      llvm_unreachable("Can't handle this type of value");
+    }
+  };
+
+  template<>
+  ValueHandler *ValueHandler::get<llvm::StringRef>(
+      HandleFunctionTy<llvm::StringRef> &&HandleFunction
+  ) {
+    static ValueHandler DirectStrHandler(
+        [&] (Failable &failable, llvm::StringRef v) {
+          HandleFunction(v);
+        }
+    );
+    return &DirectStrHandler;
+  }
+
+  template<>
+  ValueHandler *ValueHandler::get<int>(
+      HandleFunctionTy<int> &&HandleFunction
+  ) {
+    static ValueHandler IntHandler(
+        [&] (Failable &failable, llvm::StringRef v) {
+
+          std::istrstream sstrm(v.data(), v.size());
+
+          int IntValue = 0;
+
+          sstrm >> IntValue;
+
+          if (!sstrm.fail())
+            HandleFunction(IntValue);
+          else {
+            with (auto f = failable.setFailure()) {
+              f << "Value '" << v << "'is not an integer";
+            }
+          }
+        }
+    );
+    return &IntHandler;
+  };
+
+  struct Parameter {
+    llvm::StringRef Name;
+    llvm::StringRef HelpTitle;
+    llvm::StringRef ValueHint;
+    llvm::StringRef Description;
+
+    bool Optional = false;
+    bool IsFlag = false;
+
+    ValueHandler *ValueHandler = nullptr;
+  };
+
+  class ParameterBuilder {
+
+    std::unique_ptr<Parameter> P;
+    ArgsParser &ArgsParserRef;
+
+  public:
+
+    ParameterBuilder(ArgsParser &Parser) : ArgsParserRef(Parser) {
+      P = llvm::make_unique<Parameter>();
+    }
+
+    ParameterBuilder(ParameterBuilder &&Src)
+    : P(std::move(Src.P)),
+      ArgsParserRef(Src.ArgsParserRef)
+    {}
+
+    ~ParameterBuilder() {
+
+    }
+
+    ParameterBuilder &optional() {
+      P->Optional = true;
+      return *this;
+    }
+
+    ParameterBuilder &flag() {
+      P->IsFlag = true;
+      return *this;
+    }
+
+    ParameterBuilder &name(llvm::StringRef Name) {
+      P->Name = Name;
+      return *this;
+    }
+
+    ParameterBuilder &description(llvm::StringRef Description) {
+      P->Description = Description;
+      return *this;
+    }
+
+    ParameterBuilder &valueHint(llvm::StringRef ValueHint) {
+      P->ValueHint = ValueHint;
+      return *this;
+    }
+
+    ParameterBuilder &helpTitle(llvm::StringRef HelpTitle) {
+      P->HelpTitle = HelpTitle;
+      return *this;
+    }
+
+    template<typename T>
+    ParameterBuilder &action(HandleFunctionTy<T> &&Action) {
+      P->ValueHandler = ValueHandler::get<T>(std::move(Action));
+      return *this;
+    }
+
+    ParameterBuilder &action(HandleFunctionTy<llvm::StringRef> &&Action) {
+      P->ValueHandler = ValueHandler::get<llvm::StringRef>(std::move(Action));
+      return *this;
+    }
+
+    ArgsParser &done();
+  };
+
+  class ArgsParser : public Failable {
+
+    friend class ParameterBuilder;
+
     llvm::StringRef AppTitle;
+    llvm::StringRef Description;
     int Argc;
     char **Argv;
 
@@ -41,72 +190,91 @@ namespace clang { namespace levitation { namespace args {
     size_t ParameterDescriptionIndent = 4;
     size_t RightBorder = 70;
 
-    struct Parameter {
-      llvm::StringRef Name;
-      std::string Description;
-      ArgHandleFn HandleFunction;
-    };
-
     llvm::SmallVector<llvm::StringRef, 16> ParametersInOriginalOrder;
-    llvm::DenseMap<llvm::StringRef, Parameter> Parameters;
+    llvm::DenseMap<llvm::StringRef, std::unique_ptr<Parameter>> Parameters;
 
     llvm::DenseSet<llvm::StringRef> Visited;
     llvm::DenseSet<llvm::StringRef> Optional;
+
+    bool HasErrors = false;
 
   public:
     ArgsParser(llvm::StringRef AppTitle, int Argc, char **Argv)
     : AppTitle(AppTitle), Argc(Argc), Argv(Argv) {}
 
-    ArgsParser& parameter(
-        llvm::StringRef Name,
-        std::string Description,
-        ArgHandleFn HandleFunction,
-        llvm::StringRef DefaultValue = ""
-    ) {
-      Parameters.try_emplace(Name,
-          Parameter { Name, std::move(Description), std::move(HandleFunction) }
-      );
-      ParametersInOriginalOrder.push_back(Name);
+    ArgsParser& description(llvm::StringRef description) {
+      Description = description;
       return *this;
     }
 
-    ArgsParser& optional(
+    ArgsParser& parameter(
         llvm::StringRef Name,
         std::string Description,
-        ArgHandleFn HandleFunction
+        HandleFunctionTy<llvm::StringRef> &&HandleFunction,
+        llvm::StringRef DefaultValue = ""
     ) {
-      Parameters.try_emplace(Name,
-          Parameter { Name, std::move(Description), std::move(HandleFunction) }
-      );
-      ParametersInOriginalOrder.push_back(Name);
+      return ParameterBuilder(*this)
+          .name(Name)
+          .description(Description)
+          .action(std::move(HandleFunction))
+      .done();
+    }
 
-      Optional.insert(Name);
+    ArgsParser &optional(
+        llvm::StringRef Name,
+        llvm::StringRef ValueHint,
+        llvm::StringRef Description,
+        HandleFunctionTy<llvm::StringRef> &&HandleFunction
+    ) {
+      return ParameterBuilder(*this)
+          .optional()
+          .name(Name)
+          .valueHint(ValueHint)
+          .description(Description)
+          .action(std::move(HandleFunction))
+      .done();
+    }
 
-      return *this;
+    ParameterBuilder optional() {
+      ParameterBuilder Builder(*this);
+      Builder.optional();
+      return Builder;
+    }
+
+    ParameterBuilder flag() {
+      ParameterBuilder Builder(*this);
+      Builder.flag();
+      return Builder;
     }
 
     ArgsParser& helpParameter(
         llvm::StringRef Name,
         std::string Description
     ) {
-      return optional(
-          Name, std::move(Description),
-          [=] (llvm::StringRef v) { printHelp(llvm::outs()); }
-      );
+      return flag()
+          .name(Name)
+          .description(Description)
+          .action([=] (llvm::StringRef v) { printHelp(llvm::outs()); })
+      .done();
     }
 
     template <ValueSeparator S>
     bool parse() {
+
+      // If we have no parameters passed, then do default action.
       if (Argc == 1) {
         printHelp(llvm::outs());
         return false;
       }
 
-      // Skip first arg, for its command name itself.
+      // Go through command line arguments and parse them.
+      // First. We try to use default parsers. And if it fails to parse argument, then...
+      // Second. Try parse parameters with custom parsers.
       for (int i = 1; i != Argc;) {
         tryParse<S>(i);
       }
 
+      // Check whether we haven't met some of required parameters.
       bool HasMissedParameters = false;
       for (auto &P : Parameters) {
         auto ParameterName = P.first;
@@ -120,7 +288,7 @@ namespace clang { namespace levitation { namespace args {
         }
       }
 
-      if (HasMissedParameters) {
+      if (HasErrors || HasMissedParameters) {
         printHelp(llvm::errs());
         return false;
       }
@@ -187,7 +355,7 @@ namespace clang { namespace levitation { namespace args {
             "Parameters keys set."
         );
 
-        printParameterHelp(out, Found->second);
+        printParameterHelp(out, *Found->second);
       }
     }
     void reportUnknownParameter(llvm::StringRef P) {
@@ -197,6 +365,19 @@ namespace clang { namespace levitation { namespace args {
       llvm::errs() << "Missed parameter: '" << P << "'\n";
     }
   };
+
+  ArgsParser &ParameterBuilder::done()  {
+
+    if (P->Optional || P->IsFlag)
+      ArgsParserRef.Optional.insert(P->Name);
+
+    ArgsParserRef.ParametersInOriginalOrder.push_back(P->Name);
+    ArgsParserRef.Parameters.insert({
+        P->Name, std::move(P)
+    });
+
+    return ArgsParserRef;
+  }
 
   template<>
   bool ArgsParser::tryParse<ValueSeparator::Equal>(int &Offset) {
@@ -215,8 +396,20 @@ namespace clang { namespace levitation { namespace args {
     auto Found = Parameters.find(Name);
 
     if (Found != Parameters.end()) {
-      Visited.insert(Name);
-      Found->second.HandleFunction(Value);
+      Parameter &P = *Found->second;
+
+      if (!P.IsFlag) {
+        Visited.insert(Name);
+        ValueHandler &ValueHnd = *P.ValueHandler;
+        ValueHnd.Handle(Value);
+
+        if (!ValueHnd.isValid()) {
+          with (auto f = setFailure()) {
+            f << "Failed to parse '" << Name << "', " << ValueHnd.getErrorMessage();
+          }
+        }
+      }
+
       ++Offset;
       return true;
     }
@@ -225,6 +418,7 @@ namespace clang { namespace levitation { namespace args {
     printHelp(llvm::errs());
     return false;
   }
+
 }}} // end of clang::levitation namespace
 
 #endif //LLVM_LEVITATION_ARGSSEPARATOR_H

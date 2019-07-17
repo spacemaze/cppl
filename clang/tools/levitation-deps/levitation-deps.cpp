@@ -50,14 +50,14 @@ int main(int argc, char **argv) {
     )
     .parameter(
         "-main-file",
-        "Specify main source faile, usually 'main.cpp'. ",
+        "Specify main source file, usually 'main.cpp'. ",
         [&](StringRef v) { Solver.setMainFile(v); }
     )
-    .optional(
-        "--verbose",
-        "Enables verbose mode.",
-        [&](StringRef v) { Solver.setVerbose(true); }
-    )
+    .flag()
+        .name("--verbose")
+        .description("Enables verbose mode.")
+        .action([&](llvm::StringRef) { Solver.setVerbose(true); })
+    .done()
     .helpParameter("--help", "Shows this help text.")
     .parse<args::ValueSeparator::Equal>()
   ) {
