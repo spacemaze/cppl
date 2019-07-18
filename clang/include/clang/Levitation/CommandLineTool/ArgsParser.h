@@ -16,7 +16,7 @@
 #define LLVM_LEVITATION_ARGSSEPARATOR_H
 
 #include "clang/Levitation/CommandLineTool/Parameter.h"
-#include "clang/Levitation/CommandLineTool/ParameterValueHandler.h"
+#include "clang/Levitation/CommandLineTool/ParameterValueHandling.h"
 #include "clang/Levitation/Failable.h"
 #include "clang/Levitation/SimpleLogger.h"
 #include "clang/Levitation/WithOperator.h"
@@ -41,16 +41,16 @@ namespace clang { namespace levitation { namespace command_line_tool {
 
   class ArgumentsParser : public Failable {
   protected:
-//    llvm::DenseMap<llvm::StringRef, Parameter*> Parameters;
+    llvm::DenseMap<llvm::StringRef, Parameter*> Parameters;
 
   public:
 
     virtual ~ArgumentsParser() = default;
 
-//    void registerParameter(Parameter *P) {
-//      auto Res = Parameters.insert({P->Name, P});
-//      assert(Res.second && "Parameter should be identified by its name.");
-//    }
+    void registerParameter(Parameter *P) {
+      auto Res = Parameters.insert({P->Name, P});
+      assert(Res.second && "Parameter should be identified by its name.");
+    }
 
     void parse(
         int Argc,
@@ -58,11 +58,12 @@ namespace clang { namespace levitation { namespace command_line_tool {
         llvm::DenseSet<llvm::StringRef> &VisitedParameters
     ) {
       for (int i = 1; i != Argc;) {
-        tryParse(Argc, Argv, i, VisitedParameters);
+        if (!tryParse(Argc, Argv, i, VisitedParameters))
+          ++i;
       }
     }
 
-    virtual void tryParse(
+    virtual bool tryParse(
         int Argc,
         char **Argv,
         int &Offset,
@@ -73,11 +74,14 @@ namespace clang { namespace levitation { namespace command_line_tool {
   class KeyValueParser : public ArgumentsParser {
     char Separator;
   public:
+
+    KeyValueParser(char separator = '=') : Separator(separator) {}
+
     static llvm::StringRef getName() {
       return "KeyValueParser";
     }
 
-    void tryParse(
+    bool tryParse(
         int Argc,
         char **Argv,
         int &Offset,
@@ -95,26 +99,28 @@ namespace clang { namespace levitation { namespace command_line_tool {
       else
         Name = Arg;
 
-//      auto Found = Parameters.find(Name);
-//
-//      if (Found != Parameters.end()) {
-//        Parameter &P = *Found->second;
-//
-//        if (!P.IsFlag) {
-//          VisitedParameters.insert(Name);
-//          ValueHandler &ValueHnd = *P.ValueHandler;
-//          ValueHnd.Handle(Value);
-//
-//          if (!ValueHnd.isValid()) {
-//            with (auto f = setFailure()) {
-//              f << "Failed to parse '" << Name << "', " << ValueHnd.getErrorMessage();
-//            }
-//          }
-//        }
-//
-//        ++Offset;
-//        return;
-//      }
+      auto Found = Parameters.find(Name);
+
+      // TODO Levitation: for flags emit warning, in case if we have
+      // non-empty Value
+
+      if (Found != Parameters.end()) {
+        Parameter &P = *Found->second;
+
+        VisitedParameters.insert(Name);
+
+        Failable F;
+        P.Handler(F, Value);
+        if (!F.isValid()) {
+          with (auto f = setFailure()) {
+            f << "Failed to parse '" << Name << "', " << F.getErrorMessage();
+          }
+        }
+
+        ++Offset;
+        return true;
+      }
+      return false;
     }
   };
 }}} // end of clang::levitation namespace

@@ -34,38 +34,36 @@ int main(int argc, char **argv) {
 
   DependenciesSolver Solver;
 
-  auto Tool = CommandLineTool(argc, argv)
-      .description("C++ Levitation dependencies solver tool")
-      .parameter(
-          "-src-root",
-          "Specify source root (project) directory.",
-          [&](StringRef v) { Solver.setSourcesRoot(v); }
-      )
-      .parameter(
-          "-build-root",
-          "Specify build root directory. "
-          "Directories structure should repeat project structure.",
-          [&](StringRef v) { Solver.setBuildRoot(v); }
-      )
-      .parameter(
-          "-main-file",
-          "Specify main source file, usually 'main.cpp'. ",
-          [&](StringRef v) { Solver.setMainFile(v); }
-      )
-      .flag()
-          .name("--verbose")
-          .description("Enables verbose mode.")
-          .action([&](llvm::StringRef) { Solver.setVerbose(true); })
-      .done()
-      .helpParameter("--help", "Shows this help text.")
-      .defaultParser<KeyValueParser>()
-      .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
-  .done();
+  return CommandLineTool(argc, argv)
+        .description("C++ Levitation dependencies solver tool")
+        .parameter(
+            "-src-root",
+            "Specify source root (project) directory.",
+            [&](StringRef v) { Solver.setSourcesRoot(v); }
+        )
+        .parameter(
+            "-build-root",
+            "Specify build root directory. "
+            "Directories structure should repeat project structure.",
+            [&](StringRef v) { Solver.setBuildRoot(v); }
+        )
+        .parameter(
+            "-main-file",
+            "Specify main source file, usually 'main.cpp'. ",
+            [&](StringRef v) { Solver.setMainFile(v); }
+        )
+        .flag()
+            .name("--verbose")
+            .description("Enables verbose mode.")
+            .action([&](llvm::StringRef) { Solver.setVerbose(true); })
+        .done()
+        .helpParameter("--help", "Shows this help text.")
+        .defaultParser<KeyValueParser>('=')
+        .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
+        .run([&] {
+          if (!Solver.solve())
+            return RES_FAILED_TO_SOLVE;
 
-  return Tool.run([&] {
-    if (!Solver.solve())
-      return RES_FAILED_TO_SOLVE;
-
-    return RES_SUCCESS;
-  });
+          return RES_SUCCESS;
+        });
 }

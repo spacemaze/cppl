@@ -18,7 +18,7 @@
 #include "clang/Levitation/CommandLineTool/AlignedPrinter.h"
 #include "clang/Levitation/CommandLineTool/ArgsParser.h"
 #include "clang/Levitation/CommandLineTool/Parameter.h"
-#include "clang/Levitation/CommandLineTool/ParameterValueHandler.h"
+#include "clang/Levitation/CommandLineTool/ParameterValueHandling.h"
 #include "clang/Levitation/CommandLineTool/ParameterBuilder.h"
 #include "clang/Levitation/Failable.h"
 
@@ -33,6 +33,7 @@
 
 #include <functional>
 #include <memory>
+#include <utility>
 
 namespace clang { namespace levitation { namespace command_line_tool {
 
@@ -51,7 +52,7 @@ class CommandLineTool : public Failable {
   llvm::SmallVector<llvm::StringRef, 4> ParsersInOriginalOrder;
   llvm::DenseMap<llvm::StringRef, std::unique_ptr<ArgumentsParser>> Parsers;
 
-  llvm::StringRef DefaultParser;
+  ArgumentsParser *DefaultParser;
 
   llvm::SmallVector<llvm::StringRef, 16> ParametersInOriginalOrder;
   llvm::DenseMap<llvm::StringRef, std::unique_ptr<Parameter>> Parameters;
@@ -63,6 +64,9 @@ class CommandLineTool : public Failable {
 
 public:
 
+  template<typename T>
+  using HandleValueFn = ParameterValueHandling::HandleFn<T>;
+
   CommandLineTool(int argc, char **argv)
   : Argc(argc), Argv(argv)
   {
@@ -72,16 +76,17 @@ public:
     }
   }
 
-  template<class ParserTy>
-  CommandLineTool &parser() {
-    createParser<ParserTy>();
+  CommandLineTool(const CommandLineTool &) = delete;
+
+  template<class ParserTy, typename... ArgsT>
+  CommandLineTool &parser(ArgsT &&... Args) {
+    createParser<ParserTy>(std::forward<ArgsT>(Args)...);
     ParsersInOriginalOrder.push_back(ParserTy::getName());
   }
 
-  template<class ParserTy>
-  CommandLineTool &defaultParser() {
-    createParser<ParserTy>();
-    DefaultParser = ParserTy::getName();
+  template<class ParserTy, typename... ArgsT>
+  CommandLineTool &defaultParser(ArgsT &&... Args) {
+    DefaultParser = createParser<ParserTy>(std::forward<ArgsT>(Args)...);
     return *this;
   }
 
@@ -101,13 +106,19 @@ public:
 
     ParameterBuilderTy Builder(
         [&] (std::unique_ptr<Parameter> &&P) -> CommandLineTool& {
+
           if (P->Optional || P->IsFlag)
             Optional.insert(P->Name);
 
           ParametersInOriginalOrder.push_back(P->Name);
-          Parameters.insert({
+          auto InsertRes = Parameters.insert({
               P->Name, std::move(P)
           });
+
+          assert(
+              InsertRes.second &&
+              "Parameter should be unique and identified by its name"
+          );
 
           return *this;
         }
@@ -119,7 +130,7 @@ public:
   CommandLineTool &parameter(
       llvm::StringRef Name,
       std::string Description,
-      HandleFunctionTy<llvm::StringRef> &&HandleFunction,
+      HandleValueFn<llvm::StringRef> &&HandleFunction,
       llvm::StringRef DefaultValue = ""
   ) {
     return parameter()
@@ -133,7 +144,7 @@ public:
       llvm::StringRef Name,
       llvm::StringRef ValueHint,
       llvm::StringRef Description,
-      HandleFunctionTy<llvm::StringRef> &&HandleFunction
+      HandleValueFn<llvm::StringRef> &&HandleFunction
   ) {
     return parameter()
         .optional()
@@ -188,12 +199,13 @@ protected:
       }
 
       // Sort parameters by parsers.
-//      for (auto &ParamKV : Parameters) {
-//        auto &Param = *ParamKV.second;
-//        for (auto ParserName : Param.EnabledForParsers) {
-//          getParser(ParserName).registerParameter(&Param);
-//        }
-//      }
+      for (auto &ParamKV : Parameters) {
+        auto &Param = *ParamKV.second;
+        for (auto ParserName : Param.EnabledForParsers) {
+          getParser(ParserName).registerParameter(&Param);
+        }
+        DefaultParser->registerParameter(&Param);
+      }
 
       // Go through command line arguments and parse them.
       // First. We try to use parsers in order they were added.
@@ -203,7 +215,7 @@ protected:
         getParser(P).parse(Argc, Argv, Visited);
       }
 
-      getParser(DefaultParser).parse(Argc, Argv, Visited);
+      DefaultParser->parse(Argc, Argv, Visited);
 
       // Check whether we haven't met some of required parameters.
       bool HasMissedParameters = false;
@@ -227,12 +239,12 @@ protected:
       return true;
   }
 
-  template<class ParserTy>
-  ArgumentsParser &createParser() {
+  template<class ParserTy, typename... ArgsT>
+  ArgumentsParser *createParser(ArgsT &&... Args) {
     llvm::StringRef ParserName = ParserTy::getName();
-    auto P = llvm::make_unique<ParserTy>();
-    Parsers.insert({ParserName, std::move(P)});
-    return *P;
+    auto P = llvm::make_unique<ParserTy>(std::forward<ArgsT>(Args)...);
+    auto InsertRes = Parsers.insert({ParserName, std::move(P)});
+    return InsertRes.first->second.get();
   }
 
   ArgumentsParser &getParser(llvm::StringRef Name) {
@@ -258,7 +270,7 @@ protected:
 
   void printHelp(llvm::raw_ostream &out) const {
     out << "\n";
-    out.indent((unsigned)TitleIndent) << Name << "\n\n";
+    out.indent((unsigned)TitleIndent) << Name << " - " << Description << "\n\n";
     for (auto P : ParametersInOriginalOrder) {
       auto Found = Parameters.find(P);
       assert(

@@ -16,7 +16,7 @@
 #define LLVM_LEVITATION_COMMANDLINETOOL_PARAMETERBUILDER_H
 
 #include "clang/Levitation/CommandLineTool/Parameter.h"
-#include "clang/Levitation/CommandLineTool/ParameterValueHandler.h"
+#include "clang/Levitation/CommandLineTool/ParameterValueHandling.h"
 
 #include <functional>
 #include <memory>
@@ -73,13 +73,13 @@ namespace clang { namespace levitation { namespace command_line_tool {
     }
 
     template<typename T>
-    ParameterBuilder &action(HandleFunctionTy<T> &&Action) {
-      P->ValueHandler = ValueHandler::get<T>(std::move(Action));
+    ParameterBuilder &action(ParameterValueHandling::HandleFn<T> &&Action) {
+      P->Handler = ParameterValueHandling::get<T>(std::move(Action));
       return *this;
     }
 
-    ParameterBuilder &action(HandleFunctionTy<llvm::StringRef> &&Action) {
-      P->ValueHandler = ValueHandler::get<llvm::StringRef>(std::move(Action));
+    ParameterBuilder &action(ParameterValueHandling::HandleFn<llvm::StringRef> &&Action) {
+      P->Handler = ParameterValueHandling::get<llvm::StringRef>(std::move(Action));
       return *this;
     }
 
@@ -87,7 +87,6 @@ namespace clang { namespace levitation { namespace command_line_tool {
       return OnDone(std::move(P));
     }
   };
-
 }}} // end of clang::levitation::command_line_tool namespace
 
 #endif //LLVM_LEVITATION_COMMANDLINETOOL_PARAMETERBUILDER_H

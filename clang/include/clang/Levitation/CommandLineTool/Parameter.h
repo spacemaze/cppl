@@ -15,12 +15,12 @@
 #ifndef LLVM_LEVITATION_COMMANDLINETOOL_PARAMETER_H
 #define LLVM_LEVITATION_COMMANDLINETOOL_PARAMETER_H
 
+#include "clang/Levitation/CommandLineTool/ParameterValueHandling.h"
+
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace clang { namespace levitation { namespace command_line_tool {
-
-  class ValueHandler;
 
   struct Parameter {
     llvm::StringRef Name;
@@ -31,7 +31,7 @@ namespace clang { namespace levitation { namespace command_line_tool {
     bool Optional = false;
     bool IsFlag = false;
 
-    ValueHandler *ValueHandler = nullptr;
+    ParameterValueHandling::HandleStrFn Handler;
 
     llvm::SmallVector<llvm::StringRef, 4> EnabledForParsers;
   };
