@@ -48,13 +48,14 @@ int main(int argc, char **argv) {
   //    If -c is specified then it specifies output directory for object files,
   //    with a.dir by default.
 
-  return CommandLineTool(argc, argv)
+  return CommandLineTool<KeyEqValueParser>(argc, argv)
       .description(
           "Is a C++ Levitation Compiler. Depending on mode it's "
           "ran in, it can go through preamble compilation, "
           "initial parsing, dependencies solving, instantiation "
           "and code generation, and finally linker stages."
       )
+      .registerParser<KeySpaceValueParser>()
       .optional(
           "-root", "<directory>",
           "Source root (project) directory.",
@@ -88,7 +89,7 @@ int main(int argc, char **argv) {
               "with a.dir by default."
           )
           .action([&](StringRef v) { Driver.setOutput(v); })
-          .parser<KeySpaceValueParser>()
+          .useParser<KeySpaceValueParser>()
       .done()
       .flag()
           .name("--verbose")
@@ -96,8 +97,6 @@ int main(int argc, char **argv) {
           .action([&](llvm::StringRef) { Driver.setVerbose(true); })
       .done()
       .helpParameter("--help", "Shows this help text.")
-      .parser<KeySpaceValueParser>()
-      .defaultParser<KeyEqValueParser>()
       .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
       .run([&] {
         if (!Driver.run())

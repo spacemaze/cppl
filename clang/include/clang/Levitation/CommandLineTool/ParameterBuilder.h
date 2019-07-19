@@ -84,7 +84,7 @@ namespace clang { namespace levitation { namespace command_line_tool {
     }
 
     template <typename ParserTy>
-    ParameterBuilder &parser() {
+    ParameterBuilder &useParser() {
       P->EnabledForParsers.push_back(ParserTy::getName());
       return *this;
     }

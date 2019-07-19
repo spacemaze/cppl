@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
 
   DependenciesSolver Solver;
 
-  return CommandLineTool(argc, argv)
+  return CommandLineTool<KeyEqValueParser>(argc, argv)
         .description("C++ Levitation dependencies solver tool")
         .parameter(
             "-src-root",
@@ -58,7 +58,6 @@ int main(int argc, char **argv) {
             .action([&](llvm::StringRef) { Solver.setVerbose(true); })
         .done()
         .helpParameter("--help", "Shows this help text.")
-        .defaultParser<KeyEqValueParser>()
         .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
         .run([&] {
           if (!Solver.solve())

@@ -88,9 +88,6 @@ namespace clang { namespace levitation { namespace command_line_tool {
       int NewOffset = Offset;
       std::tie(Name, Value) = getNameValue(Ctx.Argc, Ctx.Argv, NewOffset, Separator);
 
-      if (!Ctx.VisitedParameters.insert(Name).second)
-        return false;
-
       auto Found = Parameters.find(Name);
 
       if (Found != Parameters.end()) {
@@ -115,6 +112,10 @@ namespace clang { namespace levitation { namespace command_line_tool {
           Ctx.VisitedArguments.insert(va);
 
         Offset = NewOffset;
+
+        if (!Ctx.VisitedParameters.insert(Name).second)
+          return false;
+
         return true;
       }
       return false;

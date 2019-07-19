@@ -37,6 +37,7 @@
 
 namespace clang { namespace levitation { namespace command_line_tool {
 
+template <typename DefaultParserTy>
 class CommandLineTool : public Failable {
   int Argc;
   char **Argv;
@@ -74,20 +75,15 @@ public:
       auto Path = Argv[0];
       Name = llvm::sys::path::filename(Path);
     }
+    defaultParser();
   }
 
   CommandLineTool(const CommandLineTool &) = delete;
 
-  template<class ParserTy, typename... ArgsT>
-  CommandLineTool &parser(ArgsT &&... Args) {
-    createParser<ParserTy>(std::forward<ArgsT>(Args)...);
+  template<class ParserTy>
+  CommandLineTool &registerParser() {
+    createParser<ParserTy>();
     ParsersInOriginalOrder.push_back(ParserTy::getName());
-    return *this;
-  }
-
-  template<class ParserTy, typename... ArgsT>
-  CommandLineTool &defaultParser(ArgsT &&... Args) {
-    DefaultParser = createParser<ParserTy>(std::forward<ArgsT>(Args)...);
     return *this;
   }
 
@@ -192,6 +188,11 @@ public:
 
 protected:
 
+  CommandLineTool &defaultParser() {
+    DefaultParser = createParser<DefaultParserTy>();
+    return *this;
+  }
+
   bool parse() {
       // If we have no parameters passed, then do default action.
       if (Argc == 1) {
@@ -200,6 +201,9 @@ protected:
       }
 
       // Sort parameters by parsers.
+
+      assert(DefaultParser && "Default Parser should be registered first");
+
       for (auto &ParamKV : Parameters) {
         auto &Param = *ParamKV.second;
         for (auto ParserName : Param.EnabledForParsers) {
@@ -247,10 +251,10 @@ protected:
       return true;
   }
 
-  template<class ParserTy, typename... ArgsT>
-  ArgumentsParser *createParser(ArgsT &&... Args) {
+  template<class ParserTy>
+  ArgumentsParser *createParser() {
     llvm::StringRef ParserName = ParserTy::getName();
-    auto P = llvm::make_unique<ParserTy>(std::forward<ArgsT>(Args)...);
+    auto P = llvm::make_unique<ParserTy>();
     auto InsertRes = Parsers.insert({ParserName, std::move(P)});
     return InsertRes.first->second.get();
   }
@@ -258,7 +262,7 @@ protected:
   ArgumentsParser &getParser(llvm::StringRef Name) {
     auto Found = Parsers.find(Name);
     if (Found == Parsers.end())
-      llvm_unreachable("Attempt to access parser by wrong name");
+      llvm_unreachable("Attempt to access parser that wasn't registered.");
 
     return *Found->second;
   }
