@@ -56,6 +56,7 @@ int main(int argc, char **argv) {
           "and code generation, and finally linker stages."
       )
       .registerParser<KeySpaceValueParser>()
+      .registerParser<KeyValueInOneWordParser>()
       .optional(
           "-root", "<directory>",
           "Source root (project) directory.",
@@ -83,6 +84,7 @@ int main(int argc, char **argv) {
           .valueHint("<N>")
           .description("Maximum jobs number.")
           .action<int>([&](int v) { Driver.setJobsNumber(v); })
+          .useParser<KeyValueInOneWordParser>()
       .done()
       .optional()
           .name("-o")
