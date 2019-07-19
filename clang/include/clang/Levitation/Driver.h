@@ -34,6 +34,7 @@ namespace clang { namespace levitation { namespace tools {
 
     int JobsNumber = DriverDefaults::JOBS_NUMBER;
 
+    llvm::StringRef OutputHeader;
     llvm::StringRef Output;
 
     log::Logger &Log;
@@ -82,12 +83,24 @@ namespace clang { namespace levitation { namespace tools {
       LevitationDriver::JobsNumber = JobsNumber;
     }
 
-    const llvm::StringRef &getOutput() const {
+    llvm::StringRef getOutput() const {
       return Output;
     }
 
-    void setOutput(const llvm::StringRef &Output) {
+    void setOutput(llvm::StringRef Output) {
       LevitationDriver::Output = Output;
+    }
+
+    void setOutputHeader(llvm::StringRef h) {
+      OutputHeader = h;
+    }
+
+    llvm::StringRef getOutputHeader() const {
+      return OutputHeader;
+    }
+
+    bool isOutputHeaderCreationRequested() const {
+      return OutputHeader.size();
     }
 
     bool run();

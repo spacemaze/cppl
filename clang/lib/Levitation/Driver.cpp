@@ -37,7 +37,9 @@ void LevitationDriver::dumpParameters() {
   << "    MainSource: " << MainSource << "\n"
   << "    PreambleSource: " << PreambleSource << "\n"
   << "    JobsNumber: " << JobsNumber << "\n"
-  << "    Output: " << Output << "\n\n";
+  << "    Output: " << Output << "\n"
+  << "    OutputHeader: " << (OutputHeader.empty() ? "<not requested>" : OutputHeader) << "\n"
+  << "\n";
 }
 
 }}}

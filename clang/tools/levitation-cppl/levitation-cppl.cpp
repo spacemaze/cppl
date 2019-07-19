@@ -72,6 +72,12 @@ int main(int argc, char **argv) {
           "will be enabled.",
           [&](StringRef v) { Driver.setPreambleSource(v); }
       )
+      .optional(
+          "-h", "<path>",
+          "Path to header file to be generated. If specified, then header "
+          "generation stage will be added to the compilation pipeline.",
+          [&](StringRef v) { Driver.setOutputHeader(v); }
+      )
       .optional()
           .name("-j")
           .valueHint("<N>")
