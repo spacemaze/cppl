@@ -245,6 +245,13 @@ protected:
         }
       }
 
+      for (int i = 1; i != Argc; ++i) {
+        if (!ParserContext.VisitedArguments.count(i)) {
+          llvm::errs()
+          << "Warning: unknown argument '" << Argv[i] << "'.\n";
+        }
+      }
+
       if (!isValid() || HasMissedParameters) {
         llvm::errs()
         << "Error: " << getErrorMessage() << "\n";
