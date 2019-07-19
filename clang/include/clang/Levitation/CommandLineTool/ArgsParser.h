@@ -36,7 +36,8 @@ namespace clang { namespace levitation { namespace command_line_tool {
   enum class ValueSeparator {
     Unknown,
     Equal,
-    Space
+    Space,
+    InOneWord
   };
 
   /// Implements Argument Parsing interface.
@@ -75,18 +76,110 @@ namespace clang { namespace levitation { namespace command_line_tool {
     virtual bool tryParse(Context &Ctx, int &Offset) = 0;
   };
 
+  /// A tricky way to customize contents of KeyValueParser.
+  /// Define in separate class methods we want to specialize.
+  /// Why?
+  /// 1. Because there is no direct way to specialize one function of
+  /// generic template. Only through inharitance, or aggregation (we use latter).
+  /// 2. We could use static function templates, but then each .h file user will
+  /// use unique function. Whilst usually compiler deal much better with
+  /// templates merging.
+  /// 3. This way allows to REMOVE this function for unknown template
+  /// argument value, and thus emit compile-time errors for unsupported
+  /// value separators.
+  template<ValueSeparator S>
+  struct KeyValueParserStatic {
+    // Nothing!
+  };
+
+  template<>
+  struct KeyValueParserStatic<ValueSeparator::Equal>{
+    static const char *getName() {
+      return "KeyValueParserEq";
+    }
+
+    static std::pair<llvm::StringRef, llvm::StringRef> getNameValue(
+        int Argc,
+        char **Argv,
+        int &Offset
+    ) {
+      char S = '=';
+      llvm::StringRef Arg = Argv[Offset++];
+
+      size_t Eq = Arg.find(S);
+
+      if (Eq != llvm::StringRef::npos) {
+        return Arg.split(S);
+      }
+
+      return std::make_pair(Arg, llvm::StringRef());
+    }
+  };
+
+  template<>
+  struct KeyValueParserStatic<ValueSeparator::Space>{
+    static const char *getName() {
+      return "KeyValueParserSpace";
+    }
+
+    static std::pair<llvm::StringRef, llvm::StringRef> getNameValue(
+        int Argc,
+        char **Argv,
+        int &Offset
+    ) {
+      llvm::StringRef Arg = Argv[Offset++];
+      if (Offset < Argc) {
+        return std::make_pair(Arg, (llvm::StringRef)Argv[Offset++]);
+      }
+      return std::make_pair(Arg, llvm::StringRef());
+    }
+  };
+
+  template<>
+  struct KeyValueParserStatic<ValueSeparator::InOneWord>{
+    static const char *getName() {
+      return "KeyValueParserInOneWord";
+    }
+
+    static std::pair<llvm::StringRef, llvm::StringRef> getNameValue(
+        int Argc,
+        char **Argv,
+        int &Offset
+    ) {
+      llvm::StringRef Arg = Argv[Offset++];
+
+      // First letter is a name
+      // The rest is a value.
+
+      if (Arg.size()) {
+        llvm::StringRef Name(Arg.substr(0, 1));
+        if (Arg.size() > 1) {
+          return std::make_pair(Name, Arg.substr(1));
+        }
+        return std::make_pair(Name, llvm::StringRef());
+      }
+
+      llvm_unreachable("Empty argument is not allowed.");
+    }
+  };
+
+  template <ValueSeparator Separator>
   class KeyValueParser : public ArgumentsParser {
-    char Separator;
   public:
 
-    KeyValueParser(char separator = '=') : Separator(separator) {}
+    static const char *getName() {
+      return KeyValueParserStatic<Separator>::getName();
+    }
 
     bool tryParse(Context &Ctx, int &Offset) override {
       llvm::StringRef Name;
       llvm::StringRef Value;
 
       int NewOffset = Offset;
-      std::tie(Name, Value) = getNameValue(Ctx.Argc, Ctx.Argv, NewOffset, Separator);
+
+      std::tie(Name, Value) = KeyValueParserStatic<Separator>::getNameValue(
+          Ctx.Argc, Ctx.Argv, NewOffset
+      );
 
       auto Found = Parameters.find(Name);
 
@@ -120,45 +213,11 @@ namespace clang { namespace levitation { namespace command_line_tool {
       }
       return false;
     }
-
-  protected:
-
-    static std::pair<llvm::StringRef, llvm::StringRef> getNameValue(
-        int Argc,
-        char **Argv,
-        int &Offset,
-        char S
-    ) {
-      llvm::StringRef Arg = Argv[Offset++];
-
-      size_t Eq = S != ' ' ? Arg.find(S) : llvm::StringRef::npos;
-
-      if (Eq != llvm::StringRef::npos) {
-        return Arg.split(S);
-      } else {
-        if (Offset < Argc) {
-          return std::make_pair(Arg, (llvm::StringRef)Argv[Offset++]);
-        }
-        return std::make_pair(Arg, llvm::StringRef());
-      }
-    }
   };
 
-  class KeyEqValueParser : public KeyValueParser {
-  public:
-    static const char *getName() {
-      return "KeyEqValueParser";
-    }
-    KeyEqValueParser() : KeyValueParser('=') {}
-  };
-
-  class KeySpaceValueParser : public KeyValueParser {
-  public:
-    static const char *getName() {
-      return "KeySpaceValueParser";
-    }
-    KeySpaceValueParser() : KeyValueParser(' ') {}
-  };
+  using KeyEqValueParser = KeyValueParser<ValueSeparator::Equal>;
+  using KeySpaceValueParser = KeyValueParser<ValueSeparator::Space>;
+  using KeyValueInOneWordParser = KeyValueParser<ValueSeparator::InOneWord>;
 
 }}} // end of clang::levitation namespace
 
