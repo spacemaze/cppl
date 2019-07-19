@@ -17,6 +17,10 @@
 #include "clang/Levitation/DriverDefaults.h"
 #include "llvm/ADT/StringRef.h"
 
+namespace clang { namespace levitation { namespace log {
+  class Logger;
+}}}
+
 namespace clang { namespace levitation { namespace tools {
 
   class LevitationDriver {
@@ -32,7 +36,11 @@ namespace clang { namespace levitation { namespace tools {
 
     llvm::StringRef Output;
 
+    log::Logger &Log;
+
   public:
+
+    LevitationDriver();
 
     bool isVerbose() const {
       return Verbose;
@@ -82,9 +90,10 @@ namespace clang { namespace levitation { namespace tools {
       LevitationDriver::Output = Output;
     }
 
-    int run() {
-      return 0;
-    }
+    bool run();
+
+  protected:
+    void dumpParameters();
   };
 }}}
 
