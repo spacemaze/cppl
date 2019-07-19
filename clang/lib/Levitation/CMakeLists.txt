@@ -7,8 +7,6 @@ add_clang_library(
 
   Dependencies.cpp
   DependenciesSolver.cpp
-  Driver.cpp
-  DriverDefaults.cpp
   FileExtensions.cpp
   Serialization.cpp
 
@@ -18,3 +16,5 @@ add_clang_library(
   clangLex
   clangSema
 )
+
+add_subdirectory(Driver)

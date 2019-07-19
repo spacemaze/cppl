@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Levitation/DriverDefaults.h"
+#include "clang/Levitation/Driver/DriverDefaults.h"
 
 namespace clang { namespace levitation { namespace tools {
   constexpr char DriverDefaults::SOURCES_ROOT[];

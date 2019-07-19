@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Levitation/CommandLineTool/CommandLineTool.h"
-#include "clang/Levitation/Driver.h"
+#include "clang/Levitation/Driver/Driver.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/SimpleLogger.h"
 #include "clang/Levitation/Serialization.h"

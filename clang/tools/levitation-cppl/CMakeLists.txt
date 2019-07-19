@@ -5,7 +5,7 @@ add_clang_executable(${LEVITATION_CPPL_TARGET} levitation-cppl.cpp)
 target_link_libraries(
     ${LEVITATION_CPPL_TARGET}
     PRIVATE
-    clangLevitation
+    clangLevitationDriver
     clangAST
     clangBasic
     clangSerialization

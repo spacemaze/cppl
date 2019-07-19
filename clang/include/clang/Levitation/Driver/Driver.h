@@ -14,7 +14,7 @@
 #ifndef LLVM_LEVITATION_DRIVER_H
 #define LLVM_LEVITATION_DRIVER_H
 
-#include "clang/Levitation/DriverDefaults.h"
+#include "clang/Levitation/Driver/DriverDefaults.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace clang { namespace levitation { namespace log {
