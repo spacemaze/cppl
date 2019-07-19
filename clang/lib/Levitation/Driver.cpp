@@ -35,10 +35,10 @@ void LevitationDriver::dumpParameters() {
   << "  Running driver with following parameters:\n\n"
   << "    SourcesRoot: " << SourcesRoot << "\n"
   << "    MainSource: " << MainSource << "\n"
-  << "    PreambleSource: " << PreambleSource << "\n"
+  << "    PreambleSource: " << (PreambleSource.empty() ? "<preamble compilation not requested>" : PreambleSource) << "\n"
   << "    JobsNumber: " << JobsNumber << "\n"
   << "    Output: " << Output << "\n"
-  << "    OutputHeader: " << (OutputHeader.empty() ? "<not requested>" : OutputHeader) << "\n"
+  << "    OutputHeader: " << (OutputHeader.empty() ? "<header creation not requested>" : OutputHeader) << "\n"
   << "\n";
 }
 

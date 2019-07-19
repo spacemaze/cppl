@@ -71,6 +71,10 @@ namespace clang { namespace levitation { namespace tools {
       return PreambleSource;
     }
 
+    bool isPreambleCompilationRequested() const {
+      return PreambleSource.size();
+    }
+
     void setPreambleSource(llvm::StringRef PreambleSource) {
       LevitationDriver::PreambleSource = PreambleSource;
     }
