@@ -59,12 +59,18 @@ protected:
 
 public:
 
-  static void createLogger(Level LogLevel = Level::Error) {
+  static Logger &createLogger(Level LogLevel = Level::Error) {
 
     llvm::raw_ostream &Out = LogLevel > Level::Warning ?
         llvm::outs() : llvm::errs();
 
     accessLoggerPtr() = std::unique_ptr<Logger>(new Logger(LogLevel, Out));
+
+    return get();
+  }
+
+  void setLogLevel(Level L) {
+    LogLevel = L;
   }
 
   static Logger &get() {
