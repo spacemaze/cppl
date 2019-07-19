@@ -21,12 +21,23 @@ LevitationDriver::LevitationDriver()
 {}
 
 bool LevitationDriver::run() {
+
+  initParameters();
+
   if (Verbose) {
     Log.setLogLevel(log::Level::Verbose);
 
     dumpParameters();
   }
   return true;
+}
+
+void LevitationDriver::initParameters() {
+  if (Output.empty()) {
+    Output = isLinkPhaseEnabled() ?
+        DriverDefaults::OUTPUT_EXECUTABLE :
+        DriverDefaults::OUTPUT_OBJECTS_DIR;
+  }
 }
 
 void LevitationDriver::dumpParameters() {

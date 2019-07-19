@@ -37,6 +37,8 @@ namespace clang { namespace levitation { namespace tools {
     llvm::StringRef OutputHeader;
     llvm::StringRef Output;
 
+    bool LinkPhaseEnabled = true;
+
     log::Logger &Log;
 
   public:
@@ -107,9 +109,20 @@ namespace clang { namespace levitation { namespace tools {
       return OutputHeader.size();
     }
 
+    bool isLinkPhaseEnabled() const {
+      return LinkPhaseEnabled;
+    }
+
+    void disableLinkPhase() {
+      LinkPhaseEnabled = false;
+    }
+
     bool run();
 
   protected:
+
+    void initParameters();
+
     void dumpParameters();
   };
 }}}
