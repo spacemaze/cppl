@@ -219,12 +219,14 @@ protected:
       ArgumentsParser::Context ParserContext = {
           Argc,
           Argv,
+          /*FailableInstance*/ *this,
           /*VisitedArguments*/ llvm::DenseSet<int>(),
           /*VisitedParameters*/ llvm::DenseSet<llvm::StringRef>()
       };
 
       for (auto &P : ParsersInOriginalOrder) {
-        getParser(P).parse(ParserContext);
+        auto &Parser = getParser(P);
+        Parser.parse(ParserContext);
       }
 
       DefaultParser->parse(ParserContext);
@@ -244,6 +246,8 @@ protected:
       }
 
       if (!isValid() || HasMissedParameters) {
+        llvm::errs()
+        << "Error: " << getErrorMessage() << "\n";
         printHelp(llvm::errs());
         return false;
       }

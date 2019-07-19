@@ -61,7 +61,7 @@ namespace clang { namespace levitation { namespace command_line_tool {
         HandleFunction(IntValue);
       else {
         with (auto f = failable.setFailure()) {
-          f << "Value '" << v << "'is not an integer";
+          f << "value '" << v << "' is not an integer";
         }
       }
     };

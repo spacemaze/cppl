@@ -38,6 +38,7 @@ private:
   OnDoneFn OnDone;
   std::string Str;
   llvm::raw_string_ostream Stream;
+  bool Moved = false;
 
 public:
 
@@ -45,7 +46,11 @@ public:
   : OnDone(std::move(Src.OnDone)),
     Str(std::move(Src.Str)),
     Stream(Str)
-  {}
+  {
+    Src.Moved = true;
+  }
+
+  StringBuilder(const StringBuilder &Src) = delete;
 
   explicit StringBuilder(OnDoneFn &&onDone)
   : OnDone(std::move(onDone)),
@@ -53,7 +58,8 @@ public:
   {}
 
   ~StringBuilder() {
-    OnDone(*this);
+    if (!Moved)
+      OnDone(*this);
   }
 
   template <typename T>
@@ -63,6 +69,7 @@ public:
   }
 
   std::string &str() {
+    Stream.flush();
     return Str;
   }
 };

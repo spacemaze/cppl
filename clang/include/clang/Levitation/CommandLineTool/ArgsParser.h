@@ -45,7 +45,7 @@ namespace clang { namespace levitation { namespace command_line_tool {
   /// Main method is 'parse'. This method accepts Context structure with
   /// details of what is parsed already. This method should also leave corresponding
   /// notes in that Context instance.
-  class ArgumentsParser : public Failable {
+  class ArgumentsParser {
   protected:
     llvm::DenseMap<llvm::StringRef, Parameter*> Parameters;
 
@@ -54,6 +54,7 @@ namespace clang { namespace levitation { namespace command_line_tool {
     struct Context {
         int Argc;
         char **Argv;
+        Failable &FailableInstance;
         llvm::DenseSet<int> VisitedArguments;
         llvm::DenseSet<llvm::StringRef> VisitedParameters;
     };
@@ -148,13 +149,18 @@ namespace clang { namespace levitation { namespace command_line_tool {
     ) {
       llvm::StringRef Arg = Argv[Offset++];
 
-      // First letter is a name
-      // The rest is a value.
+      // Format: KeyValue = <name><value>
+      //   name: '-'[a-zA-Z]
+      //   value: .*
+      //
+      // E.g. For '-j16'
+      //   name is '-j'
+      //   value is '16'
 
       if (Arg.size()) {
-        llvm::StringRef Name(Arg.substr(0, 1));
+        llvm::StringRef Name = Arg.substr(0, 2);
         if (Arg.size() > 1) {
-          return std::make_pair(Name, Arg.substr(1));
+          return std::make_pair(Name, Arg.substr(2));
         }
         return std::make_pair(Name, llvm::StringRef());
       }
@@ -195,8 +201,9 @@ namespace clang { namespace levitation { namespace command_line_tool {
         Failable F;
         P.Handler(F, Value);
         if (!F.isValid()) {
-          with (auto f = setFailure()) {
-            f << "Failed to parse '" << Name << "', " << F.getErrorMessage();
+          with (auto f = Ctx.FailableInstance.setFailure()) {
+            f << "Failed to parse "
+            << "'" << Name << "', " << F.getErrorMessage() << ".";
           }
         }
 

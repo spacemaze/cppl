@@ -34,6 +34,7 @@ public:
 
   StringBuilder setFailure() {
     return StringBuilder([&] (StringBuilder &Builder) {
+      Valid = false;
       ErrorMessage = Builder.str();
     });
   }
