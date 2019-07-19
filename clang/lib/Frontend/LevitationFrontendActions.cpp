@@ -20,7 +20,7 @@
 #include "clang/Frontend/Utils.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/DeserializationListeners.h"
-#include "clang/Levitation/WithOperator.h"
+#include "clang/Levitation/Common/WithOperator.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"

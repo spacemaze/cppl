@@ -20,7 +20,7 @@
 #include "clang/Levitation/CommandLineTool/Parameter.h"
 #include "clang/Levitation/CommandLineTool/ParameterValueHandling.h"
 #include "clang/Levitation/CommandLineTool/ParameterBuilder.h"
-#include "clang/Levitation/Failable.h"
+#include "clang/Levitation/Common/Failable.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"

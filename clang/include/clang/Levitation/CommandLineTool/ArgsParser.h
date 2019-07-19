@@ -17,9 +17,9 @@
 
 #include "clang/Levitation/CommandLineTool/Parameter.h"
 #include "clang/Levitation/CommandLineTool/ParameterValueHandling.h"
-#include "clang/Levitation/Failable.h"
-#include "clang/Levitation/SimpleLogger.h"
-#include "clang/Levitation/WithOperator.h"
+#include "clang/Levitation/Common/Failable.h"
+#include "clang/Levitation/Common/SimpleLogger.h"
+#include "clang/Levitation/Common/WithOperator.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"

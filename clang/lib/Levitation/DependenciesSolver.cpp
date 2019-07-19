@@ -13,13 +13,13 @@
 
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/DependenciesSolver.h"
-#include "clang/Levitation/WithOperator.h"
-#include "clang/Levitation/File.h"
+#include "clang/Levitation/Common/WithOperator.h"
+#include "clang/Levitation/Common/File.h"
 #include "clang/Levitation/FileExtensions.h"
-#include "clang/Levitation/Path.h"
+#include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Serialization.h"
-#include "clang/Levitation/SimpleLogger.h"
-#include "clang/Levitation/StringsPool.h"
+#include "clang/Levitation/Common/SimpleLogger.h"
+#include "clang/Levitation/Common/StringsPool.h"
 
 #include "clang/Basic/FileManager.h"
 

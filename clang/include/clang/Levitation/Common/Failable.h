@@ -14,7 +14,7 @@
 #ifndef LLVM_CLANG_LEVITATION_FAILABLE_H
 #define LLVM_CLANG_LEVITATION_FAILABLE_H
 
-#include "clang/Levitation/StringBuilder.h"
+#include "clang/Levitation/Common/StringBuilder.h"
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"

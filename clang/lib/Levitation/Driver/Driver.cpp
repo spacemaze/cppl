@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Levitation/Driver/Driver.h"
-#include "clang/Levitation/SimpleLogger.h"
+#include "clang/Levitation/Common/SimpleLogger.h"
 
 namespace clang { namespace levitation { namespace tools {
 

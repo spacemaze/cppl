@@ -14,7 +14,7 @@
 #ifndef LLVM_CLANG_LEVITATION_DEPENDENCIESSOLVER_H
 #define LLVM_CLANG_LEVITATION_DEPENDENCIESSOLVER_H
 
-#include "clang/Levitation/Failable.h"
+#include "clang/Levitation/Common/Failable.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallString.h"

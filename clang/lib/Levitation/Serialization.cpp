@@ -15,7 +15,7 @@
 
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/Serialization.h"
-#include "clang/Levitation/WithOperator.h"
+#include "clang/Levitation/Common/WithOperator.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Bitcode/BitstreamReader.h"
 #include "llvm/Bitcode/BitstreamWriter.h"

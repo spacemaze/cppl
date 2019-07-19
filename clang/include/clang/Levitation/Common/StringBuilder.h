@@ -14,7 +14,7 @@
 #ifndef LLVM_CLANG_LEVITATION_STRINGBUILDER_H
 #define LLVM_CLANG_LEVITATION_STRINGBUILDER_H
 
-#include "clang/Levitation/WithOperator.h"
+#include "clang/Levitation/Common/WithOperator.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"

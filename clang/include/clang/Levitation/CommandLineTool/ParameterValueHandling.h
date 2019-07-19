@@ -15,8 +15,8 @@
 #ifndef LLVM_LEVITATION_COMMANDLINETOOL_PARAMETERVALUEHANDLER_H
 #define LLVM_LEVITATION_COMMANDLINETOOL_PARAMETERVALUEHANDLER_H
 
-#include "clang/Levitation/Failable.h"
-#include "clang/Levitation/WithOperator.h"
+#include "clang/Levitation/Common/Failable.h"
+#include "clang/Levitation/Common/WithOperator.h"
 
 #include <strstream>
 

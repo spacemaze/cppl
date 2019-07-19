@@ -15,7 +15,7 @@
 #ifndef LLVM_CLANG_LEVITATION_STRINGSPOOL_H
 #define LLVM_CLANG_LEVITATION_STRINGSPOOL_H
 
-#include "clang/Levitation/IndexedSet.h"
+#include "clang/Levitation/Common/IndexedSet.h"
 #include "llvm/ADT/SmallString.h"
 
 namespace clang { namespace levitation {
