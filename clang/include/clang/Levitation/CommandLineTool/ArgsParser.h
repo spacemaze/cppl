@@ -39,11 +39,23 @@ namespace clang { namespace levitation { namespace command_line_tool {
     Space
   };
 
+  /// Implements Argument Parsing interface.
+  /// Each parses should be known that it may be just an item in parses stack.
+  /// Main method is 'parse'. This method accepts Context structure with
+  /// details of what is parsed already. This method should also leave corresponding
+  /// notes in that Context instance.
   class ArgumentsParser : public Failable {
   protected:
     llvm::DenseMap<llvm::StringRef, Parameter*> Parameters;
 
   public:
+
+    struct Context {
+        int Argc;
+        char **Argv;
+        llvm::DenseSet<int> VisitedArguments;
+        llvm::DenseSet<llvm::StringRef> VisitedParameters;
+    };
 
     virtual ~ArgumentsParser() = default;
 
@@ -52,23 +64,15 @@ namespace clang { namespace levitation { namespace command_line_tool {
       assert(Res.second && "Parameter should be identified by its name.");
     }
 
-    void parse(
-        int Argc,
-        char **Argv,
-        llvm::DenseSet<llvm::StringRef> &VisitedParameters
-    ) {
-      for (int i = 1; i != Argc;) {
-        if (!tryParse(Argc, Argv, i, VisitedParameters))
+    void parse(Context &Ctx) {
+      for (int i = 1; i != Ctx.Argc;) {
+        // Keep in mind [expr.log.or]
+        if (Ctx.VisitedArguments.count(i) || !tryParse(Ctx, i))
           ++i;
       }
     }
 
-    virtual bool tryParse(
-        int Argc,
-        char **Argv,
-        int &Offset,
-        llvm::DenseSet<llvm::StringRef> &VisitedParameters
-    ) = 0;
+    virtual bool tryParse(Context &Ctx, int &Offset) = 0;
   };
 
   class KeyValueParser : public ArgumentsParser {
@@ -77,37 +81,26 @@ namespace clang { namespace levitation { namespace command_line_tool {
 
     KeyValueParser(char separator = '=') : Separator(separator) {}
 
-    static llvm::StringRef getName() {
-      return "KeyValueParser";
-    }
-
-    bool tryParse(
-        int Argc,
-        char **Argv,
-        int &Offset,
-        llvm::DenseSet<llvm::StringRef> &VisitedParameters
-    ) override {
-      llvm::StringRef Arg = Argv[Offset];
-
+    bool tryParse(Context &Ctx, int &Offset) override {
       llvm::StringRef Name;
       llvm::StringRef Value;
 
-      size_t Eq = Arg.find(Separator);
+      int NewOffset = Offset;
+      std::tie(Name, Value) = getNameValue(Ctx.Argc, Ctx.Argv, NewOffset, Separator);
 
-      if (Eq != llvm::StringRef::npos)
-        std::tie(Name, Value) = Arg.split(Separator);
-      else
-        Name = Arg;
+      if (!Ctx.VisitedParameters.insert(Name).second)
+        return false;
 
       auto Found = Parameters.find(Name);
 
-      // TODO Levitation: for flags emit warning, in case if we have
-      // non-empty Value
-
       if (Found != Parameters.end()) {
         Parameter &P = *Found->second;
-
-        VisitedParameters.insert(Name);
+        if (P.IsFlag) {
+          // TODO Levitation: for flags emit warning, in case if we have
+          // non-empty Value
+          Value = llvm::StringRef();
+          NewOffset = Offset + 1;
+        }
 
         Failable F;
         P.Handler(F, Value);
@@ -117,12 +110,55 @@ namespace clang { namespace levitation { namespace command_line_tool {
           }
         }
 
-        ++Offset;
+        // Mark all arguments current parameter consists of as "used"
+        for (int va = Offset; va != NewOffset; ++va)
+          Ctx.VisitedArguments.insert(va);
+
+        Offset = NewOffset;
         return true;
       }
       return false;
     }
+
+  protected:
+
+    static std::pair<llvm::StringRef, llvm::StringRef> getNameValue(
+        int Argc,
+        char **Argv,
+        int &Offset,
+        char S
+    ) {
+      llvm::StringRef Arg = Argv[Offset++];
+
+      size_t Eq = S != ' ' ? Arg.find(S) : llvm::StringRef::npos;
+
+      if (Eq != llvm::StringRef::npos) {
+        return Arg.split(S);
+      } else {
+        if (Offset < Argc) {
+          return std::make_pair(Arg, (llvm::StringRef)Argv[Offset++]);
+        }
+        return std::make_pair(Arg, llvm::StringRef());
+      }
+    }
   };
+
+  class KeyEqValueParser : public KeyValueParser {
+  public:
+    static const char *getName() {
+      return "KeyEqValueParser";
+    }
+    KeyEqValueParser() : KeyValueParser('=') {}
+  };
+
+  class KeySpaceValueParser : public KeyValueParser {
+  public:
+    static const char *getName() {
+      return "KeySpaceValueParser";
+    }
+    KeySpaceValueParser() : KeyValueParser(' ') {}
+  };
+
 }}} // end of clang::levitation namespace
 
 #endif //LLVM_LEVITATION_ARGSSEPARATOR_H

@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
             .action([&](llvm::StringRef) { Solver.setVerbose(true); })
         .done()
         .helpParameter("--help", "Shows this help text.")
-        .defaultParser<KeyValueParser>('=')
+        .defaultParser<KeyEqValueParser>()
         .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
         .run([&] {
           if (!Solver.solve())

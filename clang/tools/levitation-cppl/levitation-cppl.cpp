@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
   //    If -c is specified then it specifies output directory for object files,
   //    with a.dir by default.
 
-  auto Tool = CommandLineTool(argc, argv)
+  return CommandLineTool(argc, argv)
       .description(
           "Is a C++ Levitation Compiler. Depending on mode it's "
           "ran in, it can go through preamble compilation, "
@@ -88,6 +88,7 @@ int main(int argc, char **argv) {
               "with a.dir by default."
           )
           .action([&](StringRef v) { Driver.setOutput(v); })
+          .parser<KeySpaceValueParser>()
       .done()
       .flag()
           .name("--verbose")
@@ -95,16 +96,15 @@ int main(int argc, char **argv) {
           .action([&](llvm::StringRef) { Driver.setVerbose(true); })
       .done()
       .helpParameter("--help", "Shows this help text.")
-      .defaultParser<KeyValueParser>()
+      .parser<KeySpaceValueParser>()
+      .defaultParser<KeyEqValueParser>()
       .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
-  .done();
+      .run([&] {
+        if (!Driver.run())
+          return RES_FAILED_TO_RUN;
 
-  return Tool.run([&] {
-    if (!Driver.run())
-      return RES_FAILED_TO_RUN;
-
-    return RES_SUCCESS;
-  });
+        return RES_SUCCESS;
+      });
 }
 
 bool parseJobsNumber(const char **Argv, int &Offset) {

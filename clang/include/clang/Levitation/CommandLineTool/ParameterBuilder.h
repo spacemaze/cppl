@@ -83,6 +83,12 @@ namespace clang { namespace levitation { namespace command_line_tool {
       return *this;
     }
 
+    template <typename ParserTy>
+    ParameterBuilder &parser() {
+      P->EnabledForParsers.push_back(ParserTy::getName());
+      return *this;
+    }
+
     OwnerTy &done() {
       return OnDone(std::move(P));
     }

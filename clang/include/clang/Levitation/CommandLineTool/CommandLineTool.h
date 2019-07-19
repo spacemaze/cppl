@@ -82,6 +82,7 @@ public:
   CommandLineTool &parser(ArgsT &&... Args) {
     createParser<ParserTy>(std::forward<ArgsT>(Args)...);
     ParsersInOriginalOrder.push_back(ParserTy::getName());
+    return *this;
   }
 
   template<class ParserTy, typename... ArgsT>
@@ -211,11 +212,18 @@ protected:
       // First. We try to use parsers in order they were added.
       // If non of them succeed, then we use default parser.
 
+      ArgumentsParser::Context ParserContext = {
+          Argc,
+          Argv,
+          /*VisitedArguments*/ llvm::DenseSet<int>(),
+          /*VisitedParameters*/ llvm::DenseSet<llvm::StringRef>()
+      };
+
       for (auto &P : ParsersInOriginalOrder) {
-        getParser(P).parse(Argc, Argv, Visited);
+        getParser(P).parse(ParserContext);
       }
 
-      DefaultParser->parse(Argc, Argv, Visited);
+      DefaultParser->parse(ParserContext);
 
       // Check whether we haven't met some of required parameters.
       bool HasMissedParameters = false;
@@ -225,7 +233,7 @@ protected:
         if (Optional.count(ParameterName))
           continue;
 
-        if (!Visited.count(ParameterName)) {
+        if (!ParserContext.VisitedParameters.count(ParameterName)) {
           reportMissedParameter(ParameterName);
           HasMissedParameters = true;
         }
