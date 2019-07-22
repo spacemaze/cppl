@@ -878,6 +878,8 @@ public:
 
   void collectParsedDependencies() {
 
+    // TODO Levitation: Use clang::levitation::FileSystem::collectFiles
+
     ParsedDependenciesVector ParsedData;
 
     Log.verbose() << "Collecting dependencies...\n";
