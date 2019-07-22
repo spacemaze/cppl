@@ -8,6 +8,8 @@
 //===----------------------------------------------------------------------===//
 //
 //  This file defines C++ Levitation Driver class.
+//  It is a public driver interface. Most of implementation is present
+//  in .cpp file as separate classes.
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,8 +40,6 @@ namespace clang { namespace levitation { namespace tools {
     llvm::StringRef Output;
 
     bool LinkPhaseEnabled = true;
-
-    log::Logger &Log;
 
   public:
 
@@ -119,10 +119,11 @@ namespace clang { namespace levitation { namespace tools {
 
     bool run();
 
+    friend class LevitationDriverImpl;
+
   protected:
 
     void initParameters();
-
     void dumpParameters();
   };
 }}}

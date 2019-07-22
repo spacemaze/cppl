@@ -11,25 +11,170 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Levitation/Driver/Driver.h"
+#include "clang/Basic/FileManager.h"
+
+#include "clang/Levitation/Common/Failable.h"
+#include "clang/Levitation/Common/FileSystem.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
+#include "clang/Levitation/DependenciesSolver.h"
+#include "clang/Levitation/Driver/Driver.h"
+#include "clang/Levitation/FileExtensions.h"
+#include "clang/Levitation/TasksManager/Task.h"
+#include "clang/Levitation/TasksManager/TasksManager.h"
+
+#include <utility>
 
 namespace clang { namespace levitation { namespace tools {
 
+//-----------------------------------------------------------------------------
+//  Levitation driver implementation classes
+//  (LevitationDriver itself is defined at the bottom)
+
+namespace {
+
+  using SourcesVector = llvm::SmallVector<std::string, 128>;
+  struct RunContext {
+    LevitationDriver &Driver;
+    Failable Status;
+    SourcesVector Sources;
+    DependenciesGraph DepsGraph;
+
+    RunContext(LevitationDriver &driver) : Driver(driver) {}
+  };
+}
+
+class LevitationDriverImpl {
+  RunContext &Context;
+
+  Failable &Status;
+  log::Logger &Log;
+  tasks::TasksManager &TM;
+
+public:
+
+  explicit LevitationDriverImpl(RunContext &context)
+  : Context(context),
+    Status(context.Status),
+    Log(log::Logger::get()),
+    TM(tasks::TasksManager::get())
+  {}
+
+  void runParse();
+  void solveDependencies();
+  void instantiateAndCodeGen();
+  void runLinker();
+
+  void collectSources();
+  tasks::Task createParseTask(llvm::StringRef Source);
+  tasks::Task createInstantiateTask(llvm::StringRef Source);
+  tasks::Task createCodeGenTask(llvm::StringRef Source);
+  tasks::Task createParseAndEmitTask(llvm::StringRef Source);
+  tasks::Task createLinkTask(const SourcesVector &Sources);
+
+};
+
+void LevitationDriverImpl::runParse() {
+  collectSources();
+
+  auto &TM = tasks::TasksManager::get();
+
+  for (auto Source : Context.Sources) {
+    auto parseTask = createParseTask(Source);
+    TM.addTask(std::move(parseTask));
+  }
+
+  TM.waitForTasks();
+
+  Status.inheritResult(TM, "Parse: ");
+}
+
+void LevitationDriverImpl::solveDependencies() {
+  if (!Status.isValid())
+    return;
+
+  DependenciesSolver Solver;
+  Solver.setSourcesRoot(Context.Driver.SourcesRoot);
+  Solver.setBuildRoot(Context.Driver.BuildRoot);
+  Solver.setMainFile(Context.Driver.MainSource);
+  Solver.setVerbose(Context.Driver.Verbose);
+  Solver.setWriteDependencyFiles(false);
+
+  Solver.solve();
+
+  Status.inheritResult(Solver, "Dependencies: ");
+
+  if (Context.Status.isValid())
+    Context.DepsGraph = std::move(Solver.detachDependeciesGraph());
+}
+
+void LevitationDriverImpl::instantiateAndCodeGen() {
+  if (!Status.isValid())
+    return;
+
+  Context.DepsGraph.dsfJobs(
+      Context.Driver.JobsNumber,
+      Context.Status,
+      [=] (const DependencyNode &N) {
+        processDependencyNode(N);
+      }
+  );
+
+  Status.inheritResult(Solver, "Instantiate and codegen: ");
+}
+
+void LevitationDriverImpl::runLinker() {
+  if (!Status.isValid())
+    return;
+
+  assert(Context.Driver.isLinkPhaseEnabled() && "Link phase must be enabled.");
+
+  auto &TM = tasks::TasksManager::get();
+
+  auto linkTask = createLinkTask(Context.Sources);
+  TM.executeTask(std::move(linkTask));
+
+  Status.inheritResult(TM, "Parse: ");
+}
+
+void LevitationDriverImpl::collectSources() {
+
+  Log.verbose() << "Collecting sources...\n";
+
+  FileSystem::collectFiles(
+      Context.Sources,
+      Context.Driver.SourcesRoot,
+      FileExtensions::SourceCode
+  );
+
+  Log.verbose()
+  << "Found " << Context.Sources.size()
+  << " '." << FileExtensions::SourceCode << "' files.\n\n";
+}
+
+//-----------------------------------------------------------------------------
+//  LevitationDriver
+
 LevitationDriver::LevitationDriver()
-: Log(log::Logger::createLogger())
 {}
 
 bool LevitationDriver::run() {
 
+  log::Logger::createLogger();
+  tasks::TasksManager::create(JobsNumber);
+
   initParameters();
 
-  if (Verbose) {
-    Log.setLogLevel(log::Level::Verbose);
+  RunContext Context(*this);
+  LevitationDriverImpl Impl(Context);
 
-    dumpParameters();
-  }
-  return true;
+  Impl.runParse();
+  Impl.solveDependencies();
+  Impl.instantiateAndCodeGen();
+
+  if (LinkPhaseEnabled)
+    Impl.runLinker();
+
+  return Context.Status.isValid();
 }
 
 void LevitationDriver::initParameters() {
@@ -37,6 +182,11 @@ void LevitationDriver::initParameters() {
     Output = isLinkPhaseEnabled() ?
         DriverDefaults::OUTPUT_EXECUTABLE :
         DriverDefaults::OUTPUT_OBJECTS_DIR;
+  }
+
+  if (Verbose) {
+    log::Logger::get().setLogLevel(log::Level::Verbose);
+    dumpParameters();
   }
 }
 

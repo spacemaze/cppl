@@ -39,6 +39,8 @@ public:
     });
   }
 
+  void inheritResult(const Failable &Src, llvm::StringRef Prefix);
+
   bool isValid() const { return Valid; }
   llvm::StringRef getErrorMessage() const { return ErrorMessage; }
 
