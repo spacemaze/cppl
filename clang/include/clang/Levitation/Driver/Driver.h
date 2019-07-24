@@ -30,6 +30,7 @@ namespace clang { namespace levitation { namespace tools {
     bool Verbose = false;
 
     llvm::StringRef SourcesRoot = DriverDefaults::SOURCES_ROOT;
+    llvm::StringRef BuildRoot = DriverDefaults::BUILD_ROOT;
     llvm::StringRef MainSource = DriverDefaults::MAIN_SOURCE;
 
     llvm::StringRef PreambleSource;
@@ -60,7 +61,11 @@ namespace clang { namespace levitation { namespace tools {
     void setSourcesRoot(llvm::StringRef SourcesRoot) {
       LevitationDriver::SourcesRoot = SourcesRoot;
     }
-
+      
+    void setBuildRoot(llvm::StringRef BuildRoot) {
+      LevitationDriver::BuildRoot = BuildRoot;
+    }
+    
     llvm::StringRef getMainSource() const {
       return MainSource;
     }

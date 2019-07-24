@@ -13,7 +13,7 @@
 
 #include "clang/Levitation/CommandLineTool/ArgsParser.h"
 #include "clang/Levitation/CommandLineTool/CommandLineTool.h"
-#include "clang/Levitation/DependenciesSolver.h"
+#include "clang/Levitation/DependenciesSolver/DependenciesSolver.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/Serialization.h"
 
@@ -24,6 +24,7 @@ using namespace llvm;
 using namespace clang;
 using namespace clang::levitation;
 using namespace clang::levitation::command_line_tool;
+using namespace clang::levitation::dependencies_solver;
 
 static const int RES_WRONG_ARGUMENTS = 1;
 static const int RES_FAILED_TO_SOLVE = 2;
@@ -32,7 +33,7 @@ static const int RES_SUCCESS = 0;
 
 int main(int argc, char **argv) {
 
-  DependenciesSolver Solver;
+  dependencies_solver::DependenciesSolver Solver;
 
   return CommandLineTool<KeyEqValueParser>(argc, argv)
         .description("C++ Levitation dependencies solver tool")

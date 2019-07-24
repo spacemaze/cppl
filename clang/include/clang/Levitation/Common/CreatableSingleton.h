@@ -66,7 +66,10 @@ public:
 
   static DerivedTy &get() {
     auto &Ptr = accessPtr();
-    assert(Ptr && "Instance should be created");
+
+    // Note, that in order to use 'get' user should initiate explicit instance
+    // creation by means of 'create' method.
+    assert(Ptr && "Instance should be created.");
     return *Ptr;
   }
 };

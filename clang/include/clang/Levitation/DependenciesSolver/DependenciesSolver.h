@@ -15,11 +15,13 @@
 #define LLVM_CLANG_LEVITATION_DEPENDENCIESSOLVER_H
 
 #include "clang/Levitation/Common/Failable.h"
+#include "clang/Levitation/Common/Path.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+
 #include <memory>
 
 namespace llvm {
@@ -30,8 +32,9 @@ namespace clang {
   class FileManager;
 }
 
-namespace clang { namespace levitation {
+namespace clang { namespace levitation { namespace dependencies_solver {
 
+class SolvedDependenciesInfo;
 class DependenciesSolver : public Failable {
   llvm::StringRef SourcesRoot;
   llvm::StringRef BuildRoot;
@@ -55,11 +58,13 @@ public:
     DependenciesSolver::MainFile = MainFile;
   }
 
+  std::shared_ptr<SolvedDependenciesInfo> solve(const Paths &LDepsFiles);
+
   bool solve();
 
   friend class DependenciesSolverImpl;
 };
 
-}}
+}}}
 
 #endif //LLVM_CLANG_LEVITATION_DEPENDENCIESSOLVER_H

@@ -5,7 +5,7 @@ add_clang_executable(${LEVITATION_DEPS_TARGET} levitation-deps.cpp)
 target_link_libraries(
     ${LEVITATION_DEPS_TARGET}
     PRIVATE
-    clangLevitation
+    clangLevitationDependenciesSolver
     clangAST
     clangBasic
     clangSerialization

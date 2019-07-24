@@ -16,15 +16,20 @@
 #include "clang/Levitation/Common/Failable.h"
 #include "clang/Levitation/Common/FileSystem.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
-#include "clang/Levitation/DependenciesSolver.h"
+#include "clang/Levitation/DependenciesSolver/DependenciesGraph.h"
+#include "clang/Levitation/DependenciesSolver/DependenciesSolver.h"
+#include "clang/Levitation/DependenciesSolver/SolvedDependenciesInfo.h"
 #include "clang/Levitation/Driver/Driver.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/TasksManager/Task.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
 
+#include <memory>
 #include <utility>
 
 namespace clang { namespace levitation { namespace tools {
+
+using namespace clang::levitation::dependencies_solver;
 
 //-----------------------------------------------------------------------------
 //  Levitation driver implementation classes
@@ -32,12 +37,13 @@ namespace clang { namespace levitation { namespace tools {
 
 namespace {
 
-  using SourcesVector = llvm::SmallVector<std::string, 128>;
   struct RunContext {
     LevitationDriver &Driver;
     Failable Status;
-    SourcesVector Sources;
-    DependenciesGraph DepsGraph;
+    Paths Sources;
+    Paths LDepsFiles;
+    Paths ObjectFiles;
+    std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
 
     RunContext(LevitationDriver &driver) : Driver(driver) {}
   };
@@ -69,13 +75,12 @@ public:
   tasks::Task createInstantiateTask(llvm::StringRef Source);
   tasks::Task createCodeGenTask(llvm::StringRef Source);
   tasks::Task createParseAndEmitTask(llvm::StringRef Source);
-  tasks::Task createLinkTask(const SourcesVector &Sources);
+  tasks::Task createLinkTask(const Paths &ObjectFiles);
 
+  void processDependencyNode(const DependenciesGraph::Node &N);
 };
 
 void LevitationDriverImpl::runParse() {
-  collectSources();
-
   auto &TM = tasks::TasksManager::get();
 
   for (auto Source : Context.Sources) {
@@ -97,24 +102,22 @@ void LevitationDriverImpl::solveDependencies() {
   Solver.setBuildRoot(Context.Driver.BuildRoot);
   Solver.setMainFile(Context.Driver.MainSource);
   Solver.setVerbose(Context.Driver.Verbose);
-  Solver.setWriteDependencyFiles(false);
 
-  Solver.solve();
+  Context.DependenciesInfo = Solver.solve(Context.LDepsFiles);
 
-  Status.inheritResult(Solver, "Dependencies: ");
-
-  if (Context.Status.isValid())
-    Context.DepsGraph = std::move(Solver.detachDependeciesGraph());
+  Status.inheritResult(Solver, "Dependencies solver: ");
 }
 
 void LevitationDriverImpl::instantiateAndCodeGen() {
   if (!Status.isValid())
     return;
 
+  auto &DependenciesInfo = *Context.DependenciesInfo;
+
   Context.DepsGraph.dsfJobs(
       Context.Driver.JobsNumber,
       Context.Status,
-      [=] (const DependencyNode &N) {
+      [=] (const DependenciesGraph::Node &N) {
         processDependencyNode(N);
       }
   );
@@ -130,7 +133,7 @@ void LevitationDriverImpl::runLinker() {
 
   auto &TM = tasks::TasksManager::get();
 
-  auto linkTask = createLinkTask(Context.Sources);
+  auto linkTask = createLinkTask(Context.ObjectFiles);
   TM.executeTask(std::move(linkTask));
 
   Status.inheritResult(TM, "Parse: ");
@@ -146,9 +149,50 @@ void LevitationDriverImpl::collectSources() {
       FileExtensions::SourceCode
   );
 
+  Path::replaceExtension(
+      Context.LDepsFiles,
+      Context.Sources,
+      FileExtensions::ParsedDependencies
+  );
+
+  Path::replaceExtension(
+      Context.ObjectFiles,
+      Context.Sources,
+      FileExtensions::Object
+  );
+
   Log.verbose()
   << "Found " << Context.Sources.size()
   << " '." << FileExtensions::SourceCode << "' files.\n\n";
+}
+
+void LevitationDriverImpl::processDependencyNode(
+    const DependenciesGraph::Node &N
+) {
+
+  auto &fullDependencies = Context.DependenciesInfo->getDependenciesList(N.ID);
+
+  switch (N.Kind) {
+
+    case DependenciesGraph::NodeKind::Declaration: {
+        // Launch instantiation of .decl-ast file.
+        // TODO Levitation: get .ast file for given dependency node
+        auto &astFile = Context.SolvedDependencies.getASTFile(N.ID);
+        runDeclInstantiation(astFile, fullDependencies);
+      }
+      break;
+
+    case DependenciesGraph::NodeKind::Definition: {
+        // Launch instantiation of .o file.
+        // TODO Levitation: get .o file for given dependency node
+        auto &astFile = Context.SolvedDependencies.getASTFile(N.ID);
+        runObjectInstantiation(astFile, fullDependencies);
+      }
+      break;
+
+    default:
+      llvm_unreachable("Unknown dependency kind");
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -167,6 +211,7 @@ bool LevitationDriver::run() {
   RunContext Context(*this);
   LevitationDriverImpl Impl(Context);
 
+  Impl.collectSources();
   Impl.runParse();
   Impl.solveDependencies();
   Impl.instantiateAndCodeGen();
@@ -191,7 +236,7 @@ void LevitationDriver::initParameters() {
 }
 
 void LevitationDriver::dumpParameters() {
-  Log.verbose()
+  log::Logger::get().verbose()
   << "\n"
   << "  Running driver with following parameters:\n\n"
   << "    SourcesRoot: " << SourcesRoot << "\n"

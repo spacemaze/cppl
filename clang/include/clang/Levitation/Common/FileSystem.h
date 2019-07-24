@@ -12,10 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_LEVITATION_FILE_H
-#define LLVM_CLANG_LEVITATION_FILE_H
+#ifndef LLVM_CLANG_LEVITATION_FILESYSTEM_H
+#define LLVM_CLANG_LEVITATION_FILESYSTEM_H
 
 #include "clang/Basic/FileManager.h"
+#include "clang/Levitation/Common/CreatableSingleton.h"
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FileSystem.h"
@@ -41,9 +42,8 @@ public:
       llvm::StringRef Root,
       llvm::StringRef Extension
   ) {
-
-    clang::FileManager FileMgr({ /*Working dir*/ StringRef()});
-    auto &FS = FileMgr.getVirtualFileSystem();
+    auto &FM = CreatableSingleton<FileManager>::get();
+    auto &FS = FM.getVirtualFileSystem();
 
     using Paths = llvm::SmallVector<llvm::StringRef, 32>;
 
@@ -106,4 +106,4 @@ protected:
 }
 }
 
-#endif
+#endif // LLVM_CLANG_LEVITATION_FILESYSTEM_H

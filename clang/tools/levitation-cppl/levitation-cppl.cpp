@@ -63,6 +63,11 @@ int main(int argc, char **argv) {
           [&](StringRef v) { Driver.setSourcesRoot(v); }
       )
       .optional(
+          "-buildRoot", "<directory>",
+          "Build root directory.",
+          [&](StringRef v) { Driver.setBuildRoot(v); }
+      )
+      .optional(
           "-main", "<path>",
           "Main source file.",
           [&](StringRef v) { Driver.setMainSource(v); }

@@ -14,6 +14,8 @@
 #ifndef LLVM_CLANG_LEVITATION_PATH_H
 #define LLVM_CLANG_LEVITATION_PATH_H
 
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -28,6 +30,9 @@ namespace clang {
 namespace levitation {
 
 using namespace llvm;
+
+  using Paths = llvm::SmallVector<llvm::SmallString<256>, 64>;
+
   class Path {
   public:
     template <typename SmallStringT>
@@ -45,6 +50,17 @@ using namespace llvm;
         Relative = Relative.substr(Separator.size());
 
       return Relative;
+    }
+
+    static void replaceExtension(Paths &paths, StringRef NewExtension) {
+      for (auto &P : paths) {
+        llvm::sys::path::replace_extension(P, NewExtension);
+      }
+    }
+
+    static void replaceExtension(Paths &New, const Paths &Src, StringRef NewExtension) {
+      New = Src;
+      replaceExtension(New, NewExtension);
     }
   };
 }

@@ -20,6 +20,7 @@ namespace clang { namespace levitation { namespace tools {
 
   struct DriverDefaults  {
       static constexpr char SOURCES_ROOT [] = ".";
+      static constexpr char BUILD_ROOT [] = ".build";
       static constexpr char MAIN_SOURCE [] = "main.cpp";
       static constexpr int JOBS_NUMBER = 1;
       static constexpr char OUTPUT_EXECUTABLE [] = "a.out";
