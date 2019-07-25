@@ -41,15 +41,25 @@ namespace {
   // Context should keep shared data for all sequence steps.
   // If something is required for particular step only it should
   // be out of context.
+
+  struct FilesInfo {
+    SinglePath Source;
+    SinglePath LDeps;
+    SinglePath AST;
+    SinglePath DeclAST;
+    SinglePath Object;
+  };
+
   struct RunContext {
 
     // TODO Levitation: Introduce LevitationDriverOpts and use here
     // its reference instead.
     LevitationDriver &Driver;
     Failable Status;
-    Paths Sources;
-    Paths LDepsFiles;
-    Paths ObjectFiles;
+
+    Paths Packages;
+    llvm::DenseMap<StringRef, FilesInfo> Files;
+
     std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
 
     RunContext(LevitationDriver &driver) : Driver(driver) {}
@@ -87,11 +97,23 @@ public:
 /*static*/
 class Commands {
 public:
-  static bool parse(StringRef SourceFile);
+  static bool parse(
+      StringRef OutASTFile,
+      StringRef OutLDepsFile,
+      StringRef SourceFile
+  );
 
-  static bool instantiateDecl(StringRef ASTFile, Paths Deps);
+  static bool instantiateDecl(
+      StringRef OutDeclASTFile,
+      StringRef ASTFile,
+      Paths Deps
+  );
 
-  static bool instantiateObject(StringRef ASTFile, Paths Deps);
+  static bool instantiateObject(
+      StringRef OutObjFile,
+      StringRef ASTFile,
+      Paths Deps
+  );
 
   static bool link(StringRef OutputFile, const Paths &ObjectFiles);
 };
@@ -99,9 +121,12 @@ public:
 void LevitationDriverImpl::runParse() {
   auto &TM = TasksManager::get();
 
-  for (auto Source : Context.Sources) {
-    TM.addTask([&] (TaskContext &TC) {
-      TC.Successful = Commands::parse(Source);
+  for (auto PackagePath : Context.Packages) {
+
+    auto Files = Context.Files[PackagePath];
+
+    TM.addTask([=] (TaskContext &TC) {
+      TC.Successful = Commands::parse(Files.AST, Files.LDeps, Files.Source);
     });
   }
 
@@ -122,7 +147,13 @@ void LevitationDriverImpl::solveDependencies() {
   Solver.setMainFile(Context.Driver.MainSource);
   Solver.setVerbose(Context.Driver.Verbose);
 
-  Context.DependenciesInfo = Solver.solve(Context.LDepsFiles);
+  Paths LDepsFiles;
+  for (auto &PackagePath : Context.Packages) {
+    assert(Context.Files.count(PackagePath));
+    LDepsFiles.push_back(Context.Files[PackagePath].LDeps);
+  }
+
+  Context.DependenciesInfo = Solver.solve(LDepsFiles);
 
   Status.inheritResult(Solver, "Dependencies solver: ");
 }
@@ -153,10 +184,16 @@ void LevitationDriverImpl::runLinker() {
 
   auto &TM = TasksManager::get();
 
+  Paths ObjectFiles;
+  for (auto &PackagePath : Context.Packages) {
+    assert(Context.Files.count(PackagePath));
+    ObjectFiles.push_back(Context.Files[PackagePath].LDeps);
+  }
+
   auto Res = TM.executeTask(
       [&] (TaskContext &TC) {
         TC.Successful = Commands::link(
-            Context.Driver.Output, Context.ObjectFiles
+            Context.Driver.Output, ObjectFiles
         );
       }
   );
@@ -171,35 +208,54 @@ void LevitationDriverImpl::collectSources() {
   Log.verbose() << "Collecting sources...\n";
 
   FileSystem::collectFiles(
-          Context.Sources,
+          Context.Packages,
           Context.Driver.SourcesRoot,
           FileExtensions::SourceCode
   );
 
-  for (const auto &Src : Context.Sources) {
+  for (const auto &Src : Context.Packages) {
     SinglePath PackagePath = Path::makeRelative<SinglePath>(
         Src, Context.Driver.SourcesRoot
     );
 
-    Context.LDepsFiles.push_back(
-        Path::getPath<SinglePath>(
-            Context.Driver.BuildRoot,
-            PackagePath,
-            FileExtensions::DirectDependencies
-        )
+    FilesInfo Files;
+
+    // In current implementation package path is equal to relative source path.
+
+    Files.Source = PackagePath;
+    //  Files.Source = Path::getPath<SinglePath>(
+    //      Context.Driver.SourcesRoot,
+    //      PackagePath,
+    //      FileExtensions::SourceCode
+    //  );
+    Files.LDeps = Path::getPath<SinglePath>(
+        Context.Driver.BuildRoot,
+        PackagePath,
+        FileExtensions::ParsedDependencies
+    );
+    Files.AST = Path::getPath<SinglePath>(
+        Context.Driver.BuildRoot,
+        PackagePath,
+        FileExtensions::ParsedAST
+    );
+    Files.DeclAST = Path::getPath<SinglePath>(
+        Context.Driver.BuildRoot,
+        PackagePath,
+        FileExtensions::DeclarationAST
+    );
+    Files.Object = Path::getPath<SinglePath>(
+        Context.Driver.BuildRoot,
+        PackagePath,
+        FileExtensions::Object
     );
 
-    Context.ObjectFiles.push_back(
-        Path::getPath<SinglePath>(
-            Context.Driver.BuildRoot,
-            PackagePath,
-            FileExtensions::Object
-        )
-    );
+    auto Res = Context.Files.insert({ Src, Files });
+
+    assert(Res.second);
   }
 
   Log.verbose()
-  << "Found " << Context.Sources.size()
+  << "Found " << Context.Packages.size()
   << " '." << FileExtensions::SourceCode << "' files.\n\n";
 }
 
@@ -210,8 +266,10 @@ bool LevitationDriverImpl::processDependencyNode(
   const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
 
   const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
+  const auto &Files = Context.Files[SrcRel];
 
   auto &fullDependencieIDs = Context.DependenciesInfo->getDependenciesList(N.ID);
+
   Paths fullDependencies;
   for (auto DID : fullDependencieIDs) {
     auto &DNode = Graph.getNode(DID.NodeID);
@@ -221,23 +279,15 @@ bool LevitationDriverImpl::processDependencyNode(
 
   switch (N.Kind) {
 
-    case DependenciesGraph::NodeKind::Declaration: {
-        auto astFile = Path::getPath<SinglePath>(
-            Context.Driver.BuildRoot,
-            SrcRel,
-            FileExtensions::ParsedAST
-        );
-        return Commands::instantiateDecl(astFile.str(), fullDependencies);
-      }
+    case DependenciesGraph::NodeKind::Declaration:
+      return Commands::instantiateDecl(
+          Files.DeclAST, Files.AST, fullDependencies
+      );
 
-    case DependenciesGraph::NodeKind::Definition: {
-        auto astFile = Path::getPath<SinglePath>(
-            Context.Driver.BuildRoot,
-            SrcRel,
-            FileExtensions::ParsedAST
-        );
-        return Commands::instantiateObject(astFile.str(), fullDependencies);
-      }
+    case DependenciesGraph::NodeKind::Definition:
+      return Commands::instantiateObject(
+          Files.Object, Files.AST, fullDependencies
+      );
 
     default:
       llvm_unreachable("Unknown dependency kind");
