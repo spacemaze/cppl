@@ -21,7 +21,6 @@
 #include "clang/Levitation/DependenciesSolver/SolvedDependenciesInfo.h"
 #include "clang/Levitation/Driver/Driver.h"
 #include "clang/Levitation/FileExtensions.h"
-#include "clang/Levitation/TasksManager/Task.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
 
 #include <memory>
@@ -30,6 +29,7 @@
 namespace clang { namespace levitation { namespace tools {
 
 using namespace clang::levitation::dependencies_solver;
+using namespace clang::levitation::tasks;
 
 //-----------------------------------------------------------------------------
 //  Levitation driver implementation classes
@@ -37,7 +37,14 @@ using namespace clang::levitation::dependencies_solver;
 
 namespace {
 
+  // TODO Levitation: Whole Context approach is malformed.
+  // Context should keep shared data for all sequence steps.
+  // If something is required for particular step only it should
+  // be out of context.
   struct RunContext {
+
+    // TODO Levitation: Introduce LevitationDriverOpts and use here
+    // its reference instead.
     LevitationDriver &Driver;
     Failable Status;
     Paths Sources;
@@ -54,7 +61,7 @@ class LevitationDriverImpl {
 
   Failable &Status;
   log::Logger &Log;
-  tasks::TasksManager &TM;
+  TasksManager &TM;
 
 public:
 
@@ -62,7 +69,7 @@ public:
   : Context(context),
     Status(context.Status),
     Log(log::Logger::get()),
-    TM(tasks::TasksManager::get())
+    TM(TasksManager::get())
   {}
 
   void runParse();
@@ -71,33 +78,27 @@ public:
   void runLinker();
 
   void collectSources();
-  tasks::Task createParseTask(llvm::StringRef Source);
-  tasks::Task createInstantiateTask(llvm::StringRef Source);
-  tasks::Task createCodeGenTask(llvm::StringRef Source);
-  tasks::Task createParseAndEmitTask(llvm::StringRef Source);
-  tasks::Task createLinkTask(const Paths &ObjectFiles);
 
   bool processDependencyNode(
       const DependenciesGraph::Node &N
   );
 
-  bool runDeclInstantiation(
-      StringRef ASTFile,
-      Paths Deps
-  );
+  bool runParsing(StringRef SourceFile);
 
-  bool runObjectInstantiation(
-      StringRef ASTFile,
-      Paths Deps
-  );
+  bool runDeclInstantiation(StringRef ASTFile, Paths Deps);
+
+  bool runObjectInstantiation(StringRef ASTFile, Paths Deps);
+
+  bool runLinker(StringRef OutputFile, const Paths &ObjectFiles);
 };
 
 void LevitationDriverImpl::runParse() {
-  auto &TM = tasks::TasksManager::get();
+  auto &TM = TasksManager::get();
 
   for (auto Source : Context.Sources) {
-    auto parseTask = createParseTask(Source);
-    TM.addTask(std::move(parseTask));
+    TM.addTask([&] (TaskContext &TC) {
+      TC.Successful = runParsing(Source);
+    });
   }
 
   auto Res = TM.waitForTasks();
@@ -146,10 +147,15 @@ void LevitationDriverImpl::runLinker() {
 
   assert(Context.Driver.isLinkPhaseEnabled() && "Link phase must be enabled.");
 
-  auto &TM = tasks::TasksManager::get();
+  auto &TM = TasksManager::get();
 
-  auto linkTask = createLinkTask(Context.ObjectFiles);
-  auto Res = TM.executeTask(std::move(linkTask));
+  auto Res = TM.executeTask(
+      [&] (TaskContext &TC) {
+        TC.Successful = runLinker(
+            Context.Driver.Output, Context.ObjectFiles
+        );
+      }
+  );
 
   if (!Res)
     Status.setFailure()
@@ -243,7 +249,7 @@ LevitationDriver::LevitationDriver()
 bool LevitationDriver::run() {
 
   log::Logger::createLogger();
-  tasks::TasksManager::create(JobsNumber);
+  TasksManager::create(JobsNumber);
 
   initParameters();
 

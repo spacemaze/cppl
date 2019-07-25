@@ -16,13 +16,20 @@
 
 #include "clang/Levitation/Common/CreatableSingleton.h"
 #include "clang/Levitation/Common/Failable.h"
-#include "clang/Levitation/TasksManager/Task.h"
 
 #include "llvm/ADT/DenseSet.h"
 
 namespace clang { namespace levitation { namespace tasks {
 
+struct TaskContext;
+
 class TasksManager : public CreatableSingleton<TasksManager> {
+public:
+  using TaskID = int;
+  using ActionFn = std::function<void(TaskContext&)>;
+  using TasksSet = llvm::DenseSet<TaskID>;
+
+private:
   int JobsNumber;
 protected:
 
@@ -34,11 +41,9 @@ protected:
 
 public:
 
-  void addTask(const Task &Task);
-  bool executeTask(const Task &Task);
+  TaskID addTask(ActionFn &&Fn);
+  bool executeTask(ActionFn &&Fn);
   bool waitForTasks();
-
-  using TasksSet = llvm::DenseSet<const Task&>;
   bool waitForTasks(const TasksSet &tasksSet);
 };
 

@@ -19,7 +19,6 @@
 #include "clang/Levitation/Common/WithOperator.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/Common/StringsPool.h"
-#include "clang/Levitation/TasksManager/Task.h"
 #include "clang/Levitation/TasksManager/TaskContext.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
 
@@ -334,7 +333,7 @@ protected:
   }
 
   class JobsContext {
-    llvm::DenseMap<NodeID::Type, std::unique_ptr<tasks::Task>> Tasks;
+    llvm::DenseMap<NodeID::Type, tasks::TasksManager::TaskID> Tasks;
     OnNodeFn OnNode;
     std::mutex Mutex;
 
@@ -342,15 +341,26 @@ protected:
 
     JobsContext(OnNodeFn &&onNode) : OnNode(onNode) {}
 
-    std::pair<const tasks::Task&, bool> tryEmplaceTask(
+    tasks::TasksManager::TaskID getJobForNode(
         NodeID::Type NID,
-        tasks::Task::ActionFn &&Fn
+        tasks::TasksManager::ActionFn &&Fn
     ) {
       Mutex.lock();
       with (levitation::make_scope_exit([=] { Mutex.unlock(); } )) {
-        auto Res = Tasks.try_emplace(NID, std::move(Fn));
 
-        return {*Res.first->second, Res.second};
+        auto Found = Tasks.find(NID);
+
+        if (Found == Tasks.end()) {
+          auto &TM = tasks::TasksManager::get();
+          auto TID = TM.addTask(std::move(Fn));
+
+          auto Res = Tasks.insert({NID, TID});
+          assert(Res.second);
+
+          return TID;
+        }
+
+        return Found->second;
       }
     }
 
@@ -371,12 +381,15 @@ protected:
 
       tasks::TasksManager::TasksSet NodeTasks;
 
-      bool FirstNode = true;
+      // Note: Whe we can't process first subnode out of task manager?
+      // Because that subnode may be used by another parent, and in order
+      // not to run same job twise, we should assign unique TaskID for it,
+      // and keep track of it in special Node-to-Task map.
 
       for (auto NID : SubNodes) {
         const auto &SubNode = getNode(NID);
 
-        auto Res = Jobs.tryEmplaceTask(
+        auto TID = Jobs.getJobForNode(
             SubNode.ID,
             [&](tasks::TaskContext &TC) {
               TC.Successful = dsfJobsOnNode(
@@ -385,19 +398,9 @@ protected:
             }
         );
 
-        NodeTasks.insert(Res.first);
+        NodeTasks.insert(TID);
 
         auto &TM = tasks::TasksManager::get();
-
-        if (Res.second) {
-          if (FirstNode) {
-            if (!TM.executeTask(Res.first))
-              return false;
-            FirstNode = false;
-          } else
-            TM.addTask(Res.first);
-        }
-
         Successful = TM.waitForTasks(NodeTasks);
       }
     }
