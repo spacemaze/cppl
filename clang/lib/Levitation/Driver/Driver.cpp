@@ -87,9 +87,9 @@ public:
   );
 
   bool runObjectInstantiation(
-        StringRef ASTFile,
-        Paths Deps
-    );
+      StringRef ASTFile,
+      Paths Deps
+  );
 };
 
 void LevitationDriverImpl::runParse() {
@@ -167,12 +167,12 @@ void LevitationDriverImpl::collectSources() {
   );
 
   for (const auto &Src : Context.Sources) {
-    SinglePath PackagePath;
-    Path::stripParent(PackagePath, Src, Context.Driver.SourcesRoot);
-    Path::stripExtension(PackagePath, PackagePath);
+    SinglePath PackagePath = Path::makeRelative<SinglePath>(
+        Src, Context.Driver.SourcesRoot
+    );
 
     Context.LDepsFiles.push_back(
-        Path::getPath(
+        Path::getPath<SinglePath>(
             Context.Driver.BuildRoot,
             PackagePath,
             FileExtensions::DirectDependencies
@@ -180,7 +180,7 @@ void LevitationDriverImpl::collectSources() {
     );
 
     Context.ObjectFiles.push_back(
-        Path::getPath(
+        Path::getPath<SinglePath>(
             Context.Driver.BuildRoot,
             PackagePath,
             FileExtensions::Object
@@ -212,7 +212,7 @@ bool LevitationDriverImpl::processDependencyNode(
   switch (N.Kind) {
 
     case DependenciesGraph::NodeKind::Declaration: {
-        auto astFile = Path::getPath(
+        auto astFile = Path::getPath<SinglePath>(
             Context.Driver.BuildRoot,
             SrcRel,
             FileExtensions::ParsedAST
@@ -221,7 +221,7 @@ bool LevitationDriverImpl::processDependencyNode(
       }
 
     case DependenciesGraph::NodeKind::Definition: {
-        auto astFile = Path::getPath(
+        auto astFile = Path::getPath<SinglePath>(
             Context.Driver.BuildRoot,
             SrcRel,
             FileExtensions::ParsedAST

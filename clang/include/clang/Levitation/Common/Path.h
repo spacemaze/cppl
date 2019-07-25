@@ -55,24 +55,26 @@ using namespace llvm;
       return Relative;
     }
 
-    static void replaceExtension(Paths &paths, StringRef NewExtension) {
-      for (auto &P : paths) {
-        llvm::sys::path::replace_extension(P, NewExtension);
-      }
+    /// Builds path out of parent directory, relative path and new extension.
+    /// \tparam SmallStringT type which reprents path
+    /// \param ParentDir Parent directory to be added in the beginning
+    /// \param SrcRel Relative path
+    /// \param Extension New extension.
+    /// \return
+    template <typename SmallStringT>
+    static SmallStringT getPath(
+        StringRef ParentDir, StringRef SrcRel, StringRef Extension
+    ) {
+      assert(
+          llvm::sys::path::is_relative(SrcRel) &&
+          "Path should be relative"
+      );
+
+      SmallStringT Res = ParentDir;
+      llvm::sys::path::append(Res, SrcRel);
+      llvm::sys::path::replace_extension(Res, Extension);
+      return Res;
     }
-
-    static void replaceExtension(Paths &New, const Paths &Src, StringRef NewExtension) {
-      New = Src;
-      replaceExtension(New, NewExtension);
-    }
-
-    static void stripParent(SinglePath &New, const SinglePath &Src, StringRef ParentDir);
-    static void stripExtension(SinglePath &New, const SinglePath &Src);
-
-    static void addParent(SinglePath &New, const SinglePath &Src, StringRef ParentDir);
-    static void addExtension(SinglePath &New, const SinglePath &Src, StringRef Extension);
-
-    static SinglePath getPath(StringRef NewParent, StringRef SrcRel, StringRef Extension);
   };
 }
 }
