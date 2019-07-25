@@ -16,21 +16,36 @@
 
 #include "clang/Levitation/Common/CreatableSingleton.h"
 #include "clang/Levitation/Common/Failable.h"
+#include "clang/Levitation/Common/WithOperator.h"
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 
-namespace clang { namespace levitation { namespace tasks {
+#include <memory>
+#include <mutex>
 
-struct TaskContext;
+namespace clang { namespace levitation { namespace tasks {
 
 class TasksManager : public CreatableSingleton<TasksManager> {
 public:
   using TaskID = int;
+
+  struct TaskContext {
+    TaskContext(TaskID tid) : ID(tid) {}
+    TaskID ID;
+    bool Successful = true;
+  };
   using ActionFn = std::function<void(TaskContext&)>;
   using TasksSet = llvm::DenseSet<TaskID>;
 
 private:
   int JobsNumber;
+
+  std::mutex TaskStatusesAccess;
+  int NextTaskID = 0;
+
+  llvm::DenseMap<TaskID, std::unique_ptr<TaskContext>> TasksStatus;
+
 protected:
 
   TasksManager(int jobsNumber)
@@ -41,10 +56,46 @@ protected:
 
 public:
 
-  TaskID addTask(ActionFn &&Fn);
-  bool executeTask(ActionFn &&Fn);
-  bool waitForTasks();
-  bool waitForTasks(const TasksSet &tasksSet);
+  TaskID addTask(ActionFn &&Fn) {
+    // TODO Levitation: it is still not implemented
+    // Current implementation is a stub
+    TaskContext &TC = registerTask();
+    Fn(TC);
+    return TC.ID;
+  }
+  bool waitForTasks() {
+    // TODO Levitation: it is still not implemented
+    // Current implementation is a stub
+    for (auto &KV : TasksStatus) {
+      if (!KV.second->Successful)
+        return false;
+    }
+    return true;
+  }
+  bool waitForTasks(const TasksSet &tasksSet) {
+    // TODO Levitation: it is still not implemented
+    // Current implementation is a stub
+    for (auto TID : tasksSet) {
+      auto Found = TasksStatus.find(TID);
+      if (
+        Found != TasksStatus.end() &&
+        !Found->second->Successful
+      )
+        return false;
+    }
+    return true;
+  }
+
+protected:
+  TaskContext &registerTask() {
+    TaskStatusesAccess.lock();
+    with (levitation::make_scope_exit([&] { TaskStatusesAccess.unlock(); })) {
+      TaskID TID = NextTaskID++;
+      auto Res = TasksStatus.try_emplace(TID, new TaskContext(TID));
+      assert(Res.second);
+      return *Res.first->second;
+    }
+  }
 };
 
 }}}

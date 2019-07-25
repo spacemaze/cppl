@@ -101,21 +101,71 @@ public:
       StringRef OutASTFile,
       StringRef OutLDepsFile,
       StringRef SourceFile
-  );
+  ) {
+    log::Logger::get().info()
+    << "parse -o " << OutASTFile
+    << " -ldeps " << OutLDepsFile
+    << " " << SourceFile
+    << "\n";
+
+    return true;
+  }
 
   static bool instantiateDecl(
       StringRef OutDeclASTFile,
       StringRef ASTFile,
       Paths Deps
-  );
+  ) {
+
+    log::Logger::get().info()
+    << "instantiate -o " << OutDeclASTFile;
+
+    for (auto &D : Deps) {
+      log::Logger::get().info()
+      << " -dep " << D;
+    }
+
+    log::Logger::get().info()
+    << " " << ASTFile
+    << "\n";
+
+    return true;
+  }
 
   static bool instantiateObject(
       StringRef OutObjFile,
       StringRef ASTFile,
       Paths Deps
-  );
+  ) {
+    log::Logger::get().info()
+    << "instantiate -o " << OutObjFile;
 
-  static bool link(StringRef OutputFile, const Paths &ObjectFiles);
+    for (auto &D : Deps) {
+      log::Logger::get().info()
+      << " -dep " << D;
+    }
+
+    log::Logger::get().info()
+    << " " << ASTFile
+    << "\n";
+
+    return true;
+  }
+
+  static bool link(StringRef OutputFile, const Paths &ObjectFiles) {
+  log::Logger::get().info()
+    << "link -o " << OutputFile;
+
+    for (auto &D : ObjectFiles) {
+      log::Logger::get().info()
+      << " " << D;
+    }
+
+    log::Logger::get().info()
+    << "\n";
+
+    return true;
+  }
 };
 
 void LevitationDriverImpl::runParse() {
@@ -125,7 +175,7 @@ void LevitationDriverImpl::runParse() {
 
     auto Files = Context.Files[PackagePath];
 
-    TM.addTask([=] (TaskContext &TC) {
+    TM.addTask([=] (TasksManager::TaskContext &TC) {
       TC.Successful = Commands::parse(Files.AST, Files.LDeps, Files.Source);
     });
   }
@@ -190,12 +240,8 @@ void LevitationDriverImpl::runLinker() {
     ObjectFiles.push_back(Context.Files[PackagePath].LDeps);
   }
 
-  auto Res = TM.executeTask(
-      [&] (TaskContext &TC) {
-        TC.Successful = Commands::link(
-            Context.Driver.Output, ObjectFiles
-        );
-      }
+  auto Res = Commands::link(
+      Context.Driver.Output, ObjectFiles
   );
 
   if (!Res)
@@ -228,6 +274,7 @@ void LevitationDriverImpl::collectSources() {
     //      PackagePath,
     //      FileExtensions::SourceCode
     //  );
+
     Files.LDeps = Path::getPath<SinglePath>(
         Context.Driver.BuildRoot,
         PackagePath,

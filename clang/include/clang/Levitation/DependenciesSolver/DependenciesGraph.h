@@ -19,7 +19,6 @@
 #include "clang/Levitation/Common/WithOperator.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/Common/StringsPool.h"
-#include "clang/Levitation/TasksManager/TaskContext.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
 
 #include "llvm/ADT/DenseMap.h"
@@ -391,7 +390,7 @@ protected:
 
         auto TID = Jobs.getJobForNode(
             SubNode.ID,
-            [&](tasks::TaskContext &TC) {
+            [&](tasks::TasksManager::TaskContext &TC) {
               TC.Successful = dsfJobsOnNode(
                   &SubNode, SubNode.Dependencies, Jobs
               );
