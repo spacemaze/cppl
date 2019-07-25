@@ -35,11 +35,11 @@ protected:
 public:
 
   void addTask(const Task &Task);
-  Failable executeTask(const Task &Task);
-  Failable waitForTasks();
+  bool executeTask(const Task &Task);
+  bool waitForTasks();
 
   using TasksSet = llvm::DenseSet<const Task&>;
-  Failable waitForTasks(const TasksSet &tasksSet);
+  bool waitForTasks(const TasksSet &tasksSet);
 };
 
 }}}

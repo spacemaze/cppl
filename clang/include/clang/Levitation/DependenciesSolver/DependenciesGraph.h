@@ -20,6 +20,7 @@
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/Common/StringsPool.h"
 #include "clang/Levitation/TasksManager/Task.h"
+#include "clang/Levitation/TasksManager/TaskContext.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
 
 #include "llvm/ADT/DenseMap.h"
@@ -182,14 +183,14 @@ public:
   /// Implements deep search first walk, and runs job on each node
   /// it meets.
   /// Starts from terminal nodes going down to roots.
-  /// \param JobsNumber
-  /// \param OnNode
-  /// \return
-  void dsfJobs(
+  /// \param OnNode Action to be launched to process current node
+  ///        but not its subnodes.
+  /// \return true is walk was successful.
+  bool dsfJobs(
       std::function<bool(const Node&)> &&OnNode
   ) const {
     JobsContext Jobs(std::move(OnNode));
-    dsfJobsOnNode(nullptr, DeclarationTerminals, Jobs);
+    return dsfJobsOnNode(nullptr, DeclarationTerminals, Jobs);
   }
 
   bool isInvalid() const { return Invalid; }
@@ -358,11 +359,13 @@ protected:
     }
   };
 
-  void dsfJobsOnNode(
+  bool dsfJobsOnNode(
       const Node *N,
       const NodesSet &SubNodes,
       JobsContext &Jobs
   ) const {
+
+    bool Successful = false;
 
     if (SubNodes.size()) {
 
@@ -375,8 +378,10 @@ protected:
 
         auto Res = Jobs.tryEmplaceTask(
             SubNode.ID,
-            [&](tasks::TaskContext &) {
-              dsfJobsOnNode(&SubNode, SubNode.Dependencies, Jobs);
+            [&](tasks::TaskContext &TC) {
+              TC.Successful = dsfJobsOnNode(
+                  &SubNode, SubNode.Dependencies, Jobs
+              );
             }
         );
 
@@ -386,18 +391,21 @@ protected:
 
         if (Res.second) {
           if (FirstNode) {
-            TM.executeTask(Res.first);
+            if (!TM.executeTask(Res.first))
+              return false;
             FirstNode = false;
           } else
             TM.addTask(Res.first);
         }
 
-        TM.waitForTasks(NodeTasks);
+        Successful = TM.waitForTasks(NodeTasks);
       }
     }
 
-    if (N)
-      Jobs.onNode(*N);
+    if (Successful && N)
+      Successful = Jobs.onNode(*N);
+
+    return Successful;
   }
 
 

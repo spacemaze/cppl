@@ -21,7 +21,7 @@ namespace clang { namespace levitation {
 namespace clang { namespace levitation { namespace tasks {
 
 struct TaskContext {
-  Failable &Status;
+  bool Successful = true;
 };
 
 }}}

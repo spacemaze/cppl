@@ -77,19 +77,19 @@ public:
   tasks::Task createParseAndEmitTask(llvm::StringRef Source);
   tasks::Task createLinkTask(const Paths &ObjectFiles);
 
-  void processDependencyNode(
+  bool processDependencyNode(
       const DependenciesGraph::Node &N
   );
 
-  void runDeclInstantiation(
+  bool runDeclInstantiation(
       StringRef ASTFile,
       Paths Deps
   );
 
-void runObjectInstantiation(
-      StringRef ASTFile,
-      Paths Deps
-  );
+  bool runObjectInstantiation(
+        StringRef ASTFile,
+        Paths Deps
+    );
 };
 
 void LevitationDriverImpl::runParse() {
@@ -102,7 +102,9 @@ void LevitationDriverImpl::runParse() {
 
   auto Res = TM.waitForTasks();
 
-  Status.inheritResult(Res, "Parse: ");
+  if (!Res)
+    Status.setFailure()
+    << "Parse: phase failed.";
 }
 
 void LevitationDriverImpl::solveDependencies() {
@@ -126,12 +128,16 @@ void LevitationDriverImpl::instantiateAndCodeGen() {
 
   auto &DependenciesInfo = *Context.DependenciesInfo;
 
-  Context.DependenciesInfo->getDependenciesGraph().dsfJobs(
-      [&] (const DependenciesGraph::Node &N) {
-        processDependencyNode(N);
-        return true;
-      }
-  );
+  bool Res =
+    Context.DependenciesInfo->getDependenciesGraph().dsfJobs(
+        [&] (const DependenciesGraph::Node &N) {
+          return processDependencyNode(N);
+        }
+    );
+
+  if (!Res)
+    Status.setFailure()
+    << "Instantiate and codegen: phase failed.";
 }
 
 void LevitationDriverImpl::runLinker() {
@@ -145,7 +151,9 @@ void LevitationDriverImpl::runLinker() {
   auto linkTask = createLinkTask(Context.ObjectFiles);
   auto Res = TM.executeTask(std::move(linkTask));
 
-  Status.inheritResult(Res, "Link: ");
+  if (!Res)
+    Status.setFailure()
+    << "Link: phase failed";
 }
 
 void LevitationDriverImpl::collectSources() {
@@ -185,7 +193,7 @@ void LevitationDriverImpl::collectSources() {
   << " '." << FileExtensions::SourceCode << "' files.\n\n";
 }
 
-void LevitationDriverImpl::processDependencyNode(
+bool LevitationDriverImpl::processDependencyNode(
     const DependenciesGraph::Node &N
 ) {
   const auto &Strings = Context.DependenciesInfo->getStrings();
@@ -209,9 +217,8 @@ void LevitationDriverImpl::processDependencyNode(
             SrcRel,
             FileExtensions::ParsedAST
         );
-        runDeclInstantiation(astFile.str(), fullDependencies);
+        return runDeclInstantiation(astFile.str(), fullDependencies);
       }
-      break;
 
     case DependenciesGraph::NodeKind::Definition: {
         auto astFile = Path::getPath(
@@ -219,9 +226,8 @@ void LevitationDriverImpl::processDependencyNode(
             SrcRel,
             FileExtensions::ParsedAST
         );
-        runObjectInstantiation(astFile.str(), fullDependencies);
+        return runObjectInstantiation(astFile.str(), fullDependencies);
       }
-      break;
 
     default:
       llvm_unreachable("Unknown dependency kind");
