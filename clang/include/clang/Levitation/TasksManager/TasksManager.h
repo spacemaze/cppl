@@ -95,6 +95,7 @@ protected:
       assert(Res.second);
       return *Res.first->second;
     }
+    llvm_unreachable("");
   }
 };
 

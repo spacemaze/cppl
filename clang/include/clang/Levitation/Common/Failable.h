@@ -39,7 +39,12 @@ public:
     });
   }
 
-  void inheritResult(const Failable &Src, llvm::StringRef Prefix);
+  void inheritResult(const Failable &Src, llvm::StringRef Prefix) {
+    if (!Src.isValid()) {
+      setFailure()
+      << Prefix << Src.getErrorMessage();
+    }
+  }
 
   bool isValid() const { return Valid; }
   llvm::StringRef getErrorMessage() const { return ErrorMessage; }

@@ -45,7 +45,8 @@ public:
 
   enum class NodeKind {
       Declaration,
-      Definition
+      Definition,
+      Unknown
   };
 
   struct NodeID {
@@ -361,6 +362,7 @@ protected:
 
         return Found->second;
       }
+      llvm_unreachable("");
     }
 
     bool onNode(const Node &N) {

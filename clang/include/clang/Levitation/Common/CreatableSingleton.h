@@ -59,7 +59,7 @@ public:
   template<typename ...ArgTys>
   static DerivedTy &create(ArgTys &&...Args) {
     accessPtr() =
-    std::unique_ptr<DerivedTy>(new DerivedTy(std::forward<ArgTys(Args)...));
+    std::unique_ptr<DerivedTy>(new DerivedTy(std::forward<ArgTys>(Args)...));
 
     return get();
   }

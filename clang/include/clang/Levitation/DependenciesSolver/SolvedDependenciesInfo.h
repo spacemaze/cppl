@@ -60,7 +60,9 @@ private:
   SolvedDependenciesInfo(
       std::shared_ptr<DependenciesGraph> &&DGraph,
       std::shared_ptr<DependenciesStringsPool> stringsPool
-  ) : DGraph(std::move(DGraph)), Strings(stringsPool)
+  )
+  : Strings(stringsPool),
+    DGraph(std::move(DGraph))
   {}
 
 public:

@@ -70,8 +70,9 @@ public:
   }
 protected:
 
+  template <typename FilesVectorTy>
   static void collectFilesWithExtension(
-      llvm::SmallVectorImpl<llvm::StringRef> &Dest,
+      FilesVectorTy &Dest,
       llvm::SmallVectorImpl<llvm::StringRef> &NewSubDirs,
       llvm::vfs::FileSystem &FS,
       llvm::StringRef CurDir,

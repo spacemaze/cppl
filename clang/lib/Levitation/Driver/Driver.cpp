@@ -212,8 +212,6 @@ void LevitationDriverImpl::instantiateAndCodeGen() {
   if (!Status.isValid())
     return;
 
-  auto &DependenciesInfo = *Context.DependenciesInfo;
-
   bool Res =
     Context.DependenciesInfo->getDependenciesGraph().dsfJobs(
         [&] (const DependenciesGraph::Node &N) {
@@ -231,8 +229,6 @@ void LevitationDriverImpl::runLinker() {
     return;
 
   assert(Context.Driver.isLinkPhaseEnabled() && "Link phase must be enabled.");
-
-  auto &TM = TasksManager::get();
 
   Paths ObjectFiles;
   for (auto &PackagePath : Context.Packages) {
@@ -351,6 +347,7 @@ bool LevitationDriver::run() {
 
   log::Logger::createLogger();
   TasksManager::create(JobsNumber);
+  CreatableSingleton<FileManager>::create( FileSystemOptions { StringRef() });
 
   initParameters();
 
