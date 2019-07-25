@@ -77,7 +77,19 @@ public:
   tasks::Task createParseAndEmitTask(llvm::StringRef Source);
   tasks::Task createLinkTask(const Paths &ObjectFiles);
 
-  void processDependencyNode(const DependenciesGraph::Node &N);
+  void processDependencyNode(
+      const DependenciesGraph::Node &N
+  );
+
+  void runDeclInstantiation(
+      StringRef ASTFile,
+      Paths Deps
+  );
+
+void runObjectInstantiation(
+      StringRef ASTFile,
+      Paths Deps
+  );
 };
 
 void LevitationDriverImpl::runParse() {
@@ -88,9 +100,9 @@ void LevitationDriverImpl::runParse() {
     TM.addTask(std::move(parseTask));
   }
 
-  TM.waitForTasks();
+  auto Res = TM.waitForTasks();
 
-  Status.inheritResult(TM, "Parse: ");
+  Status.inheritResult(Res, "Parse: ");
 }
 
 void LevitationDriverImpl::solveDependencies() {
@@ -114,15 +126,12 @@ void LevitationDriverImpl::instantiateAndCodeGen() {
 
   auto &DependenciesInfo = *Context.DependenciesInfo;
 
-  Context.DepsGraph.dsfJobs(
-      Context.Driver.JobsNumber,
-      Context.Status,
-      [=] (const DependenciesGraph::Node &N) {
+  Context.DependenciesInfo->getDependenciesGraph().dsfJobs(
+      [&] (const DependenciesGraph::Node &N) {
         processDependencyNode(N);
+        return true;
       }
   );
-
-  Status.inheritResult(Solver, "Instantiate and codegen: ");
 }
 
 void LevitationDriverImpl::runLinker() {
@@ -134,9 +143,9 @@ void LevitationDriverImpl::runLinker() {
   auto &TM = tasks::TasksManager::get();
 
   auto linkTask = createLinkTask(Context.ObjectFiles);
-  TM.executeTask(std::move(linkTask));
+  auto Res = TM.executeTask(std::move(linkTask));
 
-  Status.inheritResult(TM, "Parse: ");
+  Status.inheritResult(Res, "Link: ");
 }
 
 void LevitationDriverImpl::collectSources() {
@@ -144,22 +153,32 @@ void LevitationDriverImpl::collectSources() {
   Log.verbose() << "Collecting sources...\n";
 
   FileSystem::collectFiles(
-      Context.Sources,
-      Context.Driver.SourcesRoot,
-      FileExtensions::SourceCode
+          Context.Sources,
+          Context.Driver.SourcesRoot,
+          FileExtensions::SourceCode
   );
 
-  Path::replaceExtension(
-      Context.LDepsFiles,
-      Context.Sources,
-      FileExtensions::ParsedDependencies
-  );
+  for (const auto &Src : Context.Sources) {
+    SinglePath PackagePath;
+    Path::stripParent(PackagePath, Src, Context.Driver.SourcesRoot);
+    Path::stripExtension(PackagePath, PackagePath);
 
-  Path::replaceExtension(
-      Context.ObjectFiles,
-      Context.Sources,
-      FileExtensions::Object
-  );
+    Context.LDepsFiles.push_back(
+        Path::getPath(
+            Context.Driver.BuildRoot,
+            PackagePath,
+            FileExtensions::DirectDependencies
+        )
+    );
+
+    Context.ObjectFiles.push_back(
+        Path::getPath(
+            Context.Driver.BuildRoot,
+            PackagePath,
+            FileExtensions::Object
+        )
+    );
+  }
 
   Log.verbose()
   << "Found " << Context.Sources.size()
@@ -169,24 +188,38 @@ void LevitationDriverImpl::collectSources() {
 void LevitationDriverImpl::processDependencyNode(
     const DependenciesGraph::Node &N
 ) {
+  const auto &Strings = Context.DependenciesInfo->getStrings();
+  const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
 
-  auto &fullDependencies = Context.DependenciesInfo->getDependenciesList(N.ID);
+  const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
+
+  auto &fullDependencieIDs = Context.DependenciesInfo->getDependenciesList(N.ID);
+  Paths fullDependencies;
+  for (auto DID : fullDependencieIDs) {
+    auto &DNode = Graph.getNode(DID.NodeID);
+    auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
+    fullDependencies.push_back(DepPath);
+  }
 
   switch (N.Kind) {
 
     case DependenciesGraph::NodeKind::Declaration: {
-        // Launch instantiation of .decl-ast file.
-        // TODO Levitation: get .ast file for given dependency node
-        auto &astFile = Context.SolvedDependencies.getASTFile(N.ID);
-        runDeclInstantiation(astFile, fullDependencies);
+        auto astFile = Path::getPath(
+            Context.Driver.BuildRoot,
+            SrcRel,
+            FileExtensions::ParsedAST
+        );
+        runDeclInstantiation(astFile.str(), fullDependencies);
       }
       break;
 
     case DependenciesGraph::NodeKind::Definition: {
-        // Launch instantiation of .o file.
-        // TODO Levitation: get .o file for given dependency node
-        auto &astFile = Context.SolvedDependencies.getASTFile(N.ID);
-        runObjectInstantiation(astFile, fullDependencies);
+        auto astFile = Path::getPath(
+            Context.Driver.BuildRoot,
+            SrcRel,
+            FileExtensions::ParsedAST
+        );
+        runObjectInstantiation(astFile.str(), fullDependencies);
       }
       break;
 

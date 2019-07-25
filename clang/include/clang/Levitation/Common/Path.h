@@ -31,8 +31,11 @@ namespace levitation {
 
 using namespace llvm;
 
-  using Paths = llvm::SmallVector<llvm::SmallString<256>, 64>;
+  // TODO Levitation: rename to Path
+  using SinglePath = llvm::SmallString<256>;
+  using Paths = llvm::SmallVector<SinglePath, 64>;
 
+  // TODO Levitation: rename to PathUtils
   class Path {
   public:
     template <typename SmallStringT>
@@ -62,6 +65,14 @@ using namespace llvm;
       New = Src;
       replaceExtension(New, NewExtension);
     }
+
+    static void stripParent(SinglePath &New, const SinglePath &Src, StringRef ParentDir);
+    static void stripExtension(SinglePath &New, const SinglePath &Src);
+
+    static void addParent(SinglePath &New, const SinglePath &Src, StringRef ParentDir);
+    static void addExtension(SinglePath &New, const SinglePath &Src, StringRef Extension);
+
+    static SinglePath getPath(StringRef NewParent, StringRef SrcRel, StringRef Extension);
   };
 }
 }

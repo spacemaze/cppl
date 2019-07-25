@@ -54,7 +54,8 @@ class DependenciesSolverContext {
 
   DependenciesSolver &Solver;
 
-  DependenciesStringsPool StringsPool;
+  // TODO Levitation: make it singleton?
+  std::shared_ptr<DependenciesStringsPool> StringsPool;
 
   const Paths &LDepsFiles;
 
@@ -75,7 +76,7 @@ public:
   {}
 
   DependenciesStringsPool &getStringsPool() {
-    return StringsPool;
+    return *StringsPool;
   }
 
   const ParsedDependencies &getParsedDependencies() const {
@@ -294,7 +295,7 @@ public:
         Context.Solver.MainFile, Context.Solver.SourcesRoot
     );
 
-    auto MainFileID = Context.StringsPool.addItem(std::move(MainFileRel));
+    auto MainFileID = Context.StringsPool->addItem(std::move(MainFileRel));
 
     auto DGraph = DependenciesGraph::build(Context.getParsedDependencies(), MainFileID);
 
@@ -348,7 +349,8 @@ public:
       Log.verbose() << "Solving dependencies...\n";
 
       Context.SolvedDepsInfo = SolvedDependenciesInfo::build(
-          std::move(DGraphPtr),
+          DGraphPtr,
+          Context.StringsPool,
           std::move(OnCyclesFound)
       );
 

@@ -15,8 +15,10 @@
 #define LLVM_CLANG_LEVITATION_TASKSMANAGER_H
 
 #include "clang/Levitation/Common/CreatableSingleton.h"
+#include "clang/Levitation/Common/Failable.h"
 #include "clang/Levitation/TasksManager/Task.h"
 
+#include "llvm/ADT/DenseSet.h"
 
 namespace clang { namespace levitation { namespace tasks {
 
@@ -32,9 +34,12 @@ protected:
 
 public:
 
-  void addTask(Task &&Task);
-  void executeTask(Task &&Task);
-  void waitForTasks();
+  void addTask(const Task &Task);
+  Failable executeTask(const Task &Task);
+  Failable waitForTasks();
+
+  using TasksSet = llvm::DenseSet<const Task&>;
+  Failable waitForTasks(const TasksSet &tasksSet);
 };
 
 }}}

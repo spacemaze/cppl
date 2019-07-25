@@ -20,13 +20,14 @@
 namespace clang { namespace levitation { namespace tasks {
 
 struct TaskContext;
+
 class Task {
 public:
   using ActionFn = std::function<void(TaskContext&)>;
 
 private:
   ActionFn Action;
-
+public:
   /*implicit*/
   Task(ActionFn &&action) : Action(std::move(action)) {}
 };

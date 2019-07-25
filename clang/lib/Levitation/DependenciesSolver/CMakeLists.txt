@@ -5,8 +5,7 @@ set(LLVM_LINK_COMPONENTS
 add_clang_library(
   clangLevitationDependenciesSolver
 
-  Driver.cpp
-  DriverDefaults.cpp
+  DependenciesSolver.cpp
 
   LINK_LIBS
   clangAST

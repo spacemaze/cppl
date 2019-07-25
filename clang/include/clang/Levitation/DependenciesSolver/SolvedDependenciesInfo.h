@@ -52,12 +52,16 @@ public:
       llvm::DenseMap<NodeID::Type, std::unique_ptr<FullDependenciesList>>;
 
 private:
+  std::shared_ptr<DependenciesStringsPool> Strings;
   std::shared_ptr<DependenciesGraph> DGraph;
   FullDependenciesMap FullDepsMap;
   FullDependenciesSortedMap FullDepsSortedMap;
 
-  SolvedDependenciesInfo(std::shared_ptr<DependenciesGraph> &&DGraph)
-  : DGraph(std::move(DGraph)) {}
+  SolvedDependenciesInfo(
+      std::shared_ptr<DependenciesGraph> &&DGraph,
+      std::shared_ptr<DependenciesStringsPool> stringsPool
+  ) : DGraph(std::move(DGraph)), Strings(stringsPool)
+  {}
 
 public:
 
@@ -66,12 +70,18 @@ public:
   )>;
 
   static std::shared_ptr<SolvedDependenciesInfo> build(
-      std::shared_ptr<DependenciesGraph> &&DGraphPtr,
+      std::shared_ptr<DependenciesGraph> DGraphPtr,
+      std::shared_ptr<DependenciesStringsPool> Strings,
       OnDiagCyclesFoundFn OnDiagCyclesFound
   ) {
 
     std::shared_ptr<SolvedDependenciesInfo> SolvedInfoPtr;
-    SolvedInfoPtr.reset(new SolvedDependenciesInfo(std::move(DGraphPtr)));
+
+    SolvedInfoPtr.reset(new SolvedDependenciesInfo(
+        std::move(DGraphPtr),
+        Strings
+    ));
+
     SolvedDependenciesInfo &SolvedInfo = *SolvedInfoPtr;
 
     FullDependencies EmptyList;
@@ -167,18 +177,24 @@ public:
     return *Found->second;
   }
 
+  const DependenciesStringsPool &getStrings() const {
+    return *Strings;
+  }
+
   void dump(
       llvm::raw_ostream &out,
       const DependenciesStringsPool &Strings
   ) const {
 
-    DGraph.bsfWalkSkipVisited([&](const Node &N) {
+    auto &DGraphRef = *DGraph;
+
+    DGraphRef.bsfWalkSkipVisited([&](const Node &N) {
       auto NID = N.ID;
       const FullDependenciesList &FullDeps = getDependenciesList(NID);
 
       const auto &Path = *Strings.getItem(N.PackageInfo->PackagePath);
       out << "[";
-      DGraph.dumpNodeID(out, NID);
+        DependenciesGraph::dumpNodeID(out, NID);
       out << "]\n";
 
       out << "    Path: " << Path << "\n";
@@ -187,11 +203,11 @@ public:
                 << "    Full dependencies:\n";
 
         for (const auto &DepWithDist : FullDeps) {
-          const auto &Dep = DGraph.getNode(DepWithDist.NodeID);
+          const auto &Dep = DGraphRef.getNode(DepWithDist.NodeID);
           const auto &DepPath = *Strings.getItem(Dep.PackageInfo->PackagePath);
 
           out.indent(8) << "[";
-          DGraph.dumpNodeID(out, DepWithDist.NodeID);
+          DependenciesGraph::dumpNodeID(out, DepWithDist.NodeID);
           out
                   << "]: " << DepPath << "\n";
         }
@@ -200,7 +216,7 @@ public:
                 << "    Direct dependencies:\n";
 
         for (const auto &DepID : N.Dependencies) {
-          const auto &Dep = DGraph.getNode(DepID);
+          const auto &Dep = DGraphRef.getNode(DepID);
           const auto &DepPath = *Strings.getItem(Dep.PackageInfo->PackagePath);
 
           out

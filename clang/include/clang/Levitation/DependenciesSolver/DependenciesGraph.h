@@ -16,8 +16,11 @@
 
 #include "clang/Levitation/DependenciesSolver/ParsedDependencies.h"
 
+#include "clang/Levitation/Common/WithOperator.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/Common/StringsPool.h"
+#include "clang/Levitation/TasksManager/Task.h"
+#include "clang/Levitation/TasksManager/TasksManager.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -26,6 +29,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
+#include <mutex>
 
 namespace clang { namespace levitation { namespace dependencies_solver {
 
@@ -167,12 +171,25 @@ public:
 
   // TODO Levitation: That looks pretty much like A* walk.
   //
-  void bsfWalkSkipVisited(std::function<void(const Node &)> OnNode) const {
+  void bsfWalkSkipVisited(std::function<void(const Node &)> &&OnNode) const {
     bsfWalk(true, [&] (const Node &N) { OnNode(N); return true; });
   }
 
-  bool bsfWalk(std::function<bool(const Node &)> OnNode) const {
-    return bsfWalk(false, OnNode);
+  bool bsfWalk(std::function<bool(const Node &)> &&OnNode) const {
+    return bsfWalk(false, std::move(OnNode));
+  }
+
+  /// Implements deep search first walk, and runs job on each node
+  /// it meets.
+  /// Starts from terminal nodes going down to roots.
+  /// \param JobsNumber
+  /// \param OnNode
+  /// \return
+  void dsfJobs(
+      std::function<bool(const Node&)> &&OnNode
+  ) const {
+    JobsContext Jobs(std::move(OnNode));
+    dsfJobsOnNode(nullptr, DeclarationTerminals, Jobs);
   }
 
   bool isInvalid() const { return Invalid; }
@@ -285,9 +302,11 @@ public:
 
 protected:
 
+  using OnNodeFn = std::function<bool(const Node&)>;
+
   bool bsfWalk(
       bool SkipVisited,
-      std::function<bool(const Node&)> OnNode
+      OnNodeFn &&OnNode
   ) const {
     NodesSet Worklist = Roots;
 
@@ -312,6 +331,75 @@ protected:
     }
     return true;
   }
+
+  class JobsContext {
+    llvm::DenseMap<NodeID::Type, std::unique_ptr<tasks::Task>> Tasks;
+    OnNodeFn OnNode;
+    std::mutex Mutex;
+
+  public:
+
+    JobsContext(OnNodeFn &&onNode) : OnNode(onNode) {}
+
+    std::pair<const tasks::Task&, bool> tryEmplaceTask(
+        NodeID::Type NID,
+        tasks::Task::ActionFn &&Fn
+    ) {
+      Mutex.lock();
+      with (levitation::make_scope_exit([=] { Mutex.unlock(); } )) {
+        auto Res = Tasks.try_emplace(NID, std::move(Fn));
+
+        return {*Res.first->second, Res.second};
+      }
+    }
+
+    bool onNode(const Node &N) {
+      return OnNode(N);
+    }
+  };
+
+  void dsfJobsOnNode(
+      const Node *N,
+      const NodesSet &SubNodes,
+      JobsContext &Jobs
+  ) const {
+
+    if (SubNodes.size()) {
+
+      tasks::TasksManager::TasksSet NodeTasks;
+
+      bool FirstNode = true;
+
+      for (auto NID : SubNodes) {
+        const auto &SubNode = getNode(NID);
+
+        auto Res = Jobs.tryEmplaceTask(
+            SubNode.ID,
+            [&](tasks::TaskContext &) {
+              dsfJobsOnNode(&SubNode, SubNode.Dependencies, Jobs);
+            }
+        );
+
+        NodeTasks.insert(Res.first);
+
+        auto &TM = tasks::TasksManager::get();
+
+        if (Res.second) {
+          if (FirstNode) {
+            TM.executeTask(Res.first);
+            FirstNode = false;
+          } else
+            TM.addTask(Res.first);
+        }
+
+        TM.waitForTasks(NodeTasks);
+      }
+    }
+
+    if (N)
+      Jobs.onNode(*N);
+  }
+
 
   void addDependenciesTo(
       Node &DependentNode,
