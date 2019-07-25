@@ -82,14 +82,18 @@ public:
   bool processDependencyNode(
       const DependenciesGraph::Node &N
   );
+};
 
-  bool runParsing(StringRef SourceFile);
+/*static*/
+class Commands {
+public:
+  static bool parse(StringRef SourceFile);
 
-  bool runDeclInstantiation(StringRef ASTFile, Paths Deps);
+  static bool instantiateDecl(StringRef ASTFile, Paths Deps);
 
-  bool runObjectInstantiation(StringRef ASTFile, Paths Deps);
+  static bool instantiateObject(StringRef ASTFile, Paths Deps);
 
-  bool runLinker(StringRef OutputFile, const Paths &ObjectFiles);
+  static bool link(StringRef OutputFile, const Paths &ObjectFiles);
 };
 
 void LevitationDriverImpl::runParse() {
@@ -97,7 +101,7 @@ void LevitationDriverImpl::runParse() {
 
   for (auto Source : Context.Sources) {
     TM.addTask([&] (TaskContext &TC) {
-      TC.Successful = runParsing(Source);
+      TC.Successful = Commands::parse(Source);
     });
   }
 
@@ -151,7 +155,7 @@ void LevitationDriverImpl::runLinker() {
 
   auto Res = TM.executeTask(
       [&] (TaskContext &TC) {
-        TC.Successful = runLinker(
+        TC.Successful = Commands::link(
             Context.Driver.Output, Context.ObjectFiles
         );
       }
@@ -223,7 +227,7 @@ bool LevitationDriverImpl::processDependencyNode(
             SrcRel,
             FileExtensions::ParsedAST
         );
-        return runDeclInstantiation(astFile.str(), fullDependencies);
+        return Commands::instantiateDecl(astFile.str(), fullDependencies);
       }
 
     case DependenciesGraph::NodeKind::Definition: {
@@ -232,7 +236,7 @@ bool LevitationDriverImpl::processDependencyNode(
             SrcRel,
             FileExtensions::ParsedAST
         );
-        return runObjectInstantiation(astFile.str(), fullDependencies);
+        return Commands::instantiateObject(astFile.str(), fullDependencies);
       }
 
     default:
