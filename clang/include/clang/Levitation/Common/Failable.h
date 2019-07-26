@@ -25,6 +25,7 @@ namespace clang { namespace levitation {
 class Failable {
   bool Valid = true;
   llvm::SmallString<80> ErrorMessage;
+  llvm::SmallString<80> WarningMessage;
 public:
 
   void setFailure(llvm::StringRef errorMessage) {
@@ -39,6 +40,16 @@ public:
     });
   }
 
+  void setWarning(llvm::StringRef warningMessage) {
+    WarningMessage = warningMessage;
+  }
+
+  StringBuilder setWarning() {
+    return StringBuilder([&] (StringBuilder &Builder) {
+      WarningMessage = Builder.str();
+    });
+  }
+
   void inheritResult(const Failable &Src, llvm::StringRef Prefix) {
     if (!Src.isValid()) {
       setFailure()
@@ -47,7 +58,10 @@ public:
   }
 
   bool isValid() const { return Valid; }
+  bool hasWarnings() const { return !WarningMessage.empty(); }
+
   llvm::StringRef getErrorMessage() const { return ErrorMessage; }
+  llvm::StringRef getWarningMessage() const { return WarningMessage; }
 
   // TODO Levitation: getErrorMessages
 };
