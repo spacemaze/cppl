@@ -17,6 +17,7 @@
 
 #include "clang/Basic/FileManager.h"
 #include "clang/Levitation/Common/CreatableSingleton.h"
+#include "clang/Levitation/Common/Path.h"
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FileSystem.h"
@@ -45,8 +46,6 @@ public:
     auto &FM = CreatableSingleton<FileManager>::get();
     auto &FS = FM.getVirtualFileSystem();
 
-    using Paths = llvm::SmallVector<llvm::StringRef, 32>;
-
     Paths SubDirs;
     SubDirs.push_back(Root);
 
@@ -73,7 +72,7 @@ protected:
   template <typename FilesVectorTy>
   static void collectFilesWithExtension(
       FilesVectorTy &Dest,
-      llvm::SmallVectorImpl<llvm::StringRef> &NewSubDirs,
+      FilesVectorTy &NewSubDirs,
       llvm::vfs::FileSystem &FS,
       llvm::StringRef CurDir,
       llvm::StringRef FileExtension
