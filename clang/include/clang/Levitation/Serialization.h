@@ -82,11 +82,12 @@ namespace levitation {
     virtual void writeAndFinalize(PackageDependencies &Dependencies) = 0;
   };
 
+  class Failable;
   class DependenciesReader {
   public:
     virtual ~DependenciesReader() = default;
     virtual bool read(DependenciesData &Dependencies) = 0;
-    virtual StringRef getErrorMessage() const = 0;
+    virtual const Failable &getStatus() const = 0;
   };
 
   enum DependenciesRecordTypes {

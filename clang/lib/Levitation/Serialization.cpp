@@ -15,6 +15,8 @@
 
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/Serialization.h"
+#include "clang/Levitation/Common/Failable.h"
+#include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Common/WithOperator.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Bitcode/BitstreamReader.h"
@@ -24,6 +26,7 @@
 
 #include <functional>
 #include <utility>
+#include <clang/Levitation/Common/SimpleLogger.h>
 
 using namespace llvm;
 
@@ -367,11 +370,12 @@ namespace levitation {
   // ==========================================================================
   // Dependencies Bitstream Reader
 
-  class DependenciesBitstreamReader : public DependenciesReader {
+  class DependenciesBitstreamReader
+      : public DependenciesReader,
+        public Failable {
     BitstreamCursor Reader;
     StringRef ErrorMessage;
     Optional<llvm::BitstreamBlockInfo> BlockInfo;
-    bool HasFailure = false;
   public:
     DependenciesBitstreamReader(const llvm::MemoryBuffer &MemoryBuffer)
     : Reader(MemoryBuffer) {}
@@ -386,7 +390,7 @@ namespace levitation {
       return true;
     }
 
-    StringRef getErrorMessage() const override { return ErrorMessage; }
+    const Failable &getStatus() const override { return *this; }
 
   protected:
 
@@ -408,7 +412,8 @@ namespace levitation {
           auto Entry = Reader.advance();
           switch (Entry.Kind) {
             case BitstreamEntry::Error:
-              return failure("Failed to enter read bitstream.");
+              setFailure("Failed to enter read bitstream.");
+              return false;
 
             case BitstreamEntry::EndBlock:
               Reader.ReadBlockEnd();
@@ -425,12 +430,20 @@ namespace levitation {
                     break;
 
                   case DEPS_DEFINITION_DEPENDENCIES_BLOCK_ID:
-                    if (!readDependencies(BlockID, Data.DefinitionDependencies))
+                    if (!readDependencies(
+                         BlockID,
+                         *Data.Strings,
+                         Data.DefinitionDependencies
+                    ))
                       return false;
                     break;
 
                   case DEPS_DECLARATION_DEPENDENCIES_BLOCK_ID:
-                    if (!readDependencies(BlockID, Data.DeclarationDependencies))
+                    if (!readDependencies(
+                        BlockID,
+                        *Data.Strings,
+                        Data.DeclarationDependencies
+                    ))
                       return false;
                     break;
 
@@ -455,13 +468,18 @@ namespace levitation {
     bool readBlockInfo() {
 
       // Read the top level blocks.
-      if (Reader.AtEndOfStream())
-        return failure("No blocks.");
+      if (Reader.AtEndOfStream()) {
+        setFailure("No blocks.");
+        return false;
+      }
 
       while (!Reader.AtEndOfStream()) {
 
-        if (Reader.ReadCode() != llvm::bitc::ENTER_SUBBLOCK)
-          return failure("Expected BlockInfo Subblock, malformed file.");
+        if (Reader.ReadCode() != llvm::bitc::ENTER_SUBBLOCK) {
+          setFailure("Expected BlockInfo Subblock, malformed file.");
+          return false;
+        }
+
 
         std::error_code EC;
         switch (Reader.ReadSubBlockID()) {
@@ -470,17 +488,20 @@ namespace levitation {
               Reader.setBlockInfo(BlockInfo.getPointer());
               return true;
             } else {
-              return failure("Malformed BlockInfo.");
+              setFailure("Malformed BlockInfo.");
+              return false;
             }
           case DEPS_DEPENDENCIES_MAIN_BLOCK_ID:
-            return failure("Blockinfo missed");
+            setFailure("Blockinfo missed");
+            return false;
           default:
             break;
             // Skip all unknown blocks.
         }
       }
 
-      return failure("BlockInfo missed");
+      setFailure("BlockInfo missed");
+      return false;
     }
 
     using RecordTy = SmallVector<uint64_t, 64>;
@@ -500,13 +521,34 @@ namespace levitation {
       );
     }
 
+    StringID normalizeIfNeeded(
+        DependenciesStringsPool &Strings, StringID PathID
+    ) {
+      const auto &PathStr = *Strings.getItem(PathID);
+      auto Res = levitation::Path::normalize<SmallString<256>>(PathStr);
+
+      if (Res.compare(PathStr) != 0) {
+        setWarning()
+        << "Path '" << PathStr << "' was not normalized.\n"
+        << "'" << Res << "' will be used instead\n";
+
+        return Strings.addItem(Res);
+      }
+
+      return PathID;
+    }
+
     bool readDependencies(
         DependenciesBlockIDs BlockID,
+        DependenciesStringsPool &Strings,
         DependenciesData::DeclarationsBlock &Deps
     ) {
       auto recordHandler = [&](const RecordTy &Record, StringRef BlobStr) {
+        StringID PathID = normalizeIfNeeded(
+            Strings, (StringID)Record[0]
+        );
         Deps.emplace_back(DependenciesData::Declaration {
-            /*FilePathID=*/ (StringID) Record[0],
+            /*FilePathID=*/ PathID,
             /*LocationIDBegin=*/ (DependenciesData::LocationIDType) Record[1],
             /*LocationIDEnd=*/ (DependenciesData::LocationIDType) Record[2]
         });
@@ -523,7 +565,9 @@ namespace levitation {
     bool readPackageFilePath(unsigned int AbbrevID, DependenciesData &Data) {
       RecordTy Record;
       auto RecordID = Reader.readRecord(AbbrevID, Record, nullptr);
-      Data.PackageFilePathID = (StringID) Record[0];
+      Data.PackageFilePathID = normalizeIfNeeded(
+          *Data.Strings, (StringID)Record[0]
+      );
 
       return checkRecordType(DEPS_PACKAGE_FILE_PATH_RECORD_ID, RecordID);
     }
@@ -545,9 +589,10 @@ namespace levitation {
         )) {
           // do nothing
         }
-        return !hasFailure();
+        return isValid();
       }
-      return failure("Failed to read records, can't enter subblock");
+      setFailure("Failed to read records, can't enter subblock");
+      return false;
     }
 
     /// Reads record
@@ -568,7 +613,8 @@ namespace levitation {
       auto Entry = Reader.advanceSkippingSubblocks();
       switch (Entry.Kind) {
         case BitstreamEntry::Error:
-          return failure("Failed to read strings");
+          setFailure("Failed to read strings");
+          return false;
         case BitstreamEntry::Record: {
             RecordStorage.clear();
 
@@ -595,48 +641,42 @@ namespace levitation {
         unsigned int ObtainedID
     ) {
       if (ObtainedID != RecordID) {
-        failure("Malformed file. Wrong record type read.");
+        setFailure("Malformed file. Wrong record type read.");
         return false;
       }
       return true;
     }
 
     bool enterBlock(DependenciesBlockIDs ID) {
-      if (hasFailure()) return false;
+      if (!isValid()) return false;
 
       while (true) {
         auto Entry = Reader.advance();
 
         switch (Entry.Kind) {
           case BitstreamEntry::Error:
-            return failure("Failed to enter read bitstream.");
+            setFailure("Failed to enter read bitstream.");
+            return false;
 
           case BitstreamEntry::EndBlock:
             break;
           case BitstreamEntry::SubBlock:
             if (Entry.ID != ID) {
-              if (Reader.SkipBlock())
-                return failure("Failed to skip block.");
+              if (Reader.SkipBlock()) {
+                setFailure("Failed to skip block.");
+                return false;
+              }
             } else {
               if (!Reader.EnterSubBlock(Entry.ID))
                 return true;
-              return failure("Failed to enter subblock.");
+              setFailure("Failed to enter subblock.");
+              return false;
             }
             break;
           case BitstreamEntry::Record:
             break;
         }
       }
-    }
-
-    bool failure(StringRef Msg) {
-      ErrorMessage = Msg;
-      HasFailure = true;
-      return false;
-    }
-
-    bool hasFailure() const {
-      return HasFailure;
     }
   };
 
