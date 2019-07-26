@@ -16,6 +16,7 @@
 
 #include "clang/Levitation/DependenciesSolver/ParsedDependencies.h"
 
+#include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Common/WithOperator.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/Common/StringsPool.h"
@@ -159,7 +160,6 @@ public:
       DGraphPtr->Invalid = true;
     }
 
-
     // Create node which will represent main file
     PackageInfo &MainFilePackage = DGraphPtr->createMainFilePackage(MainFileID);
 
@@ -171,12 +171,21 @@ public:
 
   // TODO Levitation: That looks pretty much like A* walk.
   //
-  void bsfWalkSkipVisited(std::function<void(const Node &)> &&OnNode) const {
-    bsfWalk(true, [&] (const Node &N) { OnNode(N); return true; });
+  void bsfWalkSkipVisited(
+       std::function<void(const Node &)> &&OnNode) const {
+    NodesSet Visited;
+    bsfWalk(Visited, true, [&] (const Node &N) { OnNode(N); return true; });
+  }
+
+  void bsfWalkSkipVisited(
+       NodesSet &Visited,
+       std::function<void(const Node &)> &&OnNode) const {
+    bsfWalk(Visited, true, [&] (const Node &N) { OnNode(N); return true; });
   }
 
   bool bsfWalk(std::function<bool(const Node &)> &&OnNode) const {
-    return bsfWalk(false, std::move(OnNode));
+    NodesSet Visited;
+    return bsfWalk(Visited, false, std::move(OnNode));
   }
 
   /// Implements deep search first walk, and runs job on each node
@@ -204,7 +213,8 @@ public:
       return;
     }
 
-    bsfWalkSkipVisited([&](const Node &N) {
+    NodesSet Visited;
+    bsfWalkSkipVisited(Visited, [&](const Node &N) {
         dumpNode(out, N.ID, Strings);
         out << "\n";
     });
@@ -225,6 +235,16 @@ public:
       out << "\n";
     }
     out << "\n";
+
+    if (Visited.size() < AllNodes.size()) {
+      out << "Isolated nodes:\n";
+      for (const auto &NKV : AllNodes) {
+        if (!Visited.count(NKV.first)) {
+          dumpNode(out, NKV.first, Strings);
+          out << "\n";
+        }
+      }
+    }
   }
 
   void dumpNode(
@@ -235,11 +255,19 @@ public:
 
     const Node &Node = getNode(NodeID);
 
+    const auto &PackagePathStr = Node.PackageInfo ?
+        *Strings.getItem(Node.PackageInfo->PackagePath) :
+        *Strings.getItem(NodeID::getKindAndPathID(Node.ID).second);
+
     out
     << "Node[";
     dumpNodeID(out, NodeID);
-    out << "]\n"
-    << "    Path: " << *Strings.getItem(Node.PackageInfo->PackagePath) << "\n"
+    out << "]\n";
+
+    if (!Node.PackageInfo)
+      out << "  ERROR: NO PACKAGE INFO, Path is recovered from Node ID\n"
+
+    << "    Path: " << PackagePathStr << "\n"
     << "    Kind: "
     << (Node.Kind == NodeKind::Declaration ? "Declaration" : "Definition") << "\n";
 
@@ -305,12 +333,12 @@ protected:
   using OnNodeFn = std::function<bool(const Node&)>;
 
   bool bsfWalk(
+      NodesSet &VisitedNodes,
       bool SkipVisited,
       OnNodeFn &&OnNode
   ) const {
     NodesSet Worklist = Roots;
 
-    NodesSet VisitedNodes;
     NodesSet NewWorklist;
 
     while (Worklist.size()) {
@@ -376,7 +404,7 @@ protected:
       JobsContext &Jobs
   ) const {
 
-    bool Successful = false;
+    bool Successful = true;
 
     if (SubNodes.size()) {
 

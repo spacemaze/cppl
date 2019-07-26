@@ -55,7 +55,7 @@ class DependenciesSolverContext {
   DependenciesSolver &Solver;
 
   // TODO Levitation: make it singleton?
-  std::shared_ptr<DependenciesStringsPool> StringsPool;
+  DependenciesStringsPool &StringsPool;
 
   const Paths &LDepsFiles;
 
@@ -72,11 +72,12 @@ public:
       const Paths &ldepsFiles
   )
   : Solver(Solver),
+    StringsPool(CreatableSingleton<DependenciesStringsPool >::get()),
     LDepsFiles(ldepsFiles)
   {}
 
   DependenciesStringsPool &getStringsPool() {
-    return *StringsPool;
+    return StringsPool;
   }
 
   const ParsedDependencies &getParsedDependencies() const {
@@ -91,7 +92,7 @@ public:
 
   // TODO Levitation: probably pick up better name.
   std::shared_ptr<SolvedDependenciesInfo> detachSolvedDependenciesInfo() {
-    assert(DepsGraph && "DependenciesGraph should be set");
+    assert(SolvedDepsInfo && "SolvedDependenciesInfo should be set");
     return std::move(SolvedDepsInfo);
   }
 
@@ -213,8 +214,12 @@ public:
     DependenciesData PackageData;
 
     if (!Reader->read(PackageData)) {
-      Log.error() << Reader->getErrorMessage() << "\n";
+      Log.error() << Reader->getStatus().getErrorMessage() << "\n";
       return false;
+    }
+
+    if (Reader->getStatus().hasWarnings()) {
+      Log.warning() << Reader->getStatus().getWarningMessage() << "\n";
     }
 
     const auto &Source =
@@ -292,10 +297,11 @@ public:
       return;
 
     auto MainFileRel = levitation::Path::makeRelative<DependencyPath>(
-        Context.Solver.MainFile, Context.Solver.SourcesRoot
+        Context.Solver.MainFile,
+        Context.Solver.SourcesRoot
     );
 
-    auto MainFileID = Context.StringsPool->addItem(std::move(MainFileRel));
+    auto MainFileID = Context.StringsPool.addItem(std::move(MainFileRel));
 
     auto DGraph = DependenciesGraph::build(Context.getParsedDependencies(), MainFileID);
 
@@ -313,7 +319,7 @@ public:
 
     Log.verbose()
     << "Dependencies graph:\n";
-    DGraph->dump(Log.verbose(), Context.getStringsPool());
+    DGraph->dump(Log.verbose(), Context.StringsPool);
   }
 
   void solveGraph() {
@@ -350,7 +356,6 @@ public:
 
       Context.SolvedDepsInfo = SolvedDependenciesInfo::build(
           DGraphPtr,
-          Context.StringsPool,
           std::move(OnCyclesFound)
       );
 

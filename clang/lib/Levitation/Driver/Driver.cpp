@@ -292,7 +292,7 @@ void LevitationDriverImpl::collectSources() {
         FileExtensions::Object
     );
 
-    auto Res = Context.Files.insert({ Src, Files });
+    auto Res = Context.Files.insert({ Src.str(), Files });
 
     assert(Res.second);
   }
@@ -305,11 +305,15 @@ void LevitationDriverImpl::collectSources() {
 bool LevitationDriverImpl::processDependencyNode(
     const DependenciesGraph::Node &N
 ) {
-  const auto &Strings = Context.DependenciesInfo->getStrings();
+  const auto &Strings = CreatableSingleton<DependenciesStringsPool>::get();
   const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
 
   const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
-  const auto &Files = Context.Files[SrcRel];
+
+  auto FoundFiles = Context.Files.find(SrcRel);
+  assert(FoundFiles != Context.Files.end());
+
+  const auto &Files = FoundFiles->second;
 
   auto &fullDependencieIDs = Context.DependenciesInfo->getDependenciesList(N.ID);
 
@@ -348,6 +352,7 @@ bool LevitationDriver::run() {
   log::Logger::createLogger();
   TasksManager::create(JobsNumber);
   CreatableSingleton<FileManager>::create( FileSystemOptions { StringRef() });
+  CreatableSingleton<DependenciesStringsPool >::create();
 
   initParameters();
 

@@ -52,17 +52,14 @@ public:
       llvm::DenseMap<NodeID::Type, std::unique_ptr<FullDependenciesList>>;
 
 private:
-  std::shared_ptr<DependenciesStringsPool> Strings;
   std::shared_ptr<DependenciesGraph> DGraph;
   FullDependenciesMap FullDepsMap;
   FullDependenciesSortedMap FullDepsSortedMap;
 
   SolvedDependenciesInfo(
-      std::shared_ptr<DependenciesGraph> &&DGraph,
-      std::shared_ptr<DependenciesStringsPool> stringsPool
+      std::shared_ptr<DependenciesGraph> &&DGraph
   )
-  : Strings(stringsPool),
-    DGraph(std::move(DGraph))
+  : DGraph(std::move(DGraph))
   {}
 
 public:
@@ -73,15 +70,13 @@ public:
 
   static std::shared_ptr<SolvedDependenciesInfo> build(
       std::shared_ptr<DependenciesGraph> DGraphPtr,
-      std::shared_ptr<DependenciesStringsPool> Strings,
       OnDiagCyclesFoundFn OnDiagCyclesFound
   ) {
 
     std::shared_ptr<SolvedDependenciesInfo> SolvedInfoPtr;
 
     SolvedInfoPtr.reset(new SolvedDependenciesInfo(
-        std::move(DGraphPtr),
-        Strings
+        std::move(DGraphPtr)
     ));
 
     SolvedDependenciesInfo &SolvedInfo = *SolvedInfoPtr;
@@ -177,10 +172,6 @@ public:
       return EmptyList;
 
     return *Found->second;
-  }
-
-  const DependenciesStringsPool &getStrings() const {
-    return *Strings;
   }
 
   void dump(
