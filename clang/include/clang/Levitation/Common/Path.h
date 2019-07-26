@@ -52,7 +52,18 @@ using namespace llvm;
       if (Relative.startswith(Separator))
         Relative = Relative.substr(Separator.size());
 
+      llvm::sys::path::remove_dots(Relative);
+
       return Relative;
+    }
+
+    template <typename SmallStringT>
+    static SmallStringT normalize(StringRef F) {
+      SmallStringT Res(F);
+
+      llvm::sys::path::remove_dots(Res);
+
+      return Res;
     }
 
     /// Builds path out of parent directory, relative path and new extension.
