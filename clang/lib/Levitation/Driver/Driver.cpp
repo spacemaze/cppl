@@ -122,10 +122,10 @@ public:
 
   static bool instantiateDecl(
       StringRef OutDeclASTFile,
-      StringRef ASTFile,
+      StringRef InputObject,
       Paths Deps
   ) {
-    assert(OutDeclASTFile.size() && ASTFile.size());
+    assert(OutDeclASTFile.size() && InputObject.size());
 
     log::Logger::get().info()
     << "instantiate -o " << OutDeclASTFile;
@@ -136,7 +136,7 @@ public:
     }
 
     log::Logger::get().info()
-    << " " << ASTFile
+    << " " << InputObject
     << "\n";
 
     return true;
@@ -144,10 +144,10 @@ public:
 
   static bool instantiateObject(
       StringRef OutObjFile,
-      StringRef ASTFile,
+      StringRef InputObject,
       Paths Deps
   ) {
-    assert(OutObjFile.size() && ASTFile.size());
+    assert(OutObjFile.size() && InputObject.size());
 
     log::Logger::get().info()
     << "instantiate -o " << OutObjFile;
@@ -158,17 +158,16 @@ public:
     }
 
     log::Logger::get().info()
-    << " " << ASTFile
+    << " " << InputObject
     << "\n";
 
     return true;
   }
 
   static bool link(StringRef OutputFile, const Paths &ObjectFiles) {
+    assert(OutputFile.size() && ObjectFiles.size());
 
-  assert(OutputFile.size() && ObjectFiles.size());
-
-  log::Logger::get().info()
+    log::Logger::get().info()
     << "link -o " << OutputFile;
 
     for (auto &D : ObjectFiles) {
