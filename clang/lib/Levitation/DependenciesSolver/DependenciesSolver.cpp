@@ -21,6 +21,7 @@
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesGraph.h"
 #include "clang/Levitation/DependenciesSolver/SolvedDependenciesInfo.h"
+#include "clang/Levitation/DependenciesSolver/DependenciesSolverPath.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesSolver.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/Serialization.h"
@@ -414,8 +415,8 @@ public:
     }
   }
 
-  using PathString = SmallString<256>;
-  using DependenciesPaths = SmallVector<PathString, 16>;
+  using PathString = SinglePath;
+  using DependenciesPaths = Paths;
 
   bool writeResult(
       const SolvedDependenciesInfo &SolvedDependencies
@@ -571,14 +572,9 @@ public:
       // Declaration AST is instantiated from parsed AST,
       // and thus latter depends on former.
       // The only exception is main file.
-
-      if (!N.PackageInfo->IsMainFile) {
-        updateFilePath(ParsedASTPath, DepsRoot, FileExtensions::ParsedAST);
-        Paths.push_back(std::move(ParsedASTPath));
-      }
-
-      updateFilePath(SourcePath, DepsRoot, FileExtensions::DeclarationAST);
-      Paths.push_back(std::move(SourcePath));
+      DependenciesSolverPath::addDepPathsFor(
+        Paths, ParsedASTPath, DepsRoot, N.PackageInfo->IsMainFile
+      );
     }
 
     return Paths;
