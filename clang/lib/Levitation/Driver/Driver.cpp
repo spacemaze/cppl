@@ -17,6 +17,7 @@
 #include "clang/Levitation/Common/FileSystem.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesGraph.h"
+#include "clang/Levitation/DependenciesSolver/DependenciesSolverPath.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesSolver.h"
 #include "clang/Levitation/DependenciesSolver/SolvedDependenciesInfo.h"
 #include "clang/Levitation/Driver/Driver.h"
@@ -59,10 +60,16 @@ namespace {
 
     Paths Packages;
     llvm::DenseMap<StringRef, FilesInfo> Files;
+    SinglePath MainFileNormilized;
 
     std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
 
-    RunContext(LevitationDriver &driver) : Driver(driver) {}
+    RunContext(LevitationDriver &driver)
+    : Driver(driver),
+      MainFileNormilized(levitation::Path::makeRelative<SinglePath>(
+          driver.getMainSource(), driver.getSourcesRoot()
+      ))
+    {}
   };
 }
 
@@ -196,7 +203,7 @@ void LevitationDriverImpl::solveDependencies() {
   DependenciesSolver Solver;
   Solver.setSourcesRoot(Context.Driver.SourcesRoot);
   Solver.setBuildRoot(Context.Driver.BuildRoot);
-  Solver.setMainFile(Context.Driver.MainSource);
+  Solver.setMainFile(Context.MainFileNormilized);
   Solver.setVerbose(Context.Driver.Verbose);
 
   Paths LDepsFiles;
@@ -312,9 +319,7 @@ void LevitationDriverImpl::collectSources() {
 void LevitationDriverImpl::addMainFileInfo() {
 
   // Inject main file package
-  Context.Packages.emplace_back(levitation::Path::makeRelative<SinglePath>(
-      Context.Driver.MainSource, Context.Driver.SourcesRoot
-  ));
+  Context.Packages.emplace_back(Context.MainFileNormilized);
 
   const auto &PackagePath = Context.Packages.back();
 
@@ -365,7 +370,17 @@ bool LevitationDriverImpl::processDependencyNode(
   for (auto DID : fullDependencieIDs) {
     auto &DNode = Graph.getNode(DID.NodeID);
     auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
-    fullDependencies.push_back(DepPath);
+
+    DependenciesSolverPath::addDepPathsFor(
+        fullDependencies,
+        Context.Driver.BuildRoot,
+        DepPath
+    );
+
+    assert(
+        DepPath != Context.MainFileNormilized &&
+        "Main file can't be a dependency"
+    );
   }
 
   switch (N.Kind) {
