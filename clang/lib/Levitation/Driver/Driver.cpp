@@ -383,6 +383,9 @@ bool LevitationDriverImpl::processDependencyNode(
     );
   }
 
+  // TODO Levitation: process special case of main.cpp
+  // or better say, introduce new Kind, which is a "legacy source"
+  // and process respectively.
   switch (N.Kind) {
 
     case DependenciesGraph::NodeKind::Declaration:
