@@ -117,6 +117,11 @@ public:
     << " " << SourceFile
     << "\n";
 
+    // TODO Levitation execute real command:
+    //  return llvm::sys::ExecuteAndWait(
+    //      Executable, Args, Env, Redirects, /*secondsToWait*/ 0,
+    //      /*memoryLimit*/ 0, ErrMsg, ExecutionFailed);
+
     return true;
   }
 
@@ -139,6 +144,11 @@ public:
     << " " << InputObject
     << "\n";
 
+    // TODO Levitation execute real command:
+    //  return llvm::sys::ExecuteAndWait(
+    //      Executable, Args, Env, Redirects, /*secondsToWait*/ 0,
+    //      /*memoryLimit*/ 0, ErrMsg, ExecutionFailed);
+
     return true;
   }
 
@@ -160,6 +170,11 @@ public:
     log::Logger::get().info()
     << " " << InputObject
     << "\n";
+
+    // TODO Levitation execute real command:
+    //  return llvm::sys::ExecuteAndWait(
+    //      Executable, Args, Env, Redirects, /*secondsToWait*/ 0,
+    //      /*memoryLimit*/ 0, ErrMsg, ExecutionFailed);
 
     return true;
   }
