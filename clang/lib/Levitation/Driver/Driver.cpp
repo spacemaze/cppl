@@ -125,6 +125,7 @@ public:
       StringRef ASTFile,
       Paths Deps
   ) {
+    assert(OutDeclASTFile.size() && ASTFile.size());
 
     log::Logger::get().info()
     << "instantiate -o " << OutDeclASTFile;
@@ -146,6 +147,8 @@ public:
       StringRef ASTFile,
       Paths Deps
   ) {
+    assert(OutObjFile.size() && ASTFile.size());
+
     log::Logger::get().info()
     << "instantiate -o " << OutObjFile;
 
@@ -162,6 +165,9 @@ public:
   }
 
   static bool link(StringRef OutputFile, const Paths &ObjectFiles) {
+
+  assert(OutputFile.size() && ObjectFiles.size());
+
   log::Logger::get().info()
     << "link -o " << OutputFile;
 
@@ -383,9 +389,6 @@ bool LevitationDriverImpl::processDependencyNode(
     );
   }
 
-  // TODO Levitation: process special case of main.cpp
-  // or better say, introduce new Kind, which is a "legacy source"
-  // and process respectively.
   switch (N.Kind) {
 
     case DependenciesGraph::NodeKind::Declaration:
@@ -393,10 +396,14 @@ bool LevitationDriverImpl::processDependencyNode(
           Files.DeclAST, Files.AST, fullDependencies
       );
 
-    case DependenciesGraph::NodeKind::Definition:
+    case DependenciesGraph::NodeKind::Definition: {
+      StringRef InputFile = N.PackageInfo->IsMainFile ?
+          Files.Source : Files.AST;
+
       return Commands::instantiateObject(
-          Files.Object, Files.AST, fullDependencies
+        Files.Object, InputFile, fullDependencies
       );
+    }
 
     default:
       llvm_unreachable("Unknown dependency kind");
