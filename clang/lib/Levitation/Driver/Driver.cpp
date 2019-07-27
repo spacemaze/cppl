@@ -89,6 +89,8 @@ public:
 
   void collectSources();
 
+  void addMainFileInfo();
+
   bool processDependencyNode(
       const DependenciesGraph::Node &N
   );
@@ -249,22 +251,21 @@ void LevitationDriverImpl::collectSources() {
 
   Log.verbose() << "Collecting sources...\n";
 
+  // Gather all .cppl files
   FileSystem::collectFiles(
       Context.Packages,
       Context.Driver.SourcesRoot,
       FileExtensions::SourceCode
   );
 
+  // Normalize all paths to .cppl files
   for (auto &Src : Context.Packages) {
     Src = levitation::Path::makeRelative<SinglePath>(
         Src, Context.Driver.SourcesRoot
     );
   }
 
-  for (const auto &Src : Context.Packages) {
-    SinglePath PackagePath = Path::makeRelative<SinglePath>(
-        Src, Context.Driver.SourcesRoot
-    );
+  for (const auto &PackagePath : Context.Packages) {
 
     FilesInfo Files;
 
@@ -298,7 +299,7 @@ void LevitationDriverImpl::collectSources() {
         FileExtensions::Object
     );
 
-    auto Res = Context.Files.insert({ Src.str(), Files });
+    auto Res = Context.Files.insert({ PackagePath, Files });
 
     assert(Res.second);
   }
@@ -306,6 +307,39 @@ void LevitationDriverImpl::collectSources() {
   Log.verbose()
   << "Found " << Context.Packages.size()
   << " '." << FileExtensions::SourceCode << "' files.\n\n";
+}
+
+void LevitationDriverImpl::addMainFileInfo() {
+
+  // Inject main file package
+  Context.Packages.emplace_back(levitation::Path::makeRelative<SinglePath>(
+      Context.Driver.MainSource, Context.Driver.SourcesRoot
+  ));
+
+  const auto &PackagePath = Context.Packages.back();
+
+  FilesInfo Files;
+
+  // In current implementation package path is equal to relative source path.
+
+  Files.Source = PackagePath;
+  //  Files.Source = Path::getPath<SinglePath>(
+  //      Context.Driver.SourcesRoot,
+  //      PackagePath,
+  //      FileExtensions::SourceCode
+  //  );
+
+  Files.Object = Path::getPath<SinglePath>(
+      Context.Driver.BuildRoot,
+      PackagePath,
+      FileExtensions::Object
+  );
+
+  Log.verbose() << "Injected main file '" << PackagePath << "'\n";
+
+  auto Res = Context.Files.insert({ PackagePath, Files });
+
+  assert(Res.second);
 }
 
 bool LevitationDriverImpl::processDependencyNode(
@@ -317,7 +351,11 @@ bool LevitationDriverImpl::processDependencyNode(
   const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
 
   auto FoundFiles = Context.Files.find(SrcRel);
-  assert(FoundFiles != Context.Files.end());
+  if(FoundFiles == Context.Files.end()) {
+    Log.error()
+    << "Package '" << SrcRel << "' is present in dependencies, but not found.\n";
+    llvm_unreachable("Package not found");
+  }
 
   const auto &Files = FoundFiles->second;
 
@@ -368,6 +406,7 @@ bool LevitationDriver::run() {
   Impl.collectSources();
   Impl.runParse();
   Impl.solveDependencies();
+  Impl.addMainFileInfo();
   Impl.instantiateAndCodeGen();
 
   if (LinkPhaseEnabled)

@@ -117,6 +117,10 @@ private:
   /// everything.
   NodesSet DeclarationTerminals;
 
+  /// Graph terminal nodes. Contains nodes without dependent nodes.
+  /// Should be used as starting points from build process.
+  NodesSet Terminals;
+
   NodesMap AllNodes;
   PackagesMap PackageInfos;
 
@@ -166,6 +170,9 @@ public:
     // Scan for declaration terminal nodes.
     DGraphPtr->collectDeclarationTerminals(MainFilePackage);
 
+    // Scan for regular terminal nodes
+    DGraphPtr->collectTerminals();
+
     return DGraphPtr;
   }
 
@@ -198,7 +205,7 @@ public:
       std::function<bool(const Node&)> &&OnNode
   ) const {
     JobsContext Jobs(std::move(OnNode));
-    return dsfJobsOnNode(nullptr, DeclarationTerminals, Jobs);
+    return dsfJobsOnNode(nullptr, Terminals, Jobs);
   }
 
   bool isInvalid() const { return Invalid; }
@@ -550,6 +557,14 @@ protected:
 
         MainFileNode.Dependencies.insert(N.ID);
         N.DependentNodes.insert(MainFileNode.ID);
+      }
+    }
+  }
+
+  void collectTerminals() {
+    for (const auto &N : AllNodes) {
+      if (N.second->DependentNodes.empty()) {
+        Terminals.insert(N.first);
       }
     }
   }
