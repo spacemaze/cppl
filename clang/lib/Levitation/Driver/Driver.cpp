@@ -233,7 +233,7 @@ void LevitationDriverImpl::runLinker() {
   Paths ObjectFiles;
   for (auto &PackagePath : Context.Packages) {
     assert(Context.Files.count(PackagePath));
-    ObjectFiles.push_back(Context.Files[PackagePath].LDeps);
+    ObjectFiles.push_back(Context.Files[PackagePath].Object);
   }
 
   auto Res = Commands::link(
@@ -250,10 +250,16 @@ void LevitationDriverImpl::collectSources() {
   Log.verbose() << "Collecting sources...\n";
 
   FileSystem::collectFiles(
-          Context.Packages,
-          Context.Driver.SourcesRoot,
-          FileExtensions::SourceCode
+      Context.Packages,
+      Context.Driver.SourcesRoot,
+      FileExtensions::SourceCode
   );
+
+  for (auto &Src : Context.Packages) {
+    Src = levitation::Path::makeRelative<SinglePath>(
+        Src, Context.Driver.SourcesRoot
+    );
+  }
 
   for (const auto &Src : Context.Packages) {
     SinglePath PackagePath = Path::makeRelative<SinglePath>(
