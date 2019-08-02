@@ -165,11 +165,6 @@ public:
 
 protected:
 
-  // TODO Levitation: should we bother with some cool dumping?
-  void dumpKV(llvm::raw_ostream &out, StringRef K, StringRef V) {
-    out << K << ": "; // ...
-  }
-
   static void dumpParse(
       StringRef OutASTFile,
       StringRef OutLDepsFile,
