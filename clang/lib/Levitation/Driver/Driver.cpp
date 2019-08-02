@@ -135,17 +135,32 @@ public:
 
       static CommandInfo getParse(StringRef BinDir, bool DryRun) {
         auto Cmd = getBase(BinDir, DryRun);
-        Cmd.addArg("-levitation-build-ast");
+        Cmd
+        .addArg("-levitation-build-ast")
+        .addArg("-xc++");
+
         return Cmd;
       }
       static CommandInfo getInstDecl(StringRef BinDir, bool DryRun) {
         auto Cmd = getBase(BinDir, DryRun);
-        Cmd.addArg("-flevitation-build-decl");
+        Cmd
+        .addArg("-flevitation-build-decl")
+        .addArg("-emit-pch");
         return Cmd;
       }
       static CommandInfo getInstObj(StringRef BinDir, bool DryRun) {
         auto Cmd = getBase(BinDir, DryRun);
-        Cmd.addArg("-flevitation-build-object");
+        Cmd
+        .addArg("-flevitation-build-object")
+        .addArg("-emit-obj");
+        return Cmd;
+      }
+      static CommandInfo getCompileSrc(StringRef BinDir, bool DryRun) {
+        auto Cmd = getBase(BinDir, DryRun);
+        Cmd
+        .addArg("-flevitation-build-object")
+        .addArg("-xc++")
+        .addArg("-emit-obj");
         return Cmd;
       }
       static CommandInfo getLink(StringRef BinDir, bool DryRun) {
@@ -266,9 +281,10 @@ public:
       StringRef SourceFile,
       StringRef SourcesRoot,
       const LevitationDriver::Args &ExtraArgs,
+      bool Verbose,
       bool DryRun
   ) {
-    if (!DryRun)
+    if (!DryRun || Verbose)
       dumpParse(OutASTFile, OutLDepsFile, SourceFile);
 
     auto ExecutionStatus = CommandInfo::getParse(BinDir, DryRun)
@@ -281,7 +297,7 @@ public:
                     OutLDepsFile
             )
             .addArg(SourceFile)
-            .addKVArgEq("-o", OutASTFile)
+            .addKVArgSpace("-o", OutASTFile)
         .execute();
 
     return processStatus(ExecutionStatus);
@@ -292,15 +308,15 @@ public:
       StringRef OutDeclASTFile,
       StringRef InputObject,
       const Paths &Deps,
+      bool Verbose,
       bool DryRun
   ) {
     assert(OutDeclASTFile.size() && InputObject.size());
 
-    if (!DryRun)
+    if (!DryRun || Verbose)
       dumpInstantiateDecl(OutDeclASTFile, InputObject, Deps);
 
     auto ExecutionStatus = CommandInfo::getInstDecl(BinDir, DryRun)
-            .addArg("-emit-pch")
             .addKVArgsEq("-levitation-dependency", Deps)
             .addArg(InputObject)
             .addKVArgSpace("-o", OutDeclASTFile)
@@ -315,15 +331,39 @@ public:
       StringRef InputObject,
       const Paths &Deps,
       const LevitationDriver::Args &ExtraArgs,
+      bool Verbose,
       bool DryRun
   ) {
     assert(OutObjFile.size() && InputObject.size());
 
-    if (!DryRun)
+    if (!DryRun || Verbose)
       dumpInstantiateObject(OutObjFile, InputObject, Deps);
 
     auto ExecutionStatus = CommandInfo::getInstObj(BinDir, DryRun)
-            .addArg("-emit-obj")
+            .addKVArgsEq("-levitation-dependency", Deps)
+            .addArg(InputObject)
+            .addKVArgSpace("-o", OutObjFile)
+        .execute();
+
+    return processStatus(ExecutionStatus);
+  }
+
+  static bool compileMain(
+      StringRef BinDir,
+      StringRef OutObjFile,
+      StringRef InputObject,
+      const Paths &Deps,
+      const LevitationDriver::Args &ExtraParseArgs,
+      const LevitationDriver::Args &ExtraCodeGenArgs,
+      bool Verbose,
+      bool DryRun
+  ) {
+    assert(OutObjFile.size() && InputObject.size());
+
+    if (!DryRun || Verbose)
+      dumpCompileMain(OutObjFile, InputObject, Deps);
+
+    auto ExecutionStatus = CommandInfo::getCompileSrc(BinDir, DryRun)
             .addKVArgsEq("-levitation-dependency", Deps)
             .addArg(InputObject)
             .addKVArgSpace("-o", OutObjFile)
@@ -337,11 +377,12 @@ public:
       StringRef OutputFile,
       const Paths &ObjectFiles,
       const LevitationDriver::Args &ExtraArgs,
+      bool Verbose,
       bool DryRun
   ) {
     assert(OutputFile.size() && ObjectFiles.size());
 
-    if (!DryRun)
+    if (!DryRun || Verbose)
       dumpLink(OutputFile, ObjectFiles);
 
     auto ExecutionStatus = CommandInfo::getLink(BinDir, DryRun)
@@ -386,6 +427,17 @@ protected:
 
     dumpInstantiate(OutObjFile, InputObject, Deps, "INST OBJ ", "object");
   }
+
+  static void dumpCompileMain(
+      StringRef OutObjFile,
+      StringRef InputObject,
+      const Paths &Deps
+  ) {
+    assert(OutObjFile.size() && InputObject.size());
+
+    dumpInstantiate(OutObjFile, InputObject, Deps, "MAIN OBJ ", "object");
+  }
+
 
   static void dumpInstantiate(
       StringRef OutDeclASTFile,
@@ -479,6 +531,7 @@ void LevitationDriverImpl::runParse() {
           Files.Source,
           Context.Driver.SourcesRoot,
           Context.Driver.ExtraParseArgs,
+          Context.Driver.Verbose,
           Context.Driver.DryRun
       );
     });
@@ -545,6 +598,7 @@ void LevitationDriverImpl::runLinker() {
       Context.Driver.Output,
       ObjectFiles,
       Context.Driver.ExtraLinkerArgs,
+      Context.Driver.Verbose,
       Context.Driver.DryRun
   );
 
@@ -690,21 +744,33 @@ bool LevitationDriverImpl::processDependencyNode(
           Files.DeclAST,
           Files.AST,
           fullDependencies,
+          Context.Driver.Verbose,
           Context.Driver.DryRun
       );
 
     case DependenciesGraph::NodeKind::Definition: {
-      StringRef InputFile = N.PackageInfo->IsMainFile ?
-          Files.Source : Files.AST;
-
-      return Commands::instantiateObject(
-        Context.Driver.BinDir,
-        Files.Object,
-        InputFile,
-        fullDependencies,
-        Context.Driver.ExtraCodeGenArgs,
-        Context.Driver.DryRun
-      );
+      if (N.PackageInfo->IsMainFile) {
+        return Commands::compileMain(
+          Context.Driver.BinDir,
+          Files.Object,
+          Files.Source,
+          fullDependencies,
+          Context.Driver.ExtraParseArgs,
+          Context.Driver.ExtraCodeGenArgs,
+          Context.Driver.Verbose,
+          Context.Driver.DryRun
+        );
+      } else {
+        return Commands::instantiateObject(
+          Context.Driver.BinDir,
+          Files.Object,
+          Files.AST,
+          fullDependencies,
+          Context.Driver.ExtraCodeGenArgs,
+          Context.Driver.Verbose,
+          Context.Driver.DryRun
+        );
+      }
     }
 
     default:
