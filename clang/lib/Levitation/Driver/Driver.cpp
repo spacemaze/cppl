@@ -28,6 +28,7 @@
 #include "llvm/ADT/None.h"
 
 #include <memory>
+#include <system_error>
 #include <utility>
 
 namespace clang { namespace levitation { namespace tools {
@@ -112,12 +113,12 @@ public:
   class CommandInfo {
       using Args = LevitationDriver::Args;
       llvm::SmallVector<SmallString<256>, 8> OwnArgs;
-      StringRef ExecutablePath;
+      SinglePath ExecutablePath;
       Args CommandArgs;
       bool DryRun;
 
-      CommandInfo(StringRef executablePath, bool dryRun)
-      : ExecutablePath(executablePath),
+      CommandInfo(SinglePath &&executablePath, bool dryRun)
+      : ExecutablePath(std::move(executablePath)),
         DryRun(dryRun)
       {}
 
@@ -132,23 +133,23 @@ public:
         return CommandArgs;
       }
 
-      static CommandInfo getParse(bool DryRun) {
-        auto Cmd = getBase(DryRun);
+      static CommandInfo getParse(StringRef BinDir, bool DryRun) {
+        auto Cmd = getBase(BinDir, DryRun);
         Cmd.addArg("-levitation-build-ast");
         return Cmd;
       }
-      static CommandInfo getInstDecl(bool DryRun) {
-        auto Cmd = getBase(DryRun);
+      static CommandInfo getInstDecl(StringRef BinDir, bool DryRun) {
+        auto Cmd = getBase(BinDir, DryRun);
         Cmd.addArg("-flevitation-build-decl");
         return Cmd;
       }
-      static CommandInfo getInstObj(bool DryRun) {
-        auto Cmd = getBase(DryRun);
+      static CommandInfo getInstObj(StringRef BinDir, bool DryRun) {
+        auto Cmd = getBase(BinDir, DryRun);
         Cmd.addArg("-flevitation-build-object");
         return Cmd;
       }
-      static CommandInfo getLink(bool DryRun) {
-        CommandInfo Cmd(getClangPath(), DryRun);
+      static CommandInfo getLink(StringRef BinDir, bool DryRun) {
+        CommandInfo Cmd(getClangPath(BinDir), DryRun);
         Cmd.addArg("-stdlib=libstdc++");
         return Cmd;
       }
@@ -221,12 +222,21 @@ public:
       }
   protected:
 
-      static llvm::StringRef getClangPath() {
-        return "clang";
+      static SinglePath getClangPath(llvm::StringRef BinDir) {
+
+        const char *ClangBin = "clang";
+
+        if (BinDir.size()) {
+          SinglePath P = BinDir;
+          llvm::sys::path::append(P, ClangBin);
+          return P;
+        }
+
+        return SinglePath(ClangBin);
       }
 
-      static CommandInfo getBase(bool DryRun) {
-        CommandInfo Cmd(getClangPath(), DryRun);
+      static CommandInfo getBase(llvm::StringRef BinDir, bool DryRun) {
+        CommandInfo Cmd(getClangPath(BinDir), DryRun);
         Cmd.setupCCFlags();
         return Cmd;
       }
@@ -250,6 +260,7 @@ public:
   };
 
   static bool parse(
+      StringRef BinDir,
       StringRef OutASTFile,
       StringRef OutLDepsFile,
       StringRef SourceFile,
@@ -260,8 +271,7 @@ public:
     if (!DryRun)
       dumpParse(OutASTFile, OutLDepsFile, SourceFile);
 
-    auto ExecutionStatus = CommandInfo::getParse(DryRun)
-            .addArg("-levitation-build-ast")
+    auto ExecutionStatus = CommandInfo::getParse(BinDir, DryRun)
             .addKVArgEq(
                     "-levitation-sources-root-dir",
                     SourcesRoot
@@ -278,6 +288,7 @@ public:
   }
 
   static bool instantiateDecl(
+      StringRef BinDir,
       StringRef OutDeclASTFile,
       StringRef InputObject,
       const Paths &Deps,
@@ -288,8 +299,7 @@ public:
     if (!DryRun)
       dumpInstantiateDecl(OutDeclASTFile, InputObject, Deps);
 
-    auto ExecutionStatus = CommandInfo::getInstDecl(DryRun)
-            .addArg("-flevitation-build-decl")
+    auto ExecutionStatus = CommandInfo::getInstDecl(BinDir, DryRun)
             .addArg("-emit-pch")
             .addKVArgsEq("-levitation-dependency", Deps)
             .addArg(InputObject)
@@ -300,6 +310,7 @@ public:
   }
 
   static bool instantiateObject(
+      StringRef BinDir,
       StringRef OutObjFile,
       StringRef InputObject,
       const Paths &Deps,
@@ -311,8 +322,7 @@ public:
     if (!DryRun)
       dumpInstantiateObject(OutObjFile, InputObject, Deps);
 
-    auto ExecutionStatus = CommandInfo::getInstObj(DryRun)
-            .addArg("-flevitation-build-object")
+    auto ExecutionStatus = CommandInfo::getInstObj(BinDir, DryRun)
             .addArg("-emit-obj")
             .addKVArgsEq("-levitation-dependency", Deps)
             .addArg(InputObject)
@@ -323,6 +333,7 @@ public:
   }
 
   static bool link(
+      StringRef BinDir,
       StringRef OutputFile,
       const Paths &ObjectFiles,
       const LevitationDriver::Args &ExtraArgs,
@@ -333,7 +344,7 @@ public:
     if (!DryRun)
       dumpLink(OutputFile, ObjectFiles);
 
-    auto ExecutionStatus = CommandInfo::getLink(DryRun)
+    auto ExecutionStatus = CommandInfo::getLink(BinDir, DryRun)
         .addArgs(ObjectFiles)
         .addKVArgSpace("-o", OutputFile)
         .execute();
@@ -462,6 +473,7 @@ void LevitationDriverImpl::runParse() {
 
     TM.addTask([=] (TasksManager::TaskContext &TC) {
       TC.Successful = Commands::parse(
+          Context.Driver.BinDir,
           Files.AST,
           Files.LDeps,
           Files.Source,
@@ -529,6 +541,7 @@ void LevitationDriverImpl::runLinker() {
   }
 
   auto Res = Commands::link(
+      Context.Driver.BinDir,
       Context.Driver.Output,
       ObjectFiles,
       Context.Driver.ExtraLinkerArgs,
@@ -673,6 +686,7 @@ bool LevitationDriverImpl::processDependencyNode(
 
     case DependenciesGraph::NodeKind::Declaration:
       return Commands::instantiateDecl(
+          Context.Driver.BinDir,
           Files.DeclAST,
           Files.AST,
           fullDependencies,
@@ -684,6 +698,7 @@ bool LevitationDriverImpl::processDependencyNode(
           Files.Source : Files.AST;
 
       return Commands::instantiateObject(
+        Context.Driver.BinDir,
         Files.Object,
         InputFile,
         fullDependencies,
@@ -700,8 +715,18 @@ bool LevitationDriverImpl::processDependencyNode(
 //-----------------------------------------------------------------------------
 //  LevitationDriver
 
-LevitationDriver::LevitationDriver()
-{}
+LevitationDriver::LevitationDriver(StringRef CommandPath)
+{
+  SinglePath P = CommandPath;
+  if (auto Err = llvm::sys::fs::make_absolute(P)) {
+    log::Logger::get().warning()
+    << "Failed to make absolute path. System message: "
+    << Err.message() << "\n";
+    P = CommandPath;
+  }
+
+  BinDir = llvm::sys::path::parent_path(P);
+}
 
 bool LevitationDriver::run() {
 
@@ -744,12 +769,14 @@ void LevitationDriver::dumpParameters() {
   log::Logger::get().verbose()
   << "\n"
   << "  Running driver with following parameters:\n\n"
+  << "    BinaryDir: " << BinDir << "\n"
   << "    SourcesRoot: " << SourcesRoot << "\n"
   << "    MainSource: " << MainSource << "\n"
   << "    PreambleSource: " << (PreambleSource.empty() ? "<preamble compilation not requested>" : PreambleSource) << "\n"
   << "    JobsNumber: " << JobsNumber << "\n"
   << "    Output: " << Output << "\n"
   << "    OutputHeader: " << (OutputHeader.empty() ? "<header creation not requested>" : OutputHeader) << "\n"
+  << "    DryRun: " << (DryRun ? "yes" : "no") << "\n"
   << "\n";
 }
 

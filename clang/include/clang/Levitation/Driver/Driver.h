@@ -16,6 +16,7 @@
 #ifndef LLVM_LEVITATION_DRIVER_H
 #define LLVM_LEVITATION_DRIVER_H
 
+#include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Driver/DriverDefaults.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -32,6 +33,7 @@ namespace clang { namespace levitation { namespace tools {
 
     bool Verbose = false;
 
+    levitation::SinglePath BinDir;
     llvm::StringRef SourcesRoot = DriverDefaults::SOURCES_ROOT;
     llvm::StringRef BuildRoot = DriverDefaults::BUILD_ROOT;
     llvm::StringRef MainSource = DriverDefaults::MAIN_SOURCE;
@@ -53,7 +55,7 @@ namespace clang { namespace levitation { namespace tools {
 
   public:
 
-    LevitationDriver();
+    LevitationDriver(llvm::StringRef CommandPath);
 
     bool isVerbose() const {
       return Verbose;

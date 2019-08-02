@@ -34,7 +34,7 @@ bool parseJobsNumber(const char **Argv, int &Offset);
 
 int main(int argc, char **argv) {
 
-  clang::levitation::tools::LevitationDriver Driver;
+  clang::levitation::tools::LevitationDriver Driver(argv[0]);
 
   // Available driver parameters:
   // -root=<path> Specify source root (project) directory. Default value: '.'

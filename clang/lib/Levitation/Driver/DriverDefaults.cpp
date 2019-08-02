@@ -14,6 +14,7 @@
 #include "clang/Levitation/Driver/DriverDefaults.h"
 
 namespace clang { namespace levitation { namespace tools {
+  constexpr char DriverDefaults::BIN_DIR[];
   constexpr char DriverDefaults::SOURCES_ROOT[];
   constexpr char DriverDefaults::BUILD_ROOT[];
   constexpr char DriverDefaults::MAIN_SOURCE[];
