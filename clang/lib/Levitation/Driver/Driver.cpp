@@ -242,9 +242,8 @@ public:
 
       if (!DryRun) {
         std::string ErrorMessage;
-        bool ExecutionFailed = false;
 
-        llvm::sys::ExecuteAndWait(
+        int Res = llvm::sys::ExecuteAndWait(
             ExecutablePath,
             CommandArgs,
             /*Env*/llvm::None,
@@ -252,12 +251,12 @@ public:
             /*secondsToWait*/ 0,
             /*memoryLimit*/ 0,
             &ErrorMessage,
-            &ExecutionFailed
+            /*ExectutionFailed*/nullptr
         );
 
         Failable Status;
 
-        if (ExecutionFailed) {
+        if (Res != 0) {
           Status.setFailure() << ErrorMessage;
         } else if (ErrorMessage.size()) {
           Status.setWarning() << ErrorMessage;
@@ -718,6 +717,8 @@ void LevitationDriverImpl::collectSources() {
 }
 
 void LevitationDriverImpl::addMainFileInfo() {
+  if (!Context.Status.isValid())
+    return;
 
   // Inject main file package
   Context.Packages.emplace_back(Context.MainFileNormilized);
@@ -863,7 +864,18 @@ bool LevitationDriver::run() {
   if (LinkPhaseEnabled)
     Impl.runLinker();
 
-  return Context.Status.isValid();
+  if (Context.Status.hasWarnings()) {
+    log::Logger::get().warning()
+    << Context.Status.getWarningMessage();
+  }
+
+  if (!Context.Status.isValid()) {
+    log::Logger::get().error()
+    << Context.Status.getErrorMessage();
+    return false;
+  }
+
+  return true;
 }
 
 void LevitationDriver::initParameters() {
