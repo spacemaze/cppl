@@ -111,11 +111,7 @@ public:
       StringRef OutLDepsFile,
       StringRef SourceFile
   ) {
-    log::Logger::get().info()
-    << "parse -o " << OutASTFile
-    << " -ldeps " << OutLDepsFile
-    << " " << SourceFile
-    << "\n";
+    dumpParse(OutASTFile, OutLDepsFile, SourceFile);
 
     // TODO Levitation execute real command:
     //  return llvm::sys::ExecuteAndWait(
@@ -128,21 +124,11 @@ public:
   static bool instantiateDecl(
       StringRef OutDeclASTFile,
       StringRef InputObject,
-      Paths Deps
+      const Paths &Deps
   ) {
     assert(OutDeclASTFile.size() && InputObject.size());
 
-    log::Logger::get().info()
-    << "instantiate -o " << OutDeclASTFile;
-
-    for (auto &D : Deps) {
-      log::Logger::get().info()
-      << " -dep " << D;
-    }
-
-    log::Logger::get().info()
-    << " " << InputObject
-    << "\n";
+    dumpInstantiateDecl(OutDeclASTFile, InputObject, Deps);
 
     // TODO Levitation execute real command:
     //  return llvm::sys::ExecuteAndWait(
@@ -155,21 +141,11 @@ public:
   static bool instantiateObject(
       StringRef OutObjFile,
       StringRef InputObject,
-      Paths Deps
+      const Paths &Deps
   ) {
     assert(OutObjFile.size() && InputObject.size());
 
-    log::Logger::get().info()
-    << "instantiate -o " << OutObjFile;
-
-    for (auto &D : Deps) {
-      log::Logger::get().info()
-      << " -dep " << D;
-    }
-
-    log::Logger::get().info()
-    << " " << InputObject
-    << "\n";
+    dumpInstantiateObject(OutObjFile, InputObject, Deps);
 
     // TODO Levitation execute real command:
     //  return llvm::sys::ExecuteAndWait(
@@ -182,18 +158,113 @@ public:
   static bool link(StringRef OutputFile, const Paths &ObjectFiles) {
     assert(OutputFile.size() && ObjectFiles.size());
 
-    log::Logger::get().info()
-    << "link -o " << OutputFile;
-
-    for (auto &D : ObjectFiles) {
-      log::Logger::get().info()
-      << " " << D;
-    }
-
-    log::Logger::get().info()
-    << "\n";
+    dumpLink(OutputFile, ObjectFiles);
 
     return true;
+  }
+
+protected:
+
+  // TODO Levitation: should we bother with some cool dumping?
+  void dumpKV(llvm::raw_ostream &out, StringRef K, StringRef V) {
+    out << K << ": "; // ...
+  }
+
+  static void dumpParse(
+      StringRef OutASTFile,
+      StringRef OutLDepsFile,
+      StringRef SourceFile
+  ) {
+    auto &LogInfo = log::Logger::get().info();
+    LogInfo
+    << "PARSE     " << SourceFile << " -> "
+    << "(ast:" << OutASTFile << ", "
+    << "ldeps: " << OutLDepsFile << ")"
+    << "\n";
+  }
+
+  static void dumpInstantiateDecl(
+      StringRef OutDeclASTFile,
+      StringRef InputObject,
+      const Paths &Deps
+  ) {
+    assert(OutDeclASTFile.size() && InputObject.size());
+
+    dumpInstantiate(OutDeclASTFile, InputObject, Deps, "INST DECL", "decl-ast");
+  }
+
+  static void dumpInstantiateObject(
+      StringRef OutObjFile,
+      StringRef InputObject,
+      const Paths &Deps
+  ) {
+    assert(OutObjFile.size() && InputObject.size());
+
+    dumpInstantiate(OutObjFile, InputObject, Deps, "INST OBJ ", "object");
+  }
+
+  static void dumpInstantiate(
+      StringRef OutDeclASTFile,
+      StringRef InputObject,
+      const Paths &Deps,
+      StringRef ActionName,
+      StringRef OutputName
+  ) {
+    assert(OutDeclASTFile.size() && InputObject.size());
+
+    auto &LogInfo = log::Logger::get().info();
+    LogInfo << ActionName << " " << InputObject;
+
+    LogInfo << ", ";
+    dumpLDepsFiles(LogInfo, Deps);
+
+    LogInfo << " -> " << OutputName << ": " << OutDeclASTFile << "\n";
+  }
+
+  static void dumpLDepsFiles(
+      raw_ostream &Out,
+      const Paths &Deps
+  ) {
+    dumpPathsArray(Out, Deps, "deps");
+  }
+
+  static void dumpLink(StringRef OutputFile, const Paths &ObjectFiles) {
+    assert(OutputFile.size() && ObjectFiles.size());
+
+    auto &LogInfo = log::Logger::get().info();
+
+    LogInfo << "LINK ";
+
+    dumpObjectFiles(LogInfo, ObjectFiles);
+
+    LogInfo << " -> " << OutputFile << "\n";
+  }
+
+  static void dumpObjectFiles(
+      raw_ostream &Out,
+      const Paths &ObjectFiles
+  ) {
+    dumpPathsArray(Out, ObjectFiles, "objects");
+  }
+
+  static void dumpPathsArray(
+      raw_ostream &Out,
+      const Paths &ObjectFiles,
+      StringRef ArrayName
+  ) {
+    Out << ArrayName << ": ";
+
+    if (ObjectFiles.size()) {
+      Out << "(";
+      for (size_t i = 0, e = ObjectFiles.size(); i != e; ++i) {
+        log::Logger::get().info() << ObjectFiles[i];
+        if (i + 1 != e)
+          log::Logger::get().info() << ", ";
+      }
+      Out << ")";
+    } else {
+      Out << "<empty>";
+    }
   }
 };
 
@@ -432,7 +503,7 @@ LevitationDriver::LevitationDriver()
 
 bool LevitationDriver::run() {
 
-  log::Logger::createLogger();
+  log::Logger::createLogger(log::Level::Info);
   TasksManager::create(JobsNumber);
   CreatableSingleton<FileManager>::create( FileSystemOptions { StringRef() });
   CreatableSingleton<DependenciesStringsPool >::create();
