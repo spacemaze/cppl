@@ -111,202 +111,202 @@ public:
 class Commands {
 public:
   class CommandInfo {
-      using Args = LevitationDriver::Args;
-      llvm::SmallVector<SmallString<256>, 8> OwnArgs;
-      SinglePath ExecutablePath;
-      Args CommandArgs;
+    using Args = LevitationDriver::Args;
+    llvm::SmallVector<SmallString<256>, 8> OwnArgs;
+    SinglePath ExecutablePath;
+    Args CommandArgs;
 
-      bool Verbose;
-      bool DryRun;
+    bool Verbose;
+    bool DryRun;
 
-      CommandInfo(
-          SinglePath &&executablePath,
-          bool verbose,
-          bool dryRun
-      )
-      : ExecutablePath(std::move(executablePath)),
-        Verbose(verbose),
-        DryRun(dryRun)
-      {}
+    CommandInfo(
+        SinglePath &&executablePath,
+        bool verbose,
+        bool dryRun
+    )
+    : ExecutablePath(std::move(executablePath)),
+      Verbose(verbose),
+      DryRun(dryRun)
+    {}
 
-  public:
-      CommandInfo() = delete;
+public:
+    CommandInfo() = delete;
 
-      StringRef getExecutablePath() const {
-        return ExecutablePath;
-      }
+    StringRef getExecutablePath() const {
+      return ExecutablePath;
+    }
 
-      const Args &getCommandArgs() const {
-        return CommandArgs;
-      }
+    const Args &getCommandArgs() const {
+      return CommandArgs;
+    }
 
-      static CommandInfo getParse(
-          StringRef BinDir,
-          bool verbose,
-          bool dryRun
-      ) {
-        auto Cmd = getBase(BinDir, verbose, dryRun);
-        Cmd
-        .addArg("-levitation-build-ast")
-        .addArg("-xc++");
+    static CommandInfo getParse(
+        StringRef BinDir,
+        bool verbose,
+        bool dryRun
+    ) {
+      auto Cmd = getBase(BinDir, verbose, dryRun);
+      Cmd
+      .addArg("-levitation-build-ast")
+      .addArg("-xc++");
 
-        return Cmd;
-      }
+      return Cmd;
+    }
 
-      static CommandInfo getInstDecl(
-          StringRef BinDir,
-          bool verbose,
-          bool dryRun
-      ) {
-        auto Cmd = getBase(BinDir, verbose, dryRun);
-        Cmd
-        .addArg("-flevitation-build-decl")
-        .addArg("-emit-pch");
-        return Cmd;
-      }
+    static CommandInfo getInstDecl(
+        StringRef BinDir,
+        bool verbose,
+        bool dryRun
+    ) {
+      auto Cmd = getBase(BinDir, verbose, dryRun);
+      Cmd
+      .addArg("-flevitation-build-decl")
+      .addArg("-emit-pch");
+      return Cmd;
+    }
 
-      static CommandInfo getInstObj(
-          StringRef BinDir,
-          bool verbose,
-          bool dryRun
-      ) {
-        auto Cmd = getBase(BinDir, verbose, dryRun);
-        Cmd
-        .addArg("-flevitation-build-object")
-        .addArg("-emit-obj");
-        return Cmd;
-      }
-      static CommandInfo getCompileSrc(
-          StringRef BinDir,
-          bool verbose,
-          bool dryRun
-      ) {
-        auto Cmd = getBase(BinDir, verbose, dryRun);
-        Cmd
-        .addArg("-flevitation-build-object")
-        .addArg("-xc++")
-        .addArg("-emit-obj");
-        return Cmd;
-      }
-      static CommandInfo getLink(
-          StringRef BinDir,
-          bool verbose,
-          bool dryRun
-      ) {
-        CommandInfo Cmd(getClangPath(BinDir), verbose, dryRun);
-        Cmd.addArg("-stdlib=libstdc++");
-        return Cmd;
-      }
+    static CommandInfo getInstObj(
+        StringRef BinDir,
+        bool verbose,
+        bool dryRun
+    ) {
+      auto Cmd = getBase(BinDir, verbose, dryRun);
+      Cmd
+      .addArg("-flevitation-build-object")
+      .addArg("-emit-obj");
+      return Cmd;
+    }
+    static CommandInfo getCompileSrc(
+        StringRef BinDir,
+        bool verbose,
+        bool dryRun
+    ) {
+      auto Cmd = getBase(BinDir, verbose, dryRun);
+      Cmd
+      .addArg("-flevitation-build-object")
+      .addArg("-xc++")
+      .addArg("-emit-obj");
+      return Cmd;
+    }
+    static CommandInfo getLink(
+        StringRef BinDir,
+        bool verbose,
+        bool dryRun
+    ) {
+      CommandInfo Cmd(getClangPath(BinDir), verbose, dryRun);
+      Cmd.addArg("-stdlib=libstdc++");
+      return Cmd;
+    }
 
-      CommandInfo& addArg(StringRef Arg) {
-        CommandArgs.push_back(Arg);
-        return *this;
-      }
+    CommandInfo& addArg(StringRef Arg) {
+      CommandArgs.push_back(Arg);
+      return *this;
+    }
 
-      CommandInfo& addKVArgSpace(StringRef Arg, StringRef Value) {
-        CommandArgs.push_back(Arg);
-        CommandArgs.push_back(Value);
-        return *this;
-      }
+    CommandInfo& addKVArgSpace(StringRef Arg, StringRef Value) {
+      CommandArgs.push_back(Arg);
+      CommandArgs.push_back(Value);
+      return *this;
+    }
 
-      CommandInfo& addKVArgEq(StringRef Arg, StringRef Value) {
-        OwnArgs.emplace_back((Arg + "=" + Value).str());
+    CommandInfo& addKVArgEq(StringRef Arg, StringRef Value) {
+      OwnArgs.emplace_back((Arg + "=" + Value).str());
+      CommandArgs.push_back(OwnArgs.back());
+      return *this;
+    }
+
+    template <typename ValuesT>
+    CommandInfo& addArgs(const ValuesT Values) {
+      for (const auto &Value : Values) {
+        OwnArgs.emplace_back(Value);
         CommandArgs.push_back(OwnArgs.back());
-        return *this;
+      }
+      return *this;
+    }
+
+    template <typename ValuesT>
+    CommandInfo& addKVArgsEq(StringRef Name, const ValuesT Values) {
+      for (const auto &Value : Values) {
+        OwnArgs.emplace_back((Name + "=" + Value).str());
+        CommandArgs.push_back(OwnArgs.back());
+      }
+      return *this;
+    }
+
+    Failable execute() {
+      if (DryRun || Verbose) {
+        dumpCommand();
       }
 
-      template <typename ValuesT>
-      CommandInfo& addArgs(const ValuesT Values) {
-        for (const auto &Value : Values) {
-          OwnArgs.emplace_back(Value);
-          CommandArgs.push_back(OwnArgs.back());
+      if (!DryRun) {
+        std::string ErrorMessage;
+        bool ExecutionFailed = false;
+
+        llvm::sys::ExecuteAndWait(
+            ExecutablePath,
+            CommandArgs,
+            /*Env*/llvm::None,
+            /*Redirects*/{},
+            /*secondsToWait*/ 0,
+            /*memoryLimit*/ 0,
+            &ErrorMessage,
+            &ExecutionFailed
+        );
+
+        Failable Status;
+
+        if (ExecutionFailed) {
+          Status.setFailure() << ErrorMessage;
+        } else if (ErrorMessage.size()) {
+          Status.setWarning() << ErrorMessage;
         }
-        return *this;
+
+        return Status;
       }
 
-      template <typename ValuesT>
-      CommandInfo& addKVArgsEq(StringRef Name, const ValuesT Values) {
-        for (const auto &Value : Values) {
-          OwnArgs.emplace_back((Name + "=" + Value).str());
-          CommandArgs.push_back(OwnArgs.back());
-        }
-        return *this;
-      }
-
-      Failable execute() {
-        if (DryRun || Verbose) {
-          dumpCommand();
-        }
-
-        if (!DryRun) {
-          std::string ErrorMessage;
-          bool ExecutionFailed = false;
-
-          llvm::sys::ExecuteAndWait(
-              ExecutablePath,
-              CommandArgs,
-              /*Env*/llvm::None,
-              /*Redirects*/{},
-              /*secondsToWait*/ 0,
-              /*memoryLimit*/ 0,
-              &ErrorMessage,
-              &ExecutionFailed
-          );
-
-          Failable Status;
-
-          if (ExecutionFailed) {
-            Status.setFailure() << ErrorMessage;
-          } else if (ErrorMessage.size()) {
-            Status.setWarning() << ErrorMessage;
-          }
-
-          return Status;
-        }
-
-        return Failable();
-      }
+      return Failable();
+    }
   protected:
+      
+    static SinglePath getClangPath(llvm::StringRef BinDir) {
 
-      static SinglePath getClangPath(llvm::StringRef BinDir) {
+      const char *ClangBin = "clang";
 
-        const char *ClangBin = "clang";
-
-        if (BinDir.size()) {
-          SinglePath P = BinDir;
-          llvm::sys::path::append(P, ClangBin);
-          return P;
-        }
-
-        return SinglePath(ClangBin);
+      if (BinDir.size()) {
+        SinglePath P = BinDir;
+        llvm::sys::path::append(P, ClangBin);
+        return P;
       }
 
-      static CommandInfo getBase(
-          llvm::StringRef BinDir,
-          bool verbose,
-          bool dryRun
-      ) {
-        CommandInfo Cmd(getClangPath(BinDir), verbose, dryRun);
-        Cmd.setupCCFlags();
-        return Cmd;
-      }
+      return SinglePath(ClangBin);
+    }
 
-      void setupCCFlags() {
-         addArg("-cc1")
-        .addArg("-std=c++17")
-        .addArg("-stdlib=libstdc++");
-      }
+    static CommandInfo getBase(
+        llvm::StringRef BinDir,
+        bool verbose,
+        bool dryRun
+    ) {
+      CommandInfo Cmd(getClangPath(BinDir), verbose, dryRun);
+      Cmd.setupCCFlags();
+      return Cmd;
+    }
 
-      void dumpCommand() {
+    void setupCCFlags() {
+       addArg("-cc1")
+      .addArg("-std=c++17")
+      .addArg("-stdlib=libstdc++");
+    }
 
-        auto &Out = log::Logger::get().info();
+    void dumpCommand() {
 
-        Out << ExecutablePath;
-        for (auto Arg : CommandArgs)
-          Out << " " << Arg;
+      auto &Out = log::Logger::get().info();
 
-        Out << "\n";
-      }
+      Out << ExecutablePath;
+      for (auto Arg : CommandArgs)
+        Out << " " << Arg;
+
+      Out << "\n";
+    }
   };
 
   static bool parse(
