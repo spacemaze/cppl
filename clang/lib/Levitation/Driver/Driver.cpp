@@ -127,7 +127,9 @@ public:
     : ExecutablePath(std::move(executablePath)),
       Verbose(verbose),
       DryRun(dryRun)
-    {}
+    {
+      CommandArgs.push_back(ExecutablePath);
+    }
 
 public:
     CommandInfo() = delete;
@@ -267,7 +269,7 @@ public:
       return Failable();
     }
   protected:
-      
+
     static SinglePath getClangPath(llvm::StringRef BinDir) {
 
       const char *ClangBin = "clang";
