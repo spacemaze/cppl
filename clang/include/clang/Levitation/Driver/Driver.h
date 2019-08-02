@@ -26,6 +26,9 @@ namespace clang { namespace levitation { namespace log {
 namespace clang { namespace levitation { namespace tools {
 
   class LevitationDriver {
+  public:
+    using Args = llvm::SmallVector<llvm::StringRef, 8>;
+  private:
 
     bool Verbose = false;
 
@@ -41,6 +44,12 @@ namespace clang { namespace levitation { namespace tools {
     llvm::StringRef Output;
 
     bool LinkPhaseEnabled = true;
+
+    bool DryRun;
+
+    Args ExtraParseArgs;
+    Args ExtraCodeGenArgs;
+    Args ExtraLinkerArgs;
 
   public:
 
@@ -120,6 +129,14 @@ namespace clang { namespace levitation { namespace tools {
 
     void disableLinkPhase() {
       LinkPhaseEnabled = false;
+    }
+
+    bool isDryRun() const {
+      return DryRun;
+    }
+
+    void setDryRun() {
+      DryRun = true;
     }
 
     bool run();

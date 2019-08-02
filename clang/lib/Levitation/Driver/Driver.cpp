@@ -24,6 +24,9 @@
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
 
+#include "llvm/Support/Program.h"
+#include "llvm/ADT/None.h"
+
 #include <memory>
 #include <utility>
 
@@ -106,59 +109,234 @@ public:
 /*static*/
 class Commands {
 public:
+  class CommandInfo {
+      using Args = LevitationDriver::Args;
+      llvm::SmallVector<SmallString<256>, 8> OwnArgs;
+      StringRef ExecutablePath;
+      Args CommandArgs;
+      bool DryRun;
+
+      CommandInfo(StringRef executablePath, bool dryRun)
+      : ExecutablePath(executablePath),
+        DryRun(dryRun)
+      {}
+
+  public:
+      CommandInfo() = delete;
+
+      StringRef getExecutablePath() const {
+        return ExecutablePath;
+      }
+
+      const Args &getCommandArgs() const {
+        return CommandArgs;
+      }
+
+      static CommandInfo getParse(bool DryRun) {
+        auto Cmd = getBase(DryRun);
+        Cmd.addArg("-levitation-build-ast");
+        return Cmd;
+      }
+      static CommandInfo getInstDecl(bool DryRun) {
+        auto Cmd = getBase(DryRun);
+        Cmd.addArg("-flevitation-build-decl");
+        return Cmd;
+      }
+      static CommandInfo getInstObj(bool DryRun) {
+        auto Cmd = getBase(DryRun);
+        Cmd.addArg("-flevitation-build-object");
+        return Cmd;
+      }
+      static CommandInfo getLink(bool DryRun) {
+        CommandInfo Cmd(getClangPath(), DryRun);
+        Cmd.addArg("-stdlib=libstdc++");
+        return Cmd;
+      }
+
+      CommandInfo& addArg(StringRef Arg) {
+        CommandArgs.push_back(Arg);
+        return *this;
+      }
+
+      CommandInfo& addKVArgSpace(StringRef Arg, StringRef Value) {
+        CommandArgs.push_back(Arg);
+        CommandArgs.push_back(Value);
+        return *this;
+      }
+
+      CommandInfo& addKVArgEq(StringRef Arg, StringRef Value) {
+        OwnArgs.emplace_back((Arg + "=" + Value).str());
+        CommandArgs.push_back(OwnArgs.back());
+        return *this;
+      }
+
+      template <typename ValuesT>
+      CommandInfo& addArgs(const ValuesT Values) {
+        for (const auto &Value : Values) {
+          OwnArgs.emplace_back(Value);
+          CommandArgs.push_back(OwnArgs.back());
+        }
+        return *this;
+      }
+
+      template <typename ValuesT>
+      CommandInfo& addKVArgsEq(StringRef Name, const ValuesT Values) {
+        for (const auto &Value : Values) {
+          OwnArgs.emplace_back((Name + "=" + Value).str());
+          CommandArgs.push_back(OwnArgs.back());
+        }
+        return *this;
+      }
+
+      Failable execute() {
+
+        if (DryRun) {
+          executeDryRun();
+          return Failable();
+        }
+
+        std::string ErrorMessage;
+        bool ExecutionFailed = false;
+
+        llvm::sys::ExecuteAndWait(
+            ExecutablePath,
+            CommandArgs,
+            /*Env*/llvm::None,
+            /*Redirects*/{},
+            /*secondsToWait*/ 0,
+            /*memoryLimit*/ 0,
+            &ErrorMessage,
+            &ExecutionFailed
+        );
+
+        Failable Status;
+
+        if (ExecutionFailed) {
+          Status.setFailure() << ErrorMessage;
+        } else if (ErrorMessage.size()) {
+          Status.setWarning() << ErrorMessage;
+        }
+
+        return Status;
+      }
+  protected:
+
+      static llvm::StringRef getClangPath() {
+        return "clang";
+      }
+
+      static CommandInfo getBase(bool DryRun) {
+        CommandInfo Cmd(getClangPath(), DryRun);
+        Cmd.setupCCFlags();
+        return Cmd;
+      }
+
+      void setupCCFlags() {
+         addArg("-cc1")
+        .addArg("-std=c++17")
+        .addArg("-stdlib=libstdc++");
+      }
+
+      void executeDryRun() {
+
+        auto &Out = log::Logger::get().info();
+
+        Out << ExecutablePath;
+        for (auto Arg : CommandArgs)
+          Out << " " << Arg;
+
+        Out << "\n";
+      }
+  };
+
   static bool parse(
       StringRef OutASTFile,
       StringRef OutLDepsFile,
-      StringRef SourceFile
+      StringRef SourceFile,
+      StringRef SourcesRoot,
+      const LevitationDriver::Args &ExtraArgs,
+      bool DryRun
   ) {
-    dumpParse(OutASTFile, OutLDepsFile, SourceFile);
+    if (!DryRun)
+      dumpParse(OutASTFile, OutLDepsFile, SourceFile);
 
-    // TODO Levitation execute real command:
-    //  return llvm::sys::ExecuteAndWait(
-    //      Executable, Args, Env, Redirects, /*secondsToWait*/ 0,
-    //      /*memoryLimit*/ 0, ErrMsg, ExecutionFailed);
+    auto ExecutionStatus = CommandInfo::getParse(DryRun)
+            .addArg("-levitation-build-ast")
+            .addKVArgEq(
+                    "-levitation-sources-root-dir",
+                    SourcesRoot
+            )
+            .addKVArgEq(
+                    "-levitation-deps-output-file",
+                    OutLDepsFile
+            )
+            .addArg(SourceFile)
+            .addKVArgEq("-o", OutASTFile)
+        .execute();
 
-    return true;
+    return processStatus(ExecutionStatus);
   }
 
   static bool instantiateDecl(
       StringRef OutDeclASTFile,
       StringRef InputObject,
-      const Paths &Deps
+      const Paths &Deps,
+      bool DryRun
   ) {
     assert(OutDeclASTFile.size() && InputObject.size());
 
-    dumpInstantiateDecl(OutDeclASTFile, InputObject, Deps);
+    if (!DryRun)
+      dumpInstantiateDecl(OutDeclASTFile, InputObject, Deps);
 
-    // TODO Levitation execute real command:
-    //  return llvm::sys::ExecuteAndWait(
-    //      Executable, Args, Env, Redirects, /*secondsToWait*/ 0,
-    //      /*memoryLimit*/ 0, ErrMsg, ExecutionFailed);
+    auto ExecutionStatus = CommandInfo::getInstDecl(DryRun)
+            .addArg("-flevitation-build-decl")
+            .addArg("-emit-pch")
+            .addKVArgsEq("-levitation-dependency", Deps)
+            .addArg(InputObject)
+            .addKVArgSpace("-o", OutDeclASTFile)
+        .execute();
 
-    return true;
+    return processStatus(ExecutionStatus);
   }
 
   static bool instantiateObject(
       StringRef OutObjFile,
       StringRef InputObject,
-      const Paths &Deps
+      const Paths &Deps,
+      const LevitationDriver::Args &ExtraArgs,
+      bool DryRun
   ) {
     assert(OutObjFile.size() && InputObject.size());
 
-    dumpInstantiateObject(OutObjFile, InputObject, Deps);
+    if (!DryRun)
+      dumpInstantiateObject(OutObjFile, InputObject, Deps);
 
-    // TODO Levitation execute real command:
-    //  return llvm::sys::ExecuteAndWait(
-    //      Executable, Args, Env, Redirects, /*secondsToWait*/ 0,
-    //      /*memoryLimit*/ 0, ErrMsg, ExecutionFailed);
+    auto ExecutionStatus = CommandInfo::getInstObj(DryRun)
+            .addArg("-flevitation-build-object")
+            .addArg("-emit-obj")
+            .addKVArgsEq("-levitation-dependency", Deps)
+            .addArg(InputObject)
+            .addKVArgSpace("-o", OutObjFile)
+        .execute();
 
-    return true;
+    return processStatus(ExecutionStatus);
   }
 
-  static bool link(StringRef OutputFile, const Paths &ObjectFiles) {
+  static bool link(
+      StringRef OutputFile,
+      const Paths &ObjectFiles,
+      const LevitationDriver::Args &ExtraArgs,
+      bool DryRun
+  ) {
     assert(OutputFile.size() && ObjectFiles.size());
 
-    dumpLink(OutputFile, ObjectFiles);
+    if (!DryRun)
+      dumpLink(OutputFile, ObjectFiles);
+
+    auto ExecutionStatus = CommandInfo::getLink(DryRun)
+        .addArgs(ObjectFiles)
+        .addKVArgSpace("-o", OutputFile)
+        .execute();
 
     return true;
   }
@@ -261,6 +439,18 @@ protected:
       Out << "<empty>";
     }
   }
+
+  static bool processStatus(const Failable &Status) {
+    if (Status.hasWarnings())
+      log::Logger::get().warning() << Status.getWarningMessage();
+
+    if (!Status.isValid()) {
+      log::Logger::get().error() << Status.getErrorMessage();
+      return false;
+    }
+
+    return true;
+  }
 };
 
 void LevitationDriverImpl::runParse() {
@@ -271,7 +461,14 @@ void LevitationDriverImpl::runParse() {
     auto Files = Context.Files[PackagePath];
 
     TM.addTask([=] (TasksManager::TaskContext &TC) {
-      TC.Successful = Commands::parse(Files.AST, Files.LDeps, Files.Source);
+      TC.Successful = Commands::parse(
+          Files.AST,
+          Files.LDeps,
+          Files.Source,
+          Context.Driver.SourcesRoot,
+          Context.Driver.ExtraParseArgs,
+          Context.Driver.DryRun
+      );
     });
   }
 
@@ -332,7 +529,10 @@ void LevitationDriverImpl::runLinker() {
   }
 
   auto Res = Commands::link(
-      Context.Driver.Output, ObjectFiles
+      Context.Driver.Output,
+      ObjectFiles,
+      Context.Driver.ExtraLinkerArgs,
+      Context.Driver.DryRun
   );
 
   if (!Res)
@@ -473,7 +673,10 @@ bool LevitationDriverImpl::processDependencyNode(
 
     case DependenciesGraph::NodeKind::Declaration:
       return Commands::instantiateDecl(
-          Files.DeclAST, Files.AST, fullDependencies
+          Files.DeclAST,
+          Files.AST,
+          fullDependencies,
+          Context.Driver.DryRun
       );
 
     case DependenciesGraph::NodeKind::Definition: {
@@ -481,7 +684,11 @@ bool LevitationDriverImpl::processDependencyNode(
           Files.Source : Files.AST;
 
       return Commands::instantiateObject(
-        Files.Object, InputFile, fullDependencies
+        Files.Object,
+        InputFile,
+        fullDependencies,
+        Context.Driver.ExtraCodeGenArgs,
+        Context.Driver.DryRun
       );
     }
 

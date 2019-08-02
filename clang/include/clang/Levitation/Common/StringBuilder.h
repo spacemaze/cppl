@@ -52,13 +52,18 @@ public:
 
   StringBuilder(const StringBuilder &Src) = delete;
 
+  StringBuilder()
+  : OnDone(nullptr),
+    Stream(Str)
+  {}
+
   explicit StringBuilder(OnDoneFn &&onDone)
   : OnDone(std::move(onDone)),
     Stream(Str)
   {}
 
   ~StringBuilder() {
-    if (!Moved)
+    if (!Moved && OnDone)
       OnDone(*this);
   }
 

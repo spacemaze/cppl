@@ -114,6 +114,15 @@ int main(int argc, char **argv) {
           .description("Enables verbose mode.")
           .action([&](llvm::StringRef) { Driver.setVerbose(true); })
       .done()
+      .flag()
+          .name("-###")
+          .description(
+              "Toggle dry run mode. "
+              "Prints commands to be executed without "
+              "execution itself."
+          )
+          .action([&](llvm::StringRef) { Driver.setDryRun(); })
+      .done()
       .helpParameter("--help", "Shows this help text.")
       .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
       .run([&] {
