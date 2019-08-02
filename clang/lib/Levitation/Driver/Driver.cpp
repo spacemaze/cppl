@@ -115,10 +115,17 @@ public:
       llvm::SmallVector<SmallString<256>, 8> OwnArgs;
       SinglePath ExecutablePath;
       Args CommandArgs;
+
+      bool Verbose;
       bool DryRun;
 
-      CommandInfo(SinglePath &&executablePath, bool dryRun)
+      CommandInfo(
+          SinglePath &&executablePath,
+          bool verbose,
+          bool dryRun
+      )
       : ExecutablePath(std::move(executablePath)),
+        Verbose(verbose),
         DryRun(dryRun)
       {}
 
@@ -133,38 +140,60 @@ public:
         return CommandArgs;
       }
 
-      static CommandInfo getParse(StringRef BinDir, bool DryRun) {
-        auto Cmd = getBase(BinDir, DryRun);
+      static CommandInfo getParse(
+          StringRef BinDir,
+          bool verbose,
+          bool dryRun
+      ) {
+        auto Cmd = getBase(BinDir, verbose, dryRun);
         Cmd
         .addArg("-levitation-build-ast")
         .addArg("-xc++");
 
         return Cmd;
       }
-      static CommandInfo getInstDecl(StringRef BinDir, bool DryRun) {
-        auto Cmd = getBase(BinDir, DryRun);
+
+      static CommandInfo getInstDecl(
+          StringRef BinDir,
+          bool verbose,
+          bool dryRun
+      ) {
+        auto Cmd = getBase(BinDir, verbose, dryRun);
         Cmd
         .addArg("-flevitation-build-decl")
         .addArg("-emit-pch");
         return Cmd;
       }
-      static CommandInfo getInstObj(StringRef BinDir, bool DryRun) {
-        auto Cmd = getBase(BinDir, DryRun);
+
+      static CommandInfo getInstObj(
+          StringRef BinDir,
+          bool verbose,
+          bool dryRun
+      ) {
+        auto Cmd = getBase(BinDir, verbose, dryRun);
         Cmd
         .addArg("-flevitation-build-object")
         .addArg("-emit-obj");
         return Cmd;
       }
-      static CommandInfo getCompileSrc(StringRef BinDir, bool DryRun) {
-        auto Cmd = getBase(BinDir, DryRun);
+      static CommandInfo getCompileSrc(
+          StringRef BinDir,
+          bool verbose,
+          bool dryRun
+      ) {
+        auto Cmd = getBase(BinDir, verbose, dryRun);
         Cmd
         .addArg("-flevitation-build-object")
         .addArg("-xc++")
         .addArg("-emit-obj");
         return Cmd;
       }
-      static CommandInfo getLink(StringRef BinDir, bool DryRun) {
-        CommandInfo Cmd(getClangPath(BinDir), DryRun);
+      static CommandInfo getLink(
+          StringRef BinDir,
+          bool verbose,
+          bool dryRun
+      ) {
+        CommandInfo Cmd(getClangPath(BinDir), verbose, dryRun);
         Cmd.addArg("-stdlib=libstdc++");
         return Cmd;
       }
@@ -205,35 +234,37 @@ public:
       }
 
       Failable execute() {
-
-        if (DryRun) {
-          executeDryRun();
-          return Failable();
+        if (DryRun || Verbose) {
+          dumpCommand();
         }
 
-        std::string ErrorMessage;
-        bool ExecutionFailed = false;
+        if (!DryRun) {
+          std::string ErrorMessage;
+          bool ExecutionFailed = false;
 
-        llvm::sys::ExecuteAndWait(
-            ExecutablePath,
-            CommandArgs,
-            /*Env*/llvm::None,
-            /*Redirects*/{},
-            /*secondsToWait*/ 0,
-            /*memoryLimit*/ 0,
-            &ErrorMessage,
-            &ExecutionFailed
-        );
+          llvm::sys::ExecuteAndWait(
+              ExecutablePath,
+              CommandArgs,
+              /*Env*/llvm::None,
+              /*Redirects*/{},
+              /*secondsToWait*/ 0,
+              /*memoryLimit*/ 0,
+              &ErrorMessage,
+              &ExecutionFailed
+          );
 
-        Failable Status;
+          Failable Status;
 
-        if (ExecutionFailed) {
-          Status.setFailure() << ErrorMessage;
-        } else if (ErrorMessage.size()) {
-          Status.setWarning() << ErrorMessage;
+          if (ExecutionFailed) {
+            Status.setFailure() << ErrorMessage;
+          } else if (ErrorMessage.size()) {
+            Status.setWarning() << ErrorMessage;
+          }
+
+          return Status;
         }
 
-        return Status;
+        return Failable();
       }
   protected:
 
@@ -250,8 +281,12 @@ public:
         return SinglePath(ClangBin);
       }
 
-      static CommandInfo getBase(llvm::StringRef BinDir, bool DryRun) {
-        CommandInfo Cmd(getClangPath(BinDir), DryRun);
+      static CommandInfo getBase(
+          llvm::StringRef BinDir,
+          bool verbose,
+          bool dryRun
+      ) {
+        CommandInfo Cmd(getClangPath(BinDir), verbose, dryRun);
         Cmd.setupCCFlags();
         return Cmd;
       }
@@ -262,7 +297,7 @@ public:
         .addArg("-stdlib=libstdc++");
       }
 
-      void executeDryRun() {
+      void dumpCommand() {
 
         auto &Out = log::Logger::get().info();
 
@@ -287,18 +322,22 @@ public:
     if (!DryRun || Verbose)
       dumpParse(OutASTFile, OutLDepsFile, SourceFile);
 
-    auto ExecutionStatus = CommandInfo::getParse(BinDir, DryRun)
-            .addKVArgEq(
-                    "-levitation-sources-root-dir",
-                    SourcesRoot
-            )
-            .addKVArgEq(
-                    "-levitation-deps-output-file",
-                    OutLDepsFile
-            )
-            .addArg(SourceFile)
-            .addKVArgSpace("-o", OutASTFile)
-        .execute();
+    ;
+
+    auto ExecutionStatus = CommandInfo::getParse(
+        BinDir, Verbose, DryRun
+    )
+    .addKVArgEq(
+        "-levitation-sources-root-dir",
+        SourcesRoot
+    )
+    .addKVArgEq(
+        "-levitation-deps-output-file",
+        OutLDepsFile
+    )
+    .addArg(SourceFile)
+    .addKVArgSpace("-o", OutASTFile)
+    .execute();
 
     return processStatus(ExecutionStatus);
   }
@@ -316,11 +355,13 @@ public:
     if (!DryRun || Verbose)
       dumpInstantiateDecl(OutDeclASTFile, InputObject, Deps);
 
-    auto ExecutionStatus = CommandInfo::getInstDecl(BinDir, DryRun)
-            .addKVArgsEq("-levitation-dependency", Deps)
-            .addArg(InputObject)
-            .addKVArgSpace("-o", OutDeclASTFile)
-        .execute();
+    auto ExecutionStatus = CommandInfo::getInstDecl(
+        BinDir, Verbose, DryRun
+    )
+    .addKVArgsEq("-levitation-dependency", Deps)
+    .addArg(InputObject)
+    .addKVArgSpace("-o", OutDeclASTFile)
+    .execute();
 
     return processStatus(ExecutionStatus);
   }
@@ -339,11 +380,13 @@ public:
     if (!DryRun || Verbose)
       dumpInstantiateObject(OutObjFile, InputObject, Deps);
 
-    auto ExecutionStatus = CommandInfo::getInstObj(BinDir, DryRun)
-            .addKVArgsEq("-levitation-dependency", Deps)
-            .addArg(InputObject)
-            .addKVArgSpace("-o", OutObjFile)
-        .execute();
+    auto ExecutionStatus = CommandInfo::getInstObj(
+        BinDir, Verbose, DryRun
+    )
+    .addKVArgsEq("-levitation-dependency", Deps)
+    .addArg(InputObject)
+    .addKVArgSpace("-o", OutObjFile)
+    .execute();
 
     return processStatus(ExecutionStatus);
   }
@@ -363,11 +406,13 @@ public:
     if (!DryRun || Verbose)
       dumpCompileMain(OutObjFile, InputObject, Deps);
 
-    auto ExecutionStatus = CommandInfo::getCompileSrc(BinDir, DryRun)
-            .addKVArgsEq("-levitation-dependency", Deps)
-            .addArg(InputObject)
-            .addKVArgSpace("-o", OutObjFile)
-        .execute();
+    auto ExecutionStatus = CommandInfo::getCompileSrc(
+        BinDir, Verbose, DryRun
+    )
+    .addKVArgsEq("-levitation-dependency", Deps)
+    .addArg(InputObject)
+    .addKVArgSpace("-o", OutObjFile)
+    .execute();
 
     return processStatus(ExecutionStatus);
   }
@@ -385,10 +430,12 @@ public:
     if (!DryRun || Verbose)
       dumpLink(OutputFile, ObjectFiles);
 
-    auto ExecutionStatus = CommandInfo::getLink(BinDir, DryRun)
-        .addArgs(ObjectFiles)
-        .addKVArgSpace("-o", OutputFile)
-        .execute();
+    auto ExecutionStatus = CommandInfo::getLink(
+        BinDir, Verbose, DryRun
+    )
+    .addArgs(ObjectFiles)
+    .addKVArgSpace("-o", OutputFile)
+    .execute();
 
     return true;
   }
@@ -437,7 +484,6 @@ protected:
 
     dumpInstantiate(OutObjFile, InputObject, Deps, "MAIN OBJ ", "object");
   }
-
 
   static void dumpInstantiate(
       StringRef OutDeclASTFile,
