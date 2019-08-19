@@ -86,6 +86,25 @@ using namespace llvm;
       llvm::sys::path::replace_extension(Res, Extension);
       return Res;
     }
+
+    /// Builds path out of parent directory and relative path
+    /// \tparam SmallStringT type which reprents path
+    /// \param ParentDir Parent directory to be added in the beginning
+    /// \param SrcRel Relative path
+    /// \return
+    template <typename SmallStringT>
+    static SmallStringT getPath(
+        StringRef ParentDir, StringRef SrcRel
+    ) {
+      assert(
+          llvm::sys::path::is_relative(SrcRel) &&
+          "Path should be relative"
+      );
+
+      SmallStringT Res = ParentDir;
+      llvm::sys::path::append(Res, SrcRel);
+      return Res;
+    }
   };
 }
 }

@@ -39,6 +39,7 @@ namespace clang { namespace levitation { namespace tools {
     llvm::StringRef MainSource = DriverDefaults::MAIN_SOURCE;
 
     llvm::StringRef PreambleSource;
+    levitation::SinglePath PreambleOutput;
 
     int JobsNumber = DriverDefaults::JOBS_NUMBER;
 
@@ -49,6 +50,7 @@ namespace clang { namespace levitation { namespace tools {
 
     bool DryRun;
 
+    Args ExtraPreambleArgs;
     Args ExtraParseArgs;
     Args ExtraCodeGenArgs;
     Args ExtraLinkerArgs;

@@ -93,6 +93,7 @@ public:
     TM(TasksManager::get())
   {}
 
+  void buildPreamble();
   void runParse();
   void solveDependencies();
   void instantiateAndCodeGen();
@@ -142,25 +143,45 @@ public:
       return CommandArgs;
     }
 
-    static CommandInfo getParse(
+    static CommandInfo getBuildPreamble(
         StringRef BinDir,
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getBase(BinDir, verbose, dryRun);
+      auto Cmd = getBase(
+          BinDir,
+          /*PrecompiledPreamble=*/ "",
+          verbose,
+          dryRun
+      );
+
+      Cmd
+      .addArg("-xc++")
+      .addArg("-levitation-build-preamble");
+
+      return Cmd;
+    }
+
+    static CommandInfo getParse(
+        StringRef BinDir,
+        StringRef PrecompiledPreamble,
+        bool verbose,
+        bool dryRun
+    ) {
+      auto Cmd = getBase(BinDir, PrecompiledPreamble, verbose, dryRun);
       Cmd
       .addArg("-levitation-build-ast")
       .addArg("-xc++");
 
       return Cmd;
     }
-
     static CommandInfo getInstDecl(
         StringRef BinDir,
+        StringRef PrecompiledPreamble,
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getBase(BinDir, verbose, dryRun);
+      auto Cmd = getBase(BinDir, PrecompiledPreamble, verbose, dryRun);
       Cmd
       .addArg("-flevitation-build-decl")
       .addArg("-emit-pch");
@@ -169,10 +190,11 @@ public:
 
     static CommandInfo getInstObj(
         StringRef BinDir,
+        StringRef PrecompiledPreamble,
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getBase(BinDir, verbose, dryRun);
+      auto Cmd = getBase(BinDir, PrecompiledPreamble, verbose, dryRun);
       Cmd
       .addArg("-flevitation-build-object")
       .addArg("-emit-obj");
@@ -180,10 +202,11 @@ public:
     }
     static CommandInfo getCompileSrc(
         StringRef BinDir,
+        StringRef PrecompiledPreamble,
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getBase(BinDir, verbose, dryRun);
+      auto Cmd = getBase(BinDir, PrecompiledPreamble, verbose, dryRun);
       Cmd
       .addArg("-flevitation-build-object")
       .addArg("-xc++")
@@ -195,7 +218,7 @@ public:
         bool verbose,
         bool dryRun
     ) {
-      CommandInfo Cmd(getClangPath(BinDir), verbose, dryRun);
+      CommandInfo Cmd(getClangXXPath(BinDir), verbose, dryRun);
       Cmd.addArg("-stdlib=libstdc++");
       return Cmd;
     }
@@ -282,13 +305,31 @@ public:
       return SinglePath(ClangBin);
     }
 
+    static SinglePath getClangXXPath(llvm::StringRef BinDir) {
+
+      const char *ClangBin = "clang++";
+
+      if (BinDir.size()) {
+        SinglePath P = BinDir;
+        llvm::sys::path::append(P, ClangBin);
+        return P;
+      }
+
+      return SinglePath(ClangBin);
+    }
+
     static CommandInfo getBase(
         llvm::StringRef BinDir,
+        llvm::StringRef PrecompiledPreamble,
         bool verbose,
         bool dryRun
     ) {
       CommandInfo Cmd(getClangPath(BinDir), verbose, dryRun);
       Cmd.setupCCFlags();
+
+      if (PrecompiledPreamble.size())
+        Cmd.addKVArgEq("-levitation-preamble", PrecompiledPreamble);
+
       return Cmd;
     }
 
@@ -302,9 +343,11 @@ public:
 
       auto &Out = log::Logger::get().info();
 
-      Out << ExecutablePath;
-      for (auto Arg : CommandArgs)
-        Out << " " << Arg;
+      for (unsigned i = 0, e = CommandArgs.size(); i != e; ++i) {
+        if (i != 0)
+          Out << " ";
+        Out << CommandArgs[i];
+      }
 
       Out << "\n";
     }
@@ -312,6 +355,7 @@ public:
 
   static bool parse(
       StringRef BinDir,
+      StringRef PrecompiledPreamble,
       StringRef OutASTFile,
       StringRef OutLDepsFile,
       StringRef SourceFile,
@@ -323,10 +367,8 @@ public:
     if (!DryRun || Verbose)
       dumpParse(OutASTFile, OutLDepsFile, SourceFile);
 
-    ;
-
     auto ExecutionStatus = CommandInfo::getParse(
-        BinDir, Verbose, DryRun
+        BinDir, PrecompiledPreamble, Verbose, DryRun
     )
     .addKVArgEq(
         "-levitation-sources-root-dir",
@@ -345,6 +387,7 @@ public:
 
   static bool instantiateDecl(
       StringRef BinDir,
+      StringRef PrecompiledPreamble,
       StringRef OutDeclASTFile,
       StringRef InputObject,
       const Paths &Deps,
@@ -357,7 +400,7 @@ public:
       dumpInstantiateDecl(OutDeclASTFile, InputObject, Deps);
 
     auto ExecutionStatus = CommandInfo::getInstDecl(
-        BinDir, Verbose, DryRun
+        BinDir, PrecompiledPreamble, Verbose, DryRun
     )
     .addKVArgsEq("-levitation-dependency", Deps)
     .addArg(InputObject)
@@ -369,6 +412,7 @@ public:
 
   static bool instantiateObject(
       StringRef BinDir,
+      StringRef PrecompiledPreamble,
       StringRef OutObjFile,
       StringRef InputObject,
       const Paths &Deps,
@@ -382,7 +426,7 @@ public:
       dumpInstantiateObject(OutObjFile, InputObject, Deps);
 
     auto ExecutionStatus = CommandInfo::getInstObj(
-        BinDir, Verbose, DryRun
+        BinDir, PrecompiledPreamble, Verbose, DryRun
     )
     .addKVArgsEq("-levitation-dependency", Deps)
     .addArg(InputObject)
@@ -392,8 +436,33 @@ public:
     return processStatus(ExecutionStatus);
   }
 
+  static bool buildPreamble(
+      StringRef BinDir,
+      StringRef PreambleSource,
+      StringRef PCHOutput,
+      const LevitationDriver::Args &ExtraPreambleArgs,
+      bool Verbose,
+      bool DryRun
+  ) {
+    assert(PreambleSource.size() && PCHOutput.size());
+
+    if (!DryRun || Verbose)
+      dumpBuildPreamble(PreambleSource, PCHOutput);
+
+    auto ExecutionStatus = CommandInfo::getBuildPreamble(
+        BinDir, Verbose, DryRun
+    )
+    .addArg(PreambleSource)
+    .addKVArgSpace("-o", PCHOutput)
+    .addArgs(ExtraPreambleArgs)
+    .execute();
+
+    return processStatus(ExecutionStatus);
+  }
+
   static bool compileMain(
       StringRef BinDir,
+      StringRef PrecompiledPreamble,
       StringRef OutObjFile,
       StringRef InputObject,
       const Paths &Deps,
@@ -408,7 +477,7 @@ public:
       dumpCompileMain(OutObjFile, InputObject, Deps);
 
     auto ExecutionStatus = CommandInfo::getCompileSrc(
-        BinDir, Verbose, DryRun
+        BinDir, PrecompiledPreamble, Verbose, DryRun
     )
     .addKVArgsEq("-levitation-dependency", Deps)
     .addArg(InputObject)
@@ -442,6 +511,16 @@ public:
   }
 
 protected:
+
+  static void dumpBuildPreamble(
+      StringRef PreambleSource,
+      StringRef PreambleOut
+  ) {
+    auto &LogInfo = log::Logger::get().info();
+    LogInfo
+    << "PREAMBLE " << PreambleSource << " -> "
+    << "preamble out: " << PreambleOut << "\n";
+  }
 
   static void dumpParse(
       StringRef OutASTFile,
@@ -563,6 +642,34 @@ protected:
   }
 };
 
+void LevitationDriverImpl::buildPreamble() {
+  if (!Status.isValid())
+    return;
+
+  if (!Context.Driver.isPreambleCompilationRequested())
+    return;
+
+  if (Context.Driver.PreambleOutput.empty()) {
+    Context.Driver.PreambleOutput = levitation::Path::getPath<SinglePath>(
+      Context.Driver.BuildRoot,
+      DriverDefaults::PREAMBLE_OUT
+    );
+  }
+
+  auto Res = Commands::buildPreamble(
+    Context.Driver.BinDir,
+    Context.Driver.PreambleSource,
+    Context.Driver.PreambleOutput,
+    Context.Driver.ExtraPreambleArgs,
+    Context.Driver.Verbose,
+    Context.Driver.DryRun
+  );
+
+  if (!Res)
+    Status.setFailure()
+    << "Preamble: phase failed";
+}
+
 void LevitationDriverImpl::runParse() {
   auto &TM = TasksManager::get();
 
@@ -573,6 +680,7 @@ void LevitationDriverImpl::runParse() {
     TM.addTask([=] (TasksManager::TaskContext &TC) {
       TC.Successful = Commands::parse(
           Context.Driver.BinDir,
+          Context.Driver.PreambleOutput,
           Files.AST,
           Files.LDeps,
           Files.Source,
@@ -790,6 +898,7 @@ bool LevitationDriverImpl::processDependencyNode(
     case DependenciesGraph::NodeKind::Declaration:
       return Commands::instantiateDecl(
           Context.Driver.BinDir,
+          Context.Driver.PreambleOutput,
           Files.DeclAST,
           Files.AST,
           fullDependencies,
@@ -801,6 +910,7 @@ bool LevitationDriverImpl::processDependencyNode(
       if (N.PackageInfo->IsMainFile) {
         return Commands::compileMain(
           Context.Driver.BinDir,
+          Context.Driver.PreambleOutput,
           Files.Object,
           Files.Source,
           fullDependencies,
@@ -812,6 +922,7 @@ bool LevitationDriverImpl::processDependencyNode(
       } else {
         return Commands::instantiateObject(
           Context.Driver.BinDir,
+          Context.Driver.PreambleOutput,
           Files.Object,
           Files.AST,
           fullDependencies,
@@ -856,6 +967,7 @@ bool LevitationDriver::run() {
   LevitationDriverImpl Impl(Context);
 
   Impl.collectSources();
+  Impl.buildPreamble();
   Impl.runParse();
   Impl.solveDependencies();
   Impl.addMainFileInfo();
