@@ -143,6 +143,11 @@ namespace clang { namespace levitation { namespace tools {
       DryRun = true;
     }
 
+    void setExtraPreambleArgs(StringRef Args);
+    void setExtraParserArgs(StringRef Args);
+    void setExtraCodeGenArgs(StringRef Args);
+    void setExtraLinkerArgs(StringRef Args);
+
     bool run();
 
     friend class LevitationDriverImpl;
@@ -151,6 +156,7 @@ namespace clang { namespace levitation { namespace tools {
 
     void initParameters();
     void dumpParameters();
+    void dumpExtraFlags(StringRef Phase, const Args &args);
   };
 }}}
 

@@ -123,6 +123,30 @@ int main(int argc, char **argv) {
           )
           .action([&](llvm::StringRef) { Driver.setDryRun(); })
       .done()
+      .optional(
+          "-FH", "<args>",
+          "Extra args for preamble phase. Those flags are passed directly to"
+          "frontend tool (clang -cc1).",
+          [&](StringRef v) { Driver.setExtraPreambleArgs(v); }
+      )
+      .optional(
+          "-FP", "<args>",
+          "Extra args for parser phase. Those flags are passed directly to"
+          "frontend tool (clang -cc1).",
+          [&](StringRef v) { Driver.setExtraParserArgs(v); }
+      )
+      .optional(
+          "-FC", "<args>",
+          "Extra args for codegen phase. Those flags are passed directly to"
+          "frontend tool (clang -cc1).",
+          [&](StringRef v) { Driver.setExtraCodeGenArgs(v); }
+      )
+      .optional(
+          "-FL", "<args>",
+          "Extra args for link phase. Those flags are passed directly to"
+          "frontend tool (clang -cc1).",
+          [&](StringRef v) { Driver.setExtraLinkerArgs(v); }
+      )
       .helpParameter("--help", "Shows this help text.")
       .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
       .run([&] {

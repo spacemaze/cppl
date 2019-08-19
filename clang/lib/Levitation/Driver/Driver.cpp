@@ -109,6 +109,140 @@ public:
 };
 
 /*static*/
+class ArgsUtils {
+
+  enum class QuoteType {
+      None,
+      SingleQuote,
+      DoubleQuote
+  };
+
+  class ArgsBuilder {
+    StringRef ArgsString;
+    LevitationDriver::Args Args;
+
+    std::size_t ArgStart;
+    std::size_t ArgEnd;
+    llvm::SmallVector<size_t, 16> ArgEscapes;
+
+    QuoteType QuoteOpened = QuoteType::None;
+    bool EscapeOn = false;
+
+    bool isCurArgEmpty() const {
+      return ArgStart == ArgEnd;
+    }
+
+    bool isQuoteOpened() const {
+      return QuoteOpened != QuoteType::None;
+    }
+
+    void newStartPos() {
+      ++ArgEnd;
+      ++ArgStart;
+    }
+
+    void addSymbol() {
+      ++ArgEnd;
+    }
+
+    void skipSymbolAsEscape() {
+      auto CurSymbol = ArgEnd++;
+      ArgEscapes.push_back(CurSymbol);
+    }
+
+  public:
+
+    ArgsBuilder(StringRef argsString)
+    : ArgsString(argsString)
+    {}
+
+    void onQuote(QuoteType quoteType) {
+      if (!isQuoteOpened()) {
+        QuoteOpened = quoteType;
+
+        if (!isCurArgEmpty()) {
+          onRegularSymbol();
+          return;
+        }
+
+        newStartPos();
+
+      } if (QuoteOpened == quoteType) {
+        QuoteOpened = QuoteType::None;
+
+        // In case if quote symbol will turned out to be last
+        // one before space, it will be truncated
+        addSymbol();
+      }
+    }
+
+    void onEscape() {
+      if (EscapeOn) {
+        addSymbol();
+        EscapeOn = false;
+        return;
+      }
+
+      EscapeOn = true;
+      skipSymbolAsEscape();
+    }
+
+    void onRegularSymbol() {
+      addSymbol();
+    }
+
+    void onSpace() {
+      // TODO
+      // if (QuoteOpened != QuoteType )
+    }
+
+    LevitationDriver::Args && detachArgs();
+  };
+public:
+  static LevitationDriver::Args parse(StringRef S) {
+    ArgsBuilder Builder(S);
+    for (unsigned i = 0, e = S.size(); i != e; ++i) {
+      char Symbol = S[i];
+
+      switch (Symbol) {
+        case '"':
+          Builder.onQuote(QuoteType::DoubleQuote);
+          break;
+
+        case '\'':
+          Builder.onQuote(QuoteType::SingleQuote);
+          break;
+
+        case '\\':
+          Builder.onEscape();
+          break;
+
+        case ' ':
+          Builder.onSpace();
+          break;
+
+        default:
+          Builder.onRegularSymbol();
+      }
+    }
+
+    return Builder.detachArgs();
+  }
+
+  static void dump(
+      llvm::raw_ostream& Out,
+      const LevitationDriver::Args &Args
+  ) {
+    for (unsigned i = 0, e = Args.size(); i != e; ++i) {
+      if (i != 0)
+        Out << " ";
+      Out << Args[i];
+    }
+    Out << "\n";
+  }
+};
+
+/*static*/
 class Commands {
 public:
   class CommandInfo {
@@ -967,6 +1101,22 @@ LevitationDriver::LevitationDriver(StringRef CommandPath)
   BinDir = llvm::sys::path::parent_path(P);
 }
 
+void LevitationDriver::setExtraPreambleArgs(StringRef Args) {
+  // ExtraPreambleArgs = ArgsUtils::parse(Args);
+}
+
+void LevitationDriver::setExtraParserArgs(StringRef Args) {
+  // ExtraParseArgs = ArgsUtils::parse(Args);
+}
+
+void LevitationDriver::setExtraCodeGenArgs(StringRef Args) {
+  // ExtraCodeGenArgs = ArgsUtils::parse(Args);
+}
+
+void LevitationDriver::setExtraLinkerArgs(StringRef Args) {
+  // ExtraLinkerArgs = ArgsUtils::parse(Args);
+}
+
 bool LevitationDriver::run() {
 
   log::Logger::createLogger(log::Level::Info);
@@ -1029,6 +1179,24 @@ void LevitationDriver::dumpParameters() {
   << "    OutputHeader: " << (OutputHeader.empty() ? "<header creation not requested>" : OutputHeader) << "\n"
   << "    DryRun: " << (DryRun ? "yes" : "no") << "\n"
   << "\n";
+
+  dumpExtraFlags("Preamble", ExtraPreambleArgs);
+  dumpExtraFlags("Parse", ExtraParseArgs);
+  dumpExtraFlags("CodeGen", ExtraCodeGenArgs);
+  dumpExtraFlags("Link", ExtraLinkerArgs);
+}
+
+void LevitationDriver::dumpExtraFlags(StringRef Phase, const Args &args) {
+  auto &Out = log::Logger::get().verbose();
+
+  Out
+  << "Extra args, phase '" << Phase << "':\n"
+  << "  \"";
+
+  ArgsUtils::dump(Out, args);
+
+  Out
+  << "\"";
 }
 
 }}}
