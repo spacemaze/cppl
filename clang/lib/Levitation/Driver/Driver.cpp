@@ -367,6 +367,9 @@ public:
     if (!DryRun || Verbose)
       dumpParse(OutASTFile, OutLDepsFile, SourceFile);
 
+    levitation::Path::createDirsForFile(OutASTFile);
+    levitation::Path::createDirsForFile(OutLDepsFile);
+
     auto ExecutionStatus = CommandInfo::getParse(
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
@@ -399,6 +402,8 @@ public:
     if (!DryRun || Verbose)
       dumpInstantiateDecl(OutDeclASTFile, InputObject, Deps);
 
+    levitation::Path::createDirsForFile(OutDeclASTFile);
+
     auto ExecutionStatus = CommandInfo::getInstDecl(
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
@@ -425,6 +430,8 @@ public:
     if (!DryRun || Verbose)
       dumpInstantiateObject(OutObjFile, InputObject, Deps);
 
+    levitation::Path::createDirsForFile(OutObjFile);
+
     auto ExecutionStatus = CommandInfo::getInstObj(
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
@@ -448,6 +455,8 @@ public:
 
     if (!DryRun || Verbose)
       dumpBuildPreamble(PreambleSource, PCHOutput);
+
+    levitation::Path::createDirsForFile(PCHOutput);
 
     auto ExecutionStatus = CommandInfo::getBuildPreamble(
         BinDir, Verbose, DryRun
@@ -476,6 +485,8 @@ public:
     if (!DryRun || Verbose)
       dumpCompileMain(OutObjFile, InputObject, Deps);
 
+    levitation::Path::createDirsForFile(OutObjFile);
+
     auto ExecutionStatus = CommandInfo::getCompileSrc(
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
@@ -499,6 +510,8 @@ public:
 
     if (!DryRun || Verbose)
       dumpLink(OutputFile, ObjectFiles);
+
+    levitation::Path::createDirsForFile(OutputFile);
 
     auto ExecutionStatus = CommandInfo::getLink(
         BinDir, Verbose, DryRun

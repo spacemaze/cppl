@@ -105,6 +105,11 @@ using namespace llvm;
       llvm::sys::path::append(Res, SrcRel);
       return Res;
     }
+
+    static void createDirsForFile(StringRef FilePath) {
+      auto Parent = llvm::sys::path::parent_path(FilePath);
+      llvm::sys::fs::create_directories(Parent);
+    }
   };
 }
 }
