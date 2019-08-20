@@ -17,8 +17,10 @@
 #define LLVM_LEVITATION_DRIVER_H
 
 #include "clang/Levitation/Common/Path.h"
+#include "clang/Levitation/Common/StringOrRef.h"
 #include "clang/Levitation/Driver/DriverDefaults.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
 
 namespace clang { namespace levitation { namespace log {
   class Logger;
@@ -28,7 +30,7 @@ namespace clang { namespace levitation { namespace tools {
 
   class LevitationDriver {
   public:
-    using Args = llvm::SmallVector<llvm::StringRef, 8>;
+    using Args = llvm::SmallVector<StringOrRef, 8>;
   private:
 
     bool Verbose = false;

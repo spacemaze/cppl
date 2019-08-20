@@ -121,8 +121,8 @@ class ArgsUtils {
     StringRef ArgsString;
     LevitationDriver::Args Args;
 
-    std::size_t ArgStart;
-    std::size_t ArgEnd;
+    std::size_t ArgStart = 0;
+    std::size_t ArgEnd = 0;
     llvm::SmallVector<size_t, 16> ArgEscapes;
 
     QuoteType QuoteOpened = QuoteType::None;
@@ -150,11 +150,36 @@ class ArgsUtils {
       ArgEscapes.push_back(CurSymbol);
     }
 
+    void commitArg() {
+
+      if (isCurArgEmpty()) {
+        newStartPos();
+        return;
+      }
+
+      if (ArgEscapes.empty()) {
+        Args.emplace_back(ArgsString.substr(ArgStart, ArgEnd - ArgStart));
+        return;
+      }
+
+      Twine Arg(ArgsString.substr(ArgStart, ArgEscapes[0] - ArgStart));
+
+      for (size_t i = 1, e = ArgEscapes.size(); i != e; ++i) {
+        size_t Start = ArgEscapes[i-1] + 1;
+        size_t End = ArgEscapes[i];
+        Arg.concat(ArgsString.substr(Start, End - Start));
+      }
+
+      Args.push_back(Arg.str());
+    }
+
   public:
 
     ArgsBuilder(StringRef argsString)
     : ArgsString(argsString)
     {}
+
+    ~ArgsBuilder() {}
 
     void onQuote(QuoteType quoteType) {
       if (!isQuoteOpened()) {
@@ -192,15 +217,23 @@ class ArgsUtils {
     }
 
     void onSpace() {
-      // TODO
-      // if (QuoteOpened != QuoteType )
+      if (QuoteOpened != QuoteType::None || EscapeOn) {
+        addSymbol();
+        return;
+      }
+
+      commitArg();
     }
 
-    LevitationDriver::Args && detachArgs();
+    void detachArgsTo(LevitationDriver::Args &Dest) {
+      commitArg();
+      Dest.swap(Args);
+    }
   };
 public:
   static LevitationDriver::Args parse(StringRef S) {
     ArgsBuilder Builder(S);
+
     for (unsigned i = 0, e = S.size(); i != e; ++i) {
       char Symbol = S[i];
 
@@ -226,19 +259,36 @@ public:
       }
     }
 
-    return Builder.detachArgs();
+    LevitationDriver::Args Res;
+    Builder.detachArgsTo(Res);
+    return Res;
+  }
+
+  static SmallVector<StringRef, 16> toStringRefArgs(
+      const LevitationDriver::Args &InputArgs
+  ) {
+    SmallVector<StringRef, 16> Args;
+    Args.reserve(InputArgs.size());
+
+    for (const auto &A : InputArgs) {
+      Args.push_back(A);
+    }
+
+    return Args;
   }
 
   static void dump(
       llvm::raw_ostream& Out,
       const LevitationDriver::Args &Args
   ) {
+    if (Args.empty())
+      return;
+
     for (unsigned i = 0, e = Args.size(); i != e; ++i) {
       if (i != 0)
         Out << " ";
       Out << Args[i];
     }
-    Out << "\n";
   }
 };
 
@@ -358,27 +408,26 @@ public:
     }
 
     CommandInfo& addArg(StringRef Arg) {
-      CommandArgs.push_back(Arg);
+      CommandArgs.emplace_back(Arg);
       return *this;
     }
 
     CommandInfo& addKVArgSpace(StringRef Arg, StringRef Value) {
-      CommandArgs.push_back(Arg);
-      CommandArgs.push_back(Value);
+      CommandArgs.emplace_back(Arg);
+      CommandArgs.emplace_back(Value);
       return *this;
     }
 
     CommandInfo& addKVArgEq(StringRef Arg, StringRef Value) {
       OwnArgs.emplace_back((Arg + "=" + Value).str());
-      CommandArgs.push_back(OwnArgs.back());
+      CommandArgs.emplace_back(OwnArgs.back());
       return *this;
     }
 
     template <typename ValuesT>
-    CommandInfo& addArgs(const ValuesT Values) {
+    CommandInfo& addArgs(const ValuesT& Values) {
       for (const auto &Value : Values) {
-        OwnArgs.emplace_back(Value);
-        CommandArgs.push_back(OwnArgs.back());
+        CommandArgs.emplace_back(Value);
       }
       return *this;
     }
@@ -387,7 +436,7 @@ public:
     CommandInfo& addKVArgsEq(StringRef Name, const ValuesT Values) {
       for (const auto &Value : Values) {
         OwnArgs.emplace_back((Name + "=" + Value).str());
-        CommandArgs.push_back(OwnArgs.back());
+        CommandArgs.emplace_back(OwnArgs.back());
       }
       return *this;
     }
@@ -400,9 +449,11 @@ public:
       if (!DryRun) {
         std::string ErrorMessage;
 
+        auto Args = ArgsUtils::toStringRefArgs(CommandArgs);
+
         int Res = llvm::sys::ExecuteAndWait(
             ExecutablePath,
-            CommandArgs,
+            Args,
             /*Env*/llvm::None,
             /*Redirects*/{},
             /*secondsToWait*/ 0,
@@ -425,6 +476,15 @@ public:
       return Failable();
     }
   protected:
+
+    template <typename ValueT>
+    void addOwnArg(const ValueT& V) {
+      OwnArgs.emplace_back(V);
+    }
+
+    void addOwnArg(const Twine& V) {
+      OwnArgs.emplace_back(V.str());
+    }
 
     static SinglePath getClangPath(llvm::StringRef BinDir) {
 
@@ -1102,19 +1162,19 @@ LevitationDriver::LevitationDriver(StringRef CommandPath)
 }
 
 void LevitationDriver::setExtraPreambleArgs(StringRef Args) {
-  // ExtraPreambleArgs = ArgsUtils::parse(Args);
+  ExtraPreambleArgs = ArgsUtils::parse(Args);
 }
 
 void LevitationDriver::setExtraParserArgs(StringRef Args) {
-  // ExtraParseArgs = ArgsUtils::parse(Args);
+  ExtraParseArgs = ArgsUtils::parse(Args);
 }
 
 void LevitationDriver::setExtraCodeGenArgs(StringRef Args) {
-  // ExtraCodeGenArgs = ArgsUtils::parse(Args);
+  ExtraCodeGenArgs = ArgsUtils::parse(Args);
 }
 
 void LevitationDriver::setExtraLinkerArgs(StringRef Args) {
-  // ExtraLinkerArgs = ArgsUtils::parse(Args);
+  ExtraLinkerArgs = ArgsUtils::parse(Args);
 }
 
 bool LevitationDriver::run() {
@@ -1167,7 +1227,10 @@ void LevitationDriver::initParameters() {
 }
 
 void LevitationDriver::dumpParameters() {
-  log::Logger::get().verbose()
+
+  auto &Out = log::Logger::get().verbose();
+
+  Out
   << "\n"
   << "  Running driver with following parameters:\n\n"
   << "    BinaryDir: " << BinDir << "\n"
@@ -1184,9 +1247,15 @@ void LevitationDriver::dumpParameters() {
   dumpExtraFlags("Parse", ExtraParseArgs);
   dumpExtraFlags("CodeGen", ExtraCodeGenArgs);
   dumpExtraFlags("Link", ExtraLinkerArgs);
+
+  Out << "\n";
 }
 
 void LevitationDriver::dumpExtraFlags(StringRef Phase, const Args &args) {
+
+  if (args.empty())
+    return;
+
   auto &Out = log::Logger::get().verbose();
 
   Out
@@ -1196,7 +1265,7 @@ void LevitationDriver::dumpExtraFlags(StringRef Phase, const Args &args) {
   ArgsUtils::dump(Out, args);
 
   Out
-  << "\"";
+  << "\"\n";
 }
 
 }}}

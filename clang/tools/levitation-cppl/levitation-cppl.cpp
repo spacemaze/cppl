@@ -123,30 +123,46 @@ int main(int argc, char **argv) {
           )
           .action([&](llvm::StringRef) { Driver.setDryRun(); })
       .done()
-      .optional(
-          "-FH", "<args>",
-          "Extra args for preamble phase. Those flags are passed directly to"
-          "frontend tool (clang -cc1).",
-          [&](StringRef v) { Driver.setExtraPreambleArgs(v); }
-      )
-      .optional(
-          "-FP", "<args>",
-          "Extra args for parser phase. Those flags are passed directly to"
-          "frontend tool (clang -cc1).",
-          [&](StringRef v) { Driver.setExtraParserArgs(v); }
-      )
-      .optional(
-          "-FC", "<args>",
-          "Extra args for codegen phase. Those flags are passed directly to"
-          "frontend tool (clang -cc1).",
-          [&](StringRef v) { Driver.setExtraCodeGenArgs(v); }
-      )
-      .optional(
-          "-FL", "<args>",
-          "Extra args for link phase. Those flags are passed directly to"
-          "frontend tool (clang -cc1).",
-          [&](StringRef v) { Driver.setExtraLinkerArgs(v); }
-      )
+      .optional()
+          .name("-FH")
+          .valueHint("<args>")
+          .description(
+              "Extra args for preamble phase. Those flags are passed"
+              "directly to frontend tool (clang -cc1)."
+          )
+          .useParser<KeySpaceValueParser>()
+          .action([&](StringRef v) { Driver.setExtraPreambleArgs(v); })
+      .done()
+      .optional()
+          .name("-FP")
+          .valueHint("<args>")
+          .description(
+              "Extra args for parser phase. Those flags are passed"
+              "directly to frontend tool (clang -cc1)."
+          )
+          .useParser<KeySpaceValueParser>()
+          .action([&](StringRef v) { Driver.setExtraParserArgs(v); })
+      .done()
+      .optional()
+          .name("-FC")
+          .valueHint("<args>")
+          .description(
+              "Extra args for codegen phase. Those flags are passed"
+              "directly to frontend tool (clang -cc1)."
+          )
+          .useParser<KeySpaceValueParser>()
+          .action([&](StringRef v) { Driver.setExtraCodeGenArgs(v); })
+      .done()
+      .optional()
+          .name("-FL")
+          .valueHint("<args>")
+          .description(
+              "Extra args for link phase. Those flags are passed"
+              "directly to frontend tool (clang -cc1)."
+          )
+          .useParser<KeySpaceValueParser>()
+          .action([&](StringRef v) { Driver.setExtraLinkerArgs(v); })
+      .done()
       .helpParameter("--help", "Shows this help text.")
       .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
       .run([&] {
