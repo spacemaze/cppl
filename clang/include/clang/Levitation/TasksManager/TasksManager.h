@@ -56,7 +56,7 @@ protected:
 
 public:
 
-  TaskID addTask(ActionFn &&Fn) {
+  TaskID addTask(ActionFn &&Fn, bool SameThread = false) {
     // TODO Levitation: it is still not implemented
     // Current implementation is a stub
     TaskContext &TC = registerTask();

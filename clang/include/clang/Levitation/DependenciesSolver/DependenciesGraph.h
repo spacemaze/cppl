@@ -378,7 +378,8 @@ protected:
 
     tasks::TasksManager::TaskID getJobForNode(
         NodeID::Type NID,
-        tasks::TasksManager::ActionFn &&Fn
+        tasks::TasksManager::ActionFn &&Fn,
+        bool SameThread
     ) {
       Mutex.lock();
       with (levitation::make_scope_exit([=] { Mutex.unlock(); } )) {
@@ -387,7 +388,7 @@ protected:
 
         if (Found == Tasks.end()) {
           auto &TM = tasks::TasksManager::get();
-          auto TID = TM.addTask(std::move(Fn));
+          auto TID = TM.addTask(std::move(Fn), SameThread);
 
           auto Res = Tasks.insert({NID, TID});
           assert(Res.second);
@@ -417,10 +418,10 @@ protected:
 
       tasks::TasksManager::TasksSet NodeTasks;
 
-      // Note: Whe we can't process first subnode out of task manager?
-      // Because that subnode may be used by another parent, and in order
-      // not to run same job twise, we should assign unique TaskID for it,
-      // and keep track of it in special Node-to-Task map.
+      // Some tricky way to go over DenseMap, and
+      // detect the last node in collection
+      size_t NumSubNodes = SubNodes.size();
+      size_t SubNodeIdx = 0;
 
       for (auto NID : SubNodes) {
         const auto &SubNode = getNode(NID);
@@ -431,7 +432,8 @@ protected:
               TC.Successful = dsfJobsOnNode(
                   &SubNode, SubNode.Dependencies, Jobs
               );
-            }
+            },
+            /*Same thread*/++SubNodeIdx == NumSubNodes
         );
 
         NodeTasks.insert(TID);
