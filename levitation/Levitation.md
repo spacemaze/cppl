@@ -475,7 +475,7 @@ with installed binaries, and 'llvm-cppl' is accessable as '../llvm-cppl').
 5. `make`
 6. `make check-clang`
 7. `make install`
-8. `alias c++l=<path-to-llvm-cppl.install>\bin\c++l`
+8. `alias cppl=<path-to-llvm-cppl.install>\bin\cppl`
 
 ### How to build executable
 _Related tasks: L-4_
@@ -494,18 +494,18 @@ with `main` located at 'my-project/my-project.cpp'.
 
 Assuming we have a quad-core CPU we should run command:
 
-`c++l -cppl-root="my-project" -cppl-main="my-project/my-project.cpp" -cppl-j=8 -o app.out`
+`cppl -root="my-project" -main="my-project/my-project.cpp" -j8 -o app.out`
 
 If user is not fine with long and complicated command-lines, then she could rename
 'my-project.cpp' to 'main.cpp' and change directory to 'my-project'.
 
 Then build command could be reduced to
 
-`c++l -cppl-j=8 -o app.out`
+`cppl -j8 -o app.out`
 
 Or even to
 
-`c++l`
+`cppl`
 
 In latter case compiler will use single thread compilation and saves
 executable as _a.out_.
@@ -513,7 +513,7 @@ executable as _a.out_.
 ### Building library
 _Related tasks: L-4, L-27_
 
-Just like a traditional C++ compilers, `c++l` produces set of object
+Just like a traditional C++ compilers, `cppl` produces set of object
 files.
 
 Library creation is a bit out of compilers competence.
@@ -532,15 +532,15 @@ For example, building static library with _gcc_ tools and _Bash_ consists of
 2 steps (assuming current directory is project root, and compiler uses single
 thread):
 
-1. `c++l -cppl-h=my-project.h -cppl-c=lib-objects`
+1. `cppl -h=my-project.h -c=lib-objects`
 2. `ar rcs my-project.a $(ls lib-objects/*.o)`
 
 The only difference to regular C++ approach is step 1. On this step
-we ask `c++l` to produce legacy object files and .h file.
+we ask `cppl` to produce legacy object files and .h file.
 
-* `-cppl-h=<filename>` asks compiler to generate C++ header file, and save
+* `-h=<filename>` asks compiler to generate C++ header file, and save
 it with _'\<filename\>'_ name.
-* `-cppl-c=<directory>` asks compiler to produce object files and store them
+* `-c=<directory>` asks compiler to produce object files and store them
 in directory with _'\<directory\>'_ name. It also tells compiler,
 that there is no main file. Theoretically
 it is still possible to declare `int main()` somewhere though.
@@ -602,7 +602,7 @@ it in binary format as set of _.ldeps_ files. _.ldeps_ files also store
 ADLM flag, which tells whether _automatic dependencies lookup_ mode was
 enabled for corresponding file.
 
-Each call of `c++l` will parse single source file and may produce
+Each call of `cppl` will parse single source file and may produce
 one _.ldeps_ file.  
 
 If parser meets `#import` directives then it exits straight after last
@@ -862,5 +862,5 @@ status is shown in table below:
 | Parse and build stage | not implemented | L-5, L-28 | It is possible to combine instantiation with code generation for one-way dependent sources |
 | Automatic dependencies lookup mode | implemented | | |
 | Manual dependencies mode | not implemented |      L-5 | \#import directive is not supported yet. |
-| Build controlled by driver | not implemented |      L-4 | Highest priority task. Is to be implemented in first place. |
+| Build controlled by driver | implemented |      L-4 | |
 | Support of libraries creation | partially implemented |      L-27 | So far, user should run through -cc1 the compilation of object files, then add them to library. User also should manually create .h file. |
