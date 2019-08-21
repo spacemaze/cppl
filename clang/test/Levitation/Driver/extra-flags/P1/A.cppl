@@ -1,0 +1,7 @@
+namespace P1 {
+  struct A {
+    static void f() {
+      levitation::Test::context() << "P1::A::f()";
+    }
+  };
+}
