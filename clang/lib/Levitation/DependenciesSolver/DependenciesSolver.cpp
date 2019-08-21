@@ -561,8 +561,7 @@ public:
 
       auto &N = DGraph.getNode(Dep.NodeID);
 
-      PathString SourcePath = *Strings.getItem(N.PackageInfo->PackagePath);
-      PathString ParsedASTPath = SourcePath;
+      PathString Package = *Strings.getItem(N.PackageInfo->PackagePath);
 
       assert(
           N.Kind == DependenciesGraph::NodeKind::Declaration &&
@@ -573,7 +572,9 @@ public:
       // and thus latter depends on former.
       // The only exception is main file.
       DependenciesSolverPath::addDepPathsFor(
-        Paths, ParsedASTPath, DepsRoot, N.PackageInfo->IsMainFile
+        Paths, Context.Solver.BuildRoot,
+        Package,
+        N.PackageInfo->IsMainFile
       );
     }
 
@@ -645,6 +646,7 @@ DependenciesSolver::solve(const Paths &LDepsFiles) {
 bool DependenciesSolver::solve() {
 
   log::Logger::createLogger(Verbose ? log::Level::Verbose : log::Level::Warning);
+  CreatableSingleton<DependenciesStringsPool>::create();
   CreatableSingleton<FileManager>::create( FileSystemOptions { StringRef() });
 
   Paths LDepsFiles;
