@@ -30,11 +30,13 @@ static const int RES_FAILED_TO_RUN = 2;
 
 static const int RES_SUCCESS = 0;
 
-bool parseJobsNumber(const char **Argv, int &Offset);
+std::string getCommandPath(const char *argv0);
 
-int main(int argc, char **argv) {
+int levitation_driver_main(int argc, char **argv) {
 
-  clang::levitation::tools::LevitationDriver Driver(argv[0]);
+  auto CommandPath = getCommandPath(argv[0]);
+
+  clang::levitation::tools::LevitationDriver Driver(CommandPath.c_str());
 
   // Available driver parameters:
   // -root=<path> Specify source root (project) directory. Default value: '.'
@@ -173,6 +175,11 @@ int main(int argc, char **argv) {
       });
 }
 
-bool parseJobsNumber(const char **Argv, int &Offset) {
-  return true;
+int main(int argc, char **argv) {
+  return levitation_driver_main(argc, argv);
+}
+
+std::string getCommandPath(const char *argv0) {
+  void *MainAddr = (void*) (intptr_t) levitation_driver_main;
+  return llvm::sys::fs::getMainExecutable(argv0, MainAddr);
 }

@@ -423,7 +423,15 @@ public:
         bool dryRun
     ) {
       CommandInfo Cmd(getClangXXPath(BinDir), verbose, dryRun);
-      Cmd.addArg("-stdlib=libstdc++");
+
+      // We also could add -stdlib=libstdc++, but it will
+      // fail under Mac OS with non-empty SDKROOT in env.
+      //
+      // So there is no string like this:
+      //
+      //      Cmd
+      //      .addArg("-stdlib=libstdc++")
+
       return Cmd;
     }
 
@@ -1020,12 +1028,11 @@ void LevitationDriverImpl::collectSources() {
 
     // In current implementation package path is equal to relative source path.
 
-    Files.Source = PackagePath;
-    //  Files.Source = Path::getPath<SinglePath>(
-    //      Context.Driver.SourcesRoot,
-    //      PackagePath,
-    //      FileExtensions::SourceCode
-    //  );
+    Files.Source = Path::getPath<SinglePath>(
+        Context.Driver.SourcesRoot,
+        PackagePath,
+        FileExtensions::SourceCode
+    );
 
     Files.LDeps = Path::getPath<SinglePath>(
         Context.Driver.BuildRoot,
@@ -1071,12 +1078,10 @@ void LevitationDriverImpl::addMainFileInfo() {
 
   // In current implementation package path is equal to relative source path.
 
-  Files.Source = PackagePath;
-  //  Files.Source = Path::getPath<SinglePath>(
-  //      Context.Driver.SourcesRoot,
-  //      PackagePath,
-  //      FileExtensions::SourceCode
-  //  );
+  Files.Source = Path::getPath<SinglePath>(
+      Context.Driver.SourcesRoot,
+      PackagePath
+  );
 
   Files.Object = Path::getPath<SinglePath>(
       Context.Driver.BuildRoot,
