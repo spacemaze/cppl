@@ -67,6 +67,10 @@ public:
       OnDone(*this);
   }
 
+  void reserve(size_t N) {
+    Str.reserve(N);
+  }
+
   template <typename T>
   StringBuilder &operator <<(T v) {
     Stream << v;

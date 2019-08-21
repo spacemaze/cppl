@@ -16,6 +16,7 @@
 #include "clang/Levitation/Common/Failable.h"
 #include "clang/Levitation/Common/FileSystem.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
+#include "clang/Levitation/Common/StringBuilder.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesGraph.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesSolverPath.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesSolver.h"
@@ -126,6 +127,7 @@ class ArgsUtils {
     llvm::SmallVector<size_t, 16> ArgEscapes;
 
     QuoteType QuoteOpened = QuoteType::None;
+
     bool EscapeOn = false;
 
     bool isCurArgEmpty() const {
@@ -138,7 +140,7 @@ class ArgsUtils {
 
     void newStartPos() {
       ++ArgEnd;
-      ++ArgStart;
+      ArgStart = ArgEnd;
     }
 
     void addSymbol() {
@@ -158,19 +160,26 @@ class ArgsUtils {
       }
 
       if (ArgEscapes.empty()) {
-        Args.emplace_back(ArgsString.substr(ArgStart, ArgEnd - ArgStart));
+        auto Arg = ArgsString.substr(ArgStart, ArgEnd - ArgStart);
+        Args.push_back(Arg);
         return;
       }
 
-      Twine Arg(ArgsString.substr(ArgStart, ArgEscapes[0] - ArgStart));
+      levitation::StringBuilder sb;
+      sb << ArgsString.substr(ArgStart, ArgEscapes[0] - ArgStart);
+      size_t e = ArgEscapes.size();
 
-      for (size_t i = 1, e = ArgEscapes.size(); i != e; ++i) {
+      for (size_t i = 1; i != e; ++i) {
         size_t Start = ArgEscapes[i-1] + 1;
         size_t End = ArgEscapes[i];
-        Arg.concat(ArgsString.substr(Start, End - Start));
+        sb << ArgsString.substr(Start, End - Start);
       }
 
-      Args.push_back(Arg.str());
+      size_t Start = ArgEscapes[e-1] + 1;
+      size_t End = ArgEnd;
+      sb << ArgsString.substr(Start, End - Start);
+
+      Args.emplace_back(std::move(sb.str()));
     }
 
   public:
@@ -183,14 +192,10 @@ class ArgsUtils {
 
     void onQuote(QuoteType quoteType) {
       if (!isQuoteOpened()) {
+
         QuoteOpened = quoteType;
-
-        if (!isCurArgEmpty()) {
-          onRegularSymbol();
-          return;
-        }
-
-        newStartPos();
+        onRegularSymbol();
+        return;
 
       } if (QuoteOpened == quoteType) {
         QuoteOpened = QuoteType::None;
@@ -223,6 +228,8 @@ class ArgsUtils {
       }
 
       commitArg();
+
+      newStartPos();
     }
 
     void detachArgsTo(LevitationDriver::Args &Dest) {
@@ -230,6 +237,18 @@ class ArgsUtils {
       Dest.swap(Args);
     }
   };
+
+  static StringRef stripBoundingQuotesIfPresent(StringRef S) {
+    size_t e = S.size();
+    if (e < 2)
+      return S;
+
+    if (S[0] == S[e-1] && (S[0] == '\'' || S[0] == '"'))
+      return S.substr(1, e-2);
+
+    return S;
+  }
+
 public:
   static LevitationDriver::Args parse(StringRef S) {
     ArgsBuilder Builder(S);
@@ -271,7 +290,8 @@ public:
     Args.reserve(InputArgs.size());
 
     for (const auto &A : InputArgs) {
-      Args.push_back(A);
+      auto AStripped = stripBoundingQuotesIfPresent(A);
+      Args.push_back(AStripped);
     }
 
     return Args;
@@ -575,6 +595,7 @@ public:
         "-levitation-deps-output-file",
         OutLDepsFile
     )
+    .addArgs(ExtraArgs)
     .addArg(SourceFile)
     .addKVArgSpace("-o", OutASTFile)
     .execute();
@@ -588,6 +609,7 @@ public:
       StringRef OutDeclASTFile,
       StringRef InputObject,
       const Paths &Deps,
+      const LevitationDriver::Args &ExtraArgs,
       bool Verbose,
       bool DryRun
   ) {
@@ -602,6 +624,7 @@ public:
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
     .addKVArgsEq("-levitation-dependency", Deps)
+    .addArgs(ExtraArgs)
     .addArg(InputObject)
     .addKVArgSpace("-o", OutDeclASTFile)
     .execute();
@@ -630,6 +653,7 @@ public:
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
     .addKVArgsEq("-levitation-dependency", Deps)
+    .addArgs(ExtraArgs)
     .addArg(InputObject)
     .addKVArgSpace("-o", OutObjFile)
     .execute();
@@ -685,6 +709,8 @@ public:
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
     .addKVArgsEq("-levitation-dependency", Deps)
+    .addArgs(ExtraParseArgs)
+    .addArgs(ExtraCodeGenArgs)
     .addArg(InputObject)
     .addKVArgSpace("-o", OutObjFile)
     .execute();
@@ -710,6 +736,7 @@ public:
     auto ExecutionStatus = CommandInfo::getLink(
         BinDir, Verbose, DryRun
     )
+    .addArgs(ExtraArgs)
     .addArgs(ObjectFiles)
     .addKVArgSpace("-o", OutputFile)
     .execute();
@@ -1109,6 +1136,7 @@ bool LevitationDriverImpl::processDependencyNode(
           Files.DeclAST,
           Files.AST,
           fullDependencies,
+          Context.Driver.ExtraCodeGenArgs,
           Context.Driver.Verbose,
           Context.Driver.DryRun
       );
@@ -1258,14 +1286,13 @@ void LevitationDriver::dumpExtraFlags(StringRef Phase, const Args &args) {
 
   auto &Out = log::Logger::get().verbose();
 
-  Out
-  << "Extra args, phase '" << Phase << "':\n"
-  << "  \"";
+  Out << "Extra args, phase '" << Phase << "':\n";
+
+  Out << "  ";
 
   ArgsUtils::dump(Out, args);
 
-  Out
-  << "\"\n";
+  Out << "\n";
 }
 
 }}}
