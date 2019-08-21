@@ -62,6 +62,7 @@ class CommandLineTool : public Failable {
   llvm::DenseSet<llvm::StringRef> Optional;
 
   int WrongArgumentsResult = -1;
+  bool PrintHelpIfNoParams = false;
 
 public:
 
@@ -166,7 +167,8 @@ public:
 
   CommandLineTool &helpParameter(
       llvm::StringRef Name,
-      llvm::StringRef Description
+      llvm::StringRef Description,
+      bool printOnNoParams = true
   ) {
     return flag()
         .name(Name)
@@ -195,7 +197,7 @@ protected:
 
   bool parse() {
       // If we have no parameters passed, then do default action.
-      if (Argc == 1) {
+      if (Argc == 1 && PrintHelpIfNoParams) {
         printHelp(llvm::outs());
         return false;
       }

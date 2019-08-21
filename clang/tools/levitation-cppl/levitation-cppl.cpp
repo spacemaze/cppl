@@ -165,7 +165,11 @@ int levitation_driver_main(int argc, char **argv) {
           .useParser<KeySpaceValueParser>()
           .action([&](StringRef v) { Driver.setExtraLinkerArgs(v); })
       .done()
-      .helpParameter("--help", "Shows this help text.")
+      .helpParameter(
+          "--help",
+          "Shows this help text.",
+          /*Print help if no params*/false
+      )
       .onWrongArgsReturn(RES_WRONG_ARGUMENTS)
       .run([&] {
         if (!Driver.run())
