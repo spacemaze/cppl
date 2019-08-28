@@ -52,6 +52,8 @@ namespace clang { namespace levitation { namespace tools {
 
     bool DryRun;
 
+    bool UseLibStdCppForLinker = true;
+
     Args ExtraPreambleArgs;
     Args ExtraParseArgs;
     Args ExtraCodeGenArgs;
@@ -143,6 +145,10 @@ namespace clang { namespace levitation { namespace tools {
 
     void setDryRun() {
       DryRun = true;
+    }
+
+    void disableUseLibStdCppForLinker() {
+      LevitationDriver::UseLibStdCppForLinker = false;
     }
 
     void setExtraPreambleArgs(StringRef Args);

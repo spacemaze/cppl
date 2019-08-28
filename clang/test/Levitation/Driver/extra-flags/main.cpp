@@ -1,4 +1,4 @@
-// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -o %T/a.out \
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
 // RUN:    --verbose \
 // RUN:    -FH "-DH" -FP "-DP -DV=\"QUOTED ARG\" -DV2=ESCAPED\\ ARG" -FC "-DC" -FL "-LNON_EXISTING" | FileCheck %s
 // RUN: %T/a.out

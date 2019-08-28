@@ -420,17 +420,13 @@ public:
     static CommandInfo getLink(
         StringRef BinDir,
         bool verbose,
-        bool dryRun
+        bool dryRun,
+        bool UseLibStdCpp
     ) {
       CommandInfo Cmd(getClangXXPath(BinDir), verbose, dryRun);
 
-      // We also could add -stdlib=libstdc++, but it will
-      // fail under Mac OS with non-empty SDKROOT in env.
-      //
-      // So there is no string like this:
-      //
-      //      Cmd
-      //      .addArg("-stdlib=libstdc++")
+      if (UseLibStdCpp)
+        Cmd.addArg("-stdlib=libstdc++");
 
       return Cmd;
     }
@@ -732,7 +728,8 @@ public:
       const Paths &ObjectFiles,
       const LevitationDriver::Args &ExtraArgs,
       bool Verbose,
-      bool DryRun
+      bool DryRun,
+      bool UseLibStdCpp
   ) {
     assert(OutputFile.size() && ObjectFiles.size());
 
@@ -742,7 +739,7 @@ public:
     levitation::Path::createDirsForFile(OutputFile);
 
     auto ExecutionStatus = CommandInfo::getLink(
-        BinDir, Verbose, DryRun
+        BinDir, Verbose, DryRun, UseLibStdCpp
     )
     .addArgs(ExtraArgs)
     .addArgs(ObjectFiles)
@@ -996,7 +993,8 @@ void LevitationDriverImpl::runLinker() {
       ObjectFiles,
       Context.Driver.ExtraLinkerArgs,
       Context.Driver.Verbose,
-      Context.Driver.DryRun
+      Context.Driver.DryRun,
+      Context.Driver.UseLibStdCppForLinker
   );
 
   if (!Res)
