@@ -560,18 +560,6 @@ class Base(unittest2.TestCase):
             print("Restore dir to:", cls.oldcwd, file=sys.stderr)
         os.chdir(cls.oldcwd)
 
-    @classmethod
-    def skipLongRunningTest(cls):
-        """
-        By default, we skip long running test case.
-        This can be overridden by passing '-l' to the test driver (dotest.py).
-        """
-        if "LLDB_SKIP_LONG_RUNNING_TEST" in os.environ and "NO" == os.environ[
-                "LLDB_SKIP_LONG_RUNNING_TEST"]:
-            return False
-        else:
-            return True
-
     def enableLogChannelsForCurrentTest(self):
         if len(lldbtest_config.channels) == 0:
             return
@@ -1299,6 +1287,7 @@ class Base(unittest2.TestCase):
                 driver_output = check_output(
                     [self.getCompiler()] + '-g -c -x c - -o - -###'.split(),
                     stderr=STDOUT)
+                driver_output = driver_output.decode("utf-8")
                 for line in driver_output.split(os.linesep):
                     m = re.search('dwarf-version=([0-9])', line)
                     if m:
