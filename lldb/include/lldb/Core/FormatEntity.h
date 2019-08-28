@@ -23,20 +23,10 @@
 
 namespace lldb_private {
 class Address;
-}
-namespace lldb_private {
 class ExecutionContext;
-}
-namespace lldb_private {
 class Stream;
-}
-namespace lldb_private {
 class StringList;
-}
-namespace lldb_private {
 class SymbolContext;
-}
-namespace lldb_private {
 class ValueObject;
 }
 namespace llvm {
@@ -51,7 +41,7 @@ public:
       Invalid,
       ParentNumber,
       ParentString,
-      InsertString,
+      EscapeCode,
       Root,
       String,
       Scope,
@@ -209,7 +199,7 @@ public:
                                     llvm::StringRef &variable_name,
                                     llvm::StringRef &variable_format);
 
-  static size_t AutoComplete(lldb_private::CompletionRequest &request);
+  static void AutoComplete(lldb_private::CompletionRequest &request);
 
   // Format the current elements into the stream \a s.
   //

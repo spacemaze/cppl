@@ -262,10 +262,11 @@ function(add_compiler_rt_runtime name type)
       string(REGEX MATCHALL "<[A-Za-z0-9_]*>" substitutions
              ${CMAKE_C_COMPILE_OBJECT})
       set(compile_command_${libname} "${CMAKE_C_COMPILE_OBJECT}")
+
       set(output_file_${libname} ${output_name_${libname}}${CMAKE_C_OUTPUT_EXTENSION})
       foreach(substitution ${substitutions})
         if(substitution STREQUAL "<CMAKE_C_COMPILER>")
-          string(REPLACE "<CMAKE_C_COMPILER>" "${CMAKE_C_COMPILER}"
+          string(REPLACE "<CMAKE_C_COMPILER>" "${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1}"
                  compile_command_${libname} ${compile_command_${libname}})
         elseif(substitution STREQUAL "<OBJECT>")
           string(REPLACE "<OBJECT>" "${output_dir_${libname}}/${output_file_${libname}}"
@@ -359,7 +360,7 @@ set(COMPILER_RT_UNITTEST_LINK_FLAGS ${COMPILER_RT_UNITTEST_CFLAGS})
 set(COMPILER_RT_GTEST_PATH ${LLVM_MAIN_SRC_DIR}/utils/unittest/googletest)
 set(COMPILER_RT_GTEST_SOURCE ${COMPILER_RT_GTEST_PATH}/src/gtest-all.cc)
 set(COMPILER_RT_GTEST_CFLAGS
-  -DGTEST_NO_LLVM_RAW_OSTREAM=1
+  -DGTEST_NO_LLVM_SUPPORT=1
   -DGTEST_HAS_RTTI=0
   -I${COMPILER_RT_GTEST_PATH}/include
   -I${COMPILER_RT_GTEST_PATH}
@@ -369,7 +370,7 @@ set(COMPILER_RT_GTEST_CFLAGS
 set(COMPILER_RT_GMOCK_PATH ${LLVM_MAIN_SRC_DIR}/utils/unittest/googlemock)
 set(COMPILER_RT_GMOCK_SOURCE ${COMPILER_RT_GMOCK_PATH}/src/gmock-all.cc)
 set(COMPILER_RT_GMOCK_CFLAGS
-  -DGTEST_NO_LLVM_RAW_OSTREAM=1
+  -DGTEST_NO_LLVM_SUPPORT=1
   -DGTEST_HAS_RTTI=0
   -I${COMPILER_RT_GMOCK_PATH}/include
   -I${COMPILER_RT_GMOCK_PATH}

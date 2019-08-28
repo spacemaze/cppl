@@ -828,6 +828,7 @@ struct LanguageRuntimeInstance {
   std::string description;
   LanguageRuntimeCreateInstance create_callback;
   LanguageRuntimeGetCommandObject command_callback;
+  LanguageRuntimeGetExceptionPrecondition precondition_callback;
 };
 
 typedef std::vector<LanguageRuntimeInstance> LanguageRuntimeInstances;
@@ -845,7 +846,8 @@ static LanguageRuntimeInstances &GetLanguageRuntimeInstances() {
 bool PluginManager::RegisterPlugin(
     ConstString name, const char *description,
     LanguageRuntimeCreateInstance create_callback,
-    LanguageRuntimeGetCommandObject command_callback) {
+    LanguageRuntimeGetCommandObject command_callback,
+    LanguageRuntimeGetExceptionPrecondition precondition_callback) {
   if (create_callback) {
     LanguageRuntimeInstance instance;
     assert((bool)name);
@@ -854,6 +856,7 @@ bool PluginManager::RegisterPlugin(
       instance.description = description;
     instance.create_callback = create_callback;
     instance.command_callback = command_callback;
+    instance.precondition_callback = precondition_callback;
     std::lock_guard<std::recursive_mutex> guard(GetLanguageRuntimeMutex());
     GetLanguageRuntimeInstances().push_back(instance);
   }
@@ -892,6 +895,15 @@ PluginManager::GetLanguageRuntimeGetCommandObjectAtIndex(uint32_t idx) {
   LanguageRuntimeInstances &instances = GetLanguageRuntimeInstances();
   if (idx < instances.size())
     return instances[idx].command_callback;
+  return nullptr;
+}
+
+LanguageRuntimeGetExceptionPrecondition
+PluginManager::GetLanguageRuntimeGetExceptionPreconditionAtIndex(uint32_t idx) {
+  std::lock_guard<std::recursive_mutex> guard(GetLanguageRuntimeMutex());
+  LanguageRuntimeInstances &instances = GetLanguageRuntimeInstances();
+  if (idx < instances.size())
+    return instances[idx].precondition_callback;
   return nullptr;
 }
 
@@ -1329,10 +1341,10 @@ PluginManager::GetPlatformCreateCallbackForPluginName(ConstString name) {
   return nullptr;
 }
 
-size_t PluginManager::AutoCompletePlatformName(llvm::StringRef name,
-                                               StringList &matches) {
+void PluginManager::AutoCompletePlatformName(llvm::StringRef name,
+                                             CompletionRequest &request) {
   if (name.empty())
-    return matches.GetSize();
+    return;
 
   std::lock_guard<std::recursive_mutex> guard(GetPlatformInstancesMutex());
   PlatformInstances &instances = GetPlatformInstances();
@@ -1342,9 +1354,8 @@ size_t PluginManager::AutoCompletePlatformName(llvm::StringRef name,
   for (pos = instances.begin(); pos != end; ++pos) {
     llvm::StringRef plugin_name(pos->name.GetCString());
     if (plugin_name.startswith(name_sref))
-      matches.AppendString(plugin_name.data());
+      request.AddCompletion(plugin_name.data());
   }
-  return matches.GetSize();
 }
 
 #pragma mark Process

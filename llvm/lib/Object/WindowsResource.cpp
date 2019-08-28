@@ -400,13 +400,13 @@ class WindowsResourceCOFFWriter {
 public:
   WindowsResourceCOFFWriter(COFF::MachineTypes MachineType,
                             const WindowsResourceParser &Parser, Error &E);
-  std::unique_ptr<MemoryBuffer> write();
+  std::unique_ptr<MemoryBuffer> write(uint32_t TimeDateStamp);
 
 private:
   void performFileLayout();
   void performSectionOneLayout();
   void performSectionTwoLayout();
-  void writeCOFFHeader();
+  void writeCOFFHeader(uint32_t TimeDateStamp);
   void writeFirstSectionHeader();
   void writeSecondSectionHeader();
   void writeFirstSection();
@@ -442,7 +442,8 @@ WindowsResourceCOFFWriter::WindowsResourceCOFFWriter(
       Data(Parser.getData()), StringTable(Parser.getStringTable()) {
   performFileLayout();
 
-  OutputBuffer = WritableMemoryBuffer::getNewMemBuffer(FileSize);
+  OutputBuffer = WritableMemoryBuffer::getNewMemBuffer(
+      FileSize, "internal .obj file created from .res files");
 }
 
 void WindowsResourceCOFFWriter::performFileLayout() {
@@ -499,17 +500,11 @@ void WindowsResourceCOFFWriter::performSectionTwoLayout() {
   FileSize = alignTo(FileSize, SECTION_ALIGNMENT);
 }
 
-static std::time_t getTime() {
-  std::time_t Now = time(nullptr);
-  if (Now < 0 || !isUInt<32>(Now))
-    return UINT32_MAX;
-  return Now;
-}
-
-std::unique_ptr<MemoryBuffer> WindowsResourceCOFFWriter::write() {
+std::unique_ptr<MemoryBuffer>
+WindowsResourceCOFFWriter::write(uint32_t TimeDateStamp) {
   BufferStart = OutputBuffer->getBufferStart();
 
-  writeCOFFHeader();
+  writeCOFFHeader(TimeDateStamp);
   writeFirstSectionHeader();
   writeSecondSectionHeader();
   writeFirstSection();
@@ -520,16 +515,25 @@ std::unique_ptr<MemoryBuffer> WindowsResourceCOFFWriter::write() {
   return std::move(OutputBuffer);
 }
 
-void WindowsResourceCOFFWriter::writeCOFFHeader() {
+// According to COFF specification, if the Src has a size equal to Dest,
+// it's okay to *not* copy the trailing zero.
+static void coffnamecpy(char (&Dest)[COFF::NameSize], StringRef Src) {
+  assert(Src.size() <= COFF::NameSize &&
+         "Src is not larger than COFF::NameSize");
+  strncpy(Dest, Src.data(), (size_t)COFF::NameSize);
+}
+
+void WindowsResourceCOFFWriter::writeCOFFHeader(uint32_t TimeDateStamp) {
   // Write the COFF header.
   auto *Header = reinterpret_cast<coff_file_header *>(BufferStart);
   Header->Machine = MachineType;
   Header->NumberOfSections = 2;
-  Header->TimeDateStamp = getTime();
+  Header->TimeDateStamp = TimeDateStamp;
   Header->PointerToSymbolTable = SymbolTableOffset;
-  // One symbol for every resource plus 2 for each section and @feat.00
+  // One symbol for every resource plus 2 for each section and 1 for @feat.00
   Header->NumberOfSymbols = Data.size() + 5;
   Header->SizeOfOptionalHeader = 0;
+  // cvtres.exe sets 32BIT_MACHINE even for 64-bit machine types. Match it.
   Header->Characteristics = COFF::IMAGE_FILE_32BIT_MACHINE;
 }
 
@@ -538,7 +542,7 @@ void WindowsResourceCOFFWriter::writeFirstSectionHeader() {
   CurrentOffset += sizeof(coff_file_header);
   auto *SectionOneHeader =
       reinterpret_cast<coff_section *>(BufferStart + CurrentOffset);
-  strncpy(SectionOneHeader->Name, ".rsrc$01", (size_t)COFF::NameSize);
+  coffnamecpy(SectionOneHeader->Name, ".rsrc$01");
   SectionOneHeader->VirtualSize = 0;
   SectionOneHeader->VirtualAddress = 0;
   SectionOneHeader->SizeOfRawData = SectionOneSize;
@@ -556,7 +560,7 @@ void WindowsResourceCOFFWriter::writeSecondSectionHeader() {
   CurrentOffset += sizeof(coff_section);
   auto *SectionTwoHeader =
       reinterpret_cast<coff_section *>(BufferStart + CurrentOffset);
-  strncpy(SectionTwoHeader->Name, ".rsrc$02", (size_t)COFF::NameSize);
+  coffnamecpy(SectionTwoHeader->Name, ".rsrc$02");
   SectionTwoHeader->VirtualSize = 0;
   SectionTwoHeader->VirtualAddress = 0;
   SectionTwoHeader->SizeOfRawData = SectionTwoSize;
@@ -594,7 +598,7 @@ void WindowsResourceCOFFWriter::writeSymbolTable() {
   // Now write the symbol table.
   // First, the feat symbol.
   auto *Symbol = reinterpret_cast<coff_symbol16 *>(BufferStart + CurrentOffset);
-  strncpy(Symbol->Name.ShortName, "@feat.00", (size_t)COFF::NameSize);
+  coffnamecpy(Symbol->Name.ShortName, "@feat.00");
   Symbol->Value = 0x11;
   Symbol->SectionNumber = 0xffff;
   Symbol->Type = COFF::IMAGE_SYM_DTYPE_NULL;
@@ -604,7 +608,7 @@ void WindowsResourceCOFFWriter::writeSymbolTable() {
 
   // Now write the .rsrc1 symbol + aux.
   Symbol = reinterpret_cast<coff_symbol16 *>(BufferStart + CurrentOffset);
-  strncpy(Symbol->Name.ShortName, ".rsrc$01", (size_t)COFF::NameSize);
+  coffnamecpy(Symbol->Name.ShortName, ".rsrc$01");
   Symbol->Value = 0;
   Symbol->SectionNumber = 1;
   Symbol->Type = COFF::IMAGE_SYM_DTYPE_NULL;
@@ -623,7 +627,7 @@ void WindowsResourceCOFFWriter::writeSymbolTable() {
 
   // Now write the .rsrc2 symbol + aux.
   Symbol = reinterpret_cast<coff_symbol16 *>(BufferStart + CurrentOffset);
-  strncpy(Symbol->Name.ShortName, ".rsrc$02", (size_t)COFF::NameSize);
+  coffnamecpy(Symbol->Name.ShortName, ".rsrc$02");
   Symbol->Value = 0;
   Symbol->SectionNumber = 2;
   Symbol->Type = COFF::IMAGE_SYM_DTYPE_NULL;
@@ -644,7 +648,7 @@ void WindowsResourceCOFFWriter::writeSymbolTable() {
   for (unsigned i = 0; i < Data.size(); i++) {
     auto RelocationName = formatv("$R{0:X-6}", i & 0xffffff).sstr<COFF::NameSize>();
     Symbol = reinterpret_cast<coff_symbol16 *>(BufferStart + CurrentOffset);
-    memcpy(Symbol->Name.ShortName, RelocationName.data(), (size_t) COFF::NameSize);
+    coffnamecpy(Symbol->Name.ShortName, RelocationName);
     Symbol->Value = DataOffsets[i];
     Symbol->SectionNumber = 2;
     Symbol->Type = COFF::IMAGE_SYM_DTYPE_NULL;
@@ -794,12 +798,13 @@ void WindowsResourceCOFFWriter::writeFirstSectionRelocations() {
 
 Expected<std::unique_ptr<MemoryBuffer>>
 writeWindowsResourceCOFF(COFF::MachineTypes MachineType,
-                         const WindowsResourceParser &Parser) {
+                         const WindowsResourceParser &Parser,
+                         uint32_t TimeDateStamp) {
   Error E = Error::success();
   WindowsResourceCOFFWriter Writer(MachineType, Parser, E);
   if (E)
     return std::move(E);
-  return Writer.write();
+  return Writer.write(TimeDateStamp);
 }
 
 } // namespace object

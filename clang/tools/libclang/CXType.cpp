@@ -742,6 +742,8 @@ getExternalExceptionSpecificationKind(ExceptionSpecificationType EST) {
     return CXCursor_ExceptionSpecificationKind_MSAny;
   case EST_BasicNoexcept:
     return CXCursor_ExceptionSpecificationKind_BasicNoexcept;
+  case EST_NoThrow:
+    return CXCursor_ExceptionSpecificationKind_NoThrow;
   case EST_NoexceptFalse:
   case EST_NoexceptTrue:
   case EST_DependentNoexcept:
@@ -1269,6 +1271,14 @@ unsigned clang_Cursor_isAnonymousRecordDecl(CXCursor C){
   if (const RecordDecl *FD = dyn_cast_or_null<RecordDecl>(D))
     return FD->isAnonymousStructOrUnion();
   return 0;
+}
+
+unsigned clang_Cursor_isInlineNamespace(CXCursor C) {
+  if (!clang_isDeclaration(C.kind))
+    return 0;
+  const Decl *D = cxcursor::getCursorDecl(C);
+  const NamespaceDecl *ND = dyn_cast_or_null<NamespaceDecl>(D);
+  return ND ? ND->isInline() : 0;
 }
 
 CXType clang_Type_getNamedType(CXType CT){

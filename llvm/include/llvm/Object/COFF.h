@@ -901,8 +901,8 @@ protected:
   uint64_t getSectionAddress(DataRefImpl Sec) const override;
   uint64_t getSectionIndex(DataRefImpl Sec) const override;
   uint64_t getSectionSize(DataRefImpl Sec) const override;
-  std::error_code getSectionContents(DataRefImpl Sec,
-                                     StringRef &Res) const override;
+  Expected<ArrayRef<uint8_t>>
+  getSectionContents(DataRefImpl Sec) const override;
   uint64_t getSectionAlignment(DataRefImpl Sec) const override;
   bool isSectionCompressed(DataRefImpl Sec) const override;
   bool isSectionText(DataRefImpl Sec) const override;
@@ -969,11 +969,14 @@ public:
       return nullptr;
     return reinterpret_cast<const dos_header *>(base());
   }
-  std::error_code getCOFFHeader(const coff_file_header *&Res) const;
-  std::error_code
-  getCOFFBigObjHeader(const coff_bigobj_file_header *&Res) const;
-  std::error_code getPE32Header(const pe32_header *&Res) const;
-  std::error_code getPE32PlusHeader(const pe32plus_header *&Res) const;
+
+  const coff_file_header *getCOFFHeader() const { return COFFHeader; }
+  const coff_bigobj_file_header *getCOFFBigObjHeader() const {
+    return COFFBigObjHeader;
+  }
+  const pe32_header *getPE32Header() const { return PE32Header; }
+  const pe32plus_header *getPE32PlusHeader() const { return PE32PlusHeader; }
+
   std::error_code getDataDirectory(uint32_t index,
                                    const data_directory *&Res) const;
   std::error_code getSection(int32_t index, const coff_section *&Res) const;
@@ -1034,8 +1037,8 @@ public:
 
   Expected<StringRef> getSectionName(const coff_section *Sec) const;
   uint64_t getSectionSize(const coff_section *Sec) const;
-  std::error_code getSectionContents(const coff_section *Sec,
-                                     ArrayRef<uint8_t> &Res) const;
+  Error getSectionContents(const coff_section *Sec,
+                           ArrayRef<uint8_t> &Res) const;
 
   uint64_t getImageBase() const;
   std::error_code getVaPtr(uint64_t VA, uintptr_t &Res) const;

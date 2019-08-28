@@ -50,9 +50,7 @@ INITIALIZE_PASS_END(Legalizer, DEBUG_TYPE,
                     "Legalize the Machine IR a function's Machine IR", false,
                     false)
 
-Legalizer::Legalizer() : MachineFunctionPass(ID) {
-  initializeLegalizerPass(*PassRegistry::getPassRegistry());
-}
+Legalizer::Legalizer() : MachineFunctionPass(ID) { }
 
 void Legalizer::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<TargetPassConfig>();
@@ -186,11 +184,11 @@ bool Legalizer::runOnMachineFunction(MachineFunction &MF) {
                        : TPC.isGISelCSEEnabled();
 
   if (EnableCSE) {
-    MIRBuilder = make_unique<CSEMIRBuilder>();
+    MIRBuilder = std::make_unique<CSEMIRBuilder>();
     CSEInfo = &Wrapper.get(TPC.getCSEConfig());
     MIRBuilder->setCSEInfo(CSEInfo);
   } else
-    MIRBuilder = make_unique<MachineIRBuilder>();
+    MIRBuilder = std::make_unique<MachineIRBuilder>();
   // This observer keeps the worklist updated.
   LegalizerWorkListManager WorkListObserver(InstList, ArtifactList);
   // We want both WorkListObserver as well as CSEInfo to observe all changes.

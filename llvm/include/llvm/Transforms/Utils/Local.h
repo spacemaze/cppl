@@ -271,6 +271,15 @@ inline unsigned getKnownAlignment(Value *V, const DataLayout &DL,
   return getOrEnforceKnownAlignment(V, 0, DL, CxtI, AC, DT);
 }
 
+/// Create a call that matches the invoke \p II in terms of arguments,
+/// attributes, debug information, etc. The call is not placed in a block and it
+/// will not have a name. The invoke instruction is not removed, nor are the
+/// uses replaced by the new call.
+CallInst *createCallMatchingInvoke(InvokeInst *II);
+
+/// This function converts the specified invoek into a normall call.
+void changeToCall(InvokeInst *II, DomTreeUpdater *DTU = nullptr);
+
 ///===---------------------------------------------------------------------===//
 ///  Dbg Intrinsic utilities
 ///
@@ -316,7 +325,7 @@ void findDbgUsers(SmallVectorImpl<DbgVariableIntrinsic *> &DbgInsts, Value *V);
 /// (between the optional Deref operations). Offset can be negative.
 bool replaceDbgDeclare(Value *Address, Value *NewAddress,
                        Instruction *InsertBefore, DIBuilder &Builder,
-                       bool DerefBefore, int Offset, bool DerefAfter);
+                       uint8_t DIExprFlags, int Offset);
 
 /// Replaces llvm.dbg.declare instruction when the alloca it describes
 /// is replaced with a new value. If Deref is true, an additional
@@ -325,8 +334,8 @@ bool replaceDbgDeclare(Value *Address, Value *NewAddress,
 /// optional Deref operations). Offset can be negative. The new
 /// llvm.dbg.declare is inserted immediately after AI.
 bool replaceDbgDeclareForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
-                                DIBuilder &Builder, bool DerefBefore,
-                                int Offset, bool DerefAfter);
+                                DIBuilder &Builder, uint8_t DIExprFlags,
+                                int Offset);
 
 /// Replaces multiple llvm.dbg.value instructions when the alloca it describes
 /// is replaced with a new value. If Offset is non-zero, a constant displacement
@@ -423,6 +432,10 @@ void combineMetadata(Instruction *K, const Instruction *J,
 /// Unknown metadata is removed.
 void combineMetadataForCSE(Instruction *K, const Instruction *J,
                            bool DoesKMove);
+
+/// Copy the metadata from the source instruction to the destination (the
+/// replacement for the source instruction).
+void copyMetadataForLoad(LoadInst &Dest, const LoadInst &Source);
 
 /// Patch the replacement so that it is not more restrictive than the value
 /// being replaced. It assumes that the replacement does not get moved from

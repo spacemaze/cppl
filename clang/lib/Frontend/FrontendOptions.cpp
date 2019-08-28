@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Frontend/FrontendOptions.h"
+#include "clang/Basic/LangStandard.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "llvm/ADT/StringSwitch.h"
 
@@ -14,30 +15,30 @@ using namespace clang;
 
 InputKind FrontendOptions::getInputKindForExtension(StringRef Extension) {
   return llvm::StringSwitch<InputKind>(Extension)
-    .Cases("ast", "pcm", InputKind(InputKind::Unknown, InputKind::Precompiled))
-    .Case("c", InputKind::C)
-    .Cases("S", "s", InputKind::Asm)
-    .Case("i", InputKind(InputKind::C).getPreprocessed())
-    .Case("ii", InputKind(InputKind::CXX).getPreprocessed())
-    .Case("cui", InputKind(InputKind::CUDA).getPreprocessed())
-    .Case("m", InputKind::ObjC)
-    .Case("mi", InputKind(InputKind::ObjC).getPreprocessed())
-    .Cases("mm", "M", InputKind::ObjCXX)
-    .Case("mii", InputKind(InputKind::ObjCXX).getPreprocessed())
-    .Cases("C", "cc", "cp", InputKind::CXX)
-    .Cases("cpp", "CPP", "c++", "cxx", "hpp", InputKind::CXX)
-    .Case("cppm", InputKind::CXX)
-    .Case("iim", InputKind(InputKind::CXX).getPreprocessed())
-    .Case("cl", InputKind::OpenCL)
-    .Case("cu", InputKind::CUDA)
-    .Cases("ll", "bc", InputKind::LLVM_IR)
+      .Cases("ast", "pcm", InputKind(Language::Unknown, InputKind::Precompiled))
+      .Case("c", Language::C)
+      .Cases("S", "s", Language::Asm)
+      .Case("i", InputKind(Language::C).getPreprocessed())
+      .Case("ii", InputKind(Language::CXX).getPreprocessed())
+      .Case("cui", InputKind(Language::CUDA).getPreprocessed())
+      .Case("m", Language::ObjC)
+      .Case("mi", InputKind(Language::ObjC).getPreprocessed())
+      .Cases("mm", "M", Language::ObjCXX)
+      .Case("mii", InputKind(Language::ObjCXX).getPreprocessed())
+      .Cases("C", "cc", "cp", Language::CXX)
+      .Cases("cpp", "CPP", "c++", "cxx", "hpp", Language::CXX)
+      .Case("cppm", Language::CXX)
+      .Case("iim", InputKind(Language::CXX).getPreprocessed())
+      .Case("cl", Language::OpenCL)
+      .Case("cu", Language::CUDA)
+      .Cases("ll", "bc", Language::LLVM_IR)
 
-    // C++ Levitation extension:
-    .Cases(
-        levitation::FileExtensions::DeclarationAST,
-        levitation::FileExtensions::ParsedAST,
-        InputKind(InputKind::Unknown, InputKind::Precompiled)
-    )
+      // C++ Levitation extension:
+      .Cases(
+          levitation::FileExtensions::DeclarationAST,
+          levitation::FileExtensions::ParsedAST,
+          InputKind(Language::Unknown, InputKind::Precompiled)
+      )
 
-    .Default(InputKind::Unknown);
+      .Default(Language::Unknown);
 }

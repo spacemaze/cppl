@@ -16,6 +16,7 @@
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/TypeLoc.h"
+#include "clang/Basic/CharInfo.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Sema/Designator.h"
 #include "clang/Sema/Initialization.h"
@@ -1289,7 +1290,16 @@ void InitListChecker::CheckSubElementType(const InitializedEntity &Entity,
     // FIXME: Better EqualLoc?
     InitializationKind Kind =
         InitializationKind::CreateCopy(expr->getBeginLoc(), SourceLocation());
-    InitializationSequence Seq(SemaRef, Entity, Kind, expr,
+
+    // Vector elements can be initialized from other vectors in which case
+    // we need initialization entity with a type of a vector (and not a vector
+    // element!) initializing multiple vector elements.
+    auto TmpEntity =
+        (ElemType->isExtVectorType() && !Entity.getType()->isExtVectorType())
+            ? InitializedEntity::InitializeTemporary(ElemType)
+            : Entity;
+
+    InitializationSequence Seq(SemaRef, TmpEntity, Kind, expr,
                                /*TopLevelOfInitList*/ true);
 
     // C++14 [dcl.init.aggr]p13:
@@ -1300,8 +1310,7 @@ void InitListChecker::CheckSubElementType(const InitializedEntity &Entity,
     // assignment-expression.
     if (Seq || isa<InitListExpr>(expr)) {
       if (!VerifyOnly) {
-        ExprResult Result =
-          Seq.Perform(SemaRef, Entity, Kind, expr);
+        ExprResult Result = Seq.Perform(SemaRef, TmpEntity, Kind, expr);
         if (Result.isInvalid())
           hadError = true;
 
@@ -1707,6 +1716,30 @@ void InitListChecker::CheckVectorType(const InitializedEntity &Entity,
   }
 }
 
+/// Check if the type of a class element has an accessible destructor, and marks
+/// it referenced. Returns true if we shouldn't form a reference to the
+/// destructor.
+///
+/// Aggregate initialization requires a class element's destructor be
+/// accessible per 11.6.1 [dcl.init.aggr]:
+///
+/// The destructor for each element of class type is potentially invoked
+/// (15.4 [class.dtor]) from the context where the aggregate initialization
+/// occurs.
+static bool checkDestructorReference(QualType ElementType, SourceLocation Loc,
+                                     Sema &SemaRef) {
+  auto *CXXRD = ElementType->getAsCXXRecordDecl();
+  if (!CXXRD)
+    return false;
+
+  CXXDestructorDecl *Destructor = SemaRef.LookupDestructor(CXXRD);
+  SemaRef.CheckDestructorAccess(Loc, Destructor,
+                                SemaRef.PDiag(diag::err_access_dtor_temp)
+                                << ElementType);
+  SemaRef.MarkFunctionReferenced(Loc, Destructor);
+  return SemaRef.DiagnoseUseOfDecl(Destructor, Loc);
+}
+
 void InitListChecker::CheckArrayType(const InitializedEntity &Entity,
                                      InitListExpr *IList, QualType &DeclType,
                                      llvm::APSInt elementIndex,
@@ -1715,6 +1748,14 @@ void InitListChecker::CheckArrayType(const InitializedEntity &Entity,
                                      InitListExpr *StructuredList,
                                      unsigned &StructuredIndex) {
   const ArrayType *arrayType = SemaRef.Context.getAsArrayType(DeclType);
+
+  if (!VerifyOnly) {
+    if (checkDestructorReference(arrayType->getElementType(),
+                                 IList->getEndLoc(), SemaRef)) {
+      hadError = true;
+      return;
+    }
+  }
 
   // Check for the special-case of initializing an array with a string.
   if (Index < IList->getNumInits()) {
@@ -1877,30 +1918,6 @@ bool InitListChecker::CheckFlexibleArrayInit(const InitializedEntity &Entity,
   return FlexArrayDiag != diag::ext_flexible_array_init;
 }
 
-/// Check if the type of a class element has an accessible destructor.
-///
-/// Aggregate initialization requires a class element's destructor be
-/// accessible per 11.6.1 [dcl.init.aggr]:
-///
-/// The destructor for each element of class type is potentially invoked
-/// (15.4 [class.dtor]) from the context where the aggregate initialization
-/// occurs.
-static bool hasAccessibleDestructor(QualType ElementType, SourceLocation Loc,
-                                    Sema &SemaRef) {
-  auto *CXXRD = ElementType->getAsCXXRecordDecl();
-  if (!CXXRD)
-    return false;
-
-  CXXDestructorDecl *Destructor = SemaRef.LookupDestructor(CXXRD);
-  SemaRef.CheckDestructorAccess(Loc, Destructor,
-                                SemaRef.PDiag(diag::err_access_dtor_temp)
-                                    << ElementType);
-  SemaRef.MarkFunctionReferenced(Loc, Destructor);
-  if (SemaRef.DiagnoseUseOfDecl(Destructor, Loc))
-    return true;
-  return false;
-}
-
 void InitListChecker::CheckStructUnionTypes(
     const InitializedEntity &Entity, InitListExpr *IList, QualType DeclType,
     CXXRecordDecl::base_class_range Bases, RecordDecl::field_iterator Field,
@@ -1924,7 +1941,7 @@ void InitListChecker::CheckStructUnionTypes(
     if (!VerifyOnly)
       for (FieldDecl *FD : RD->fields()) {
         QualType ET = SemaRef.Context.getBaseElementType(FD->getType());
-        if (hasAccessibleDestructor(ET, IList->getEndLoc(), SemaRef)) {
+        if (checkDestructorReference(ET, IList->getEndLoc(), SemaRef)) {
           hadError = true;
           return;
         }
@@ -1984,7 +2001,7 @@ void InitListChecker::CheckStructUnionTypes(
     }
 
     if (!VerifyOnly)
-      if (hasAccessibleDestructor(Base.getType(), InitLoc, SemaRef)) {
+      if (checkDestructorReference(Base.getType(), InitLoc, SemaRef)) {
         hadError = true;
         return;
       }
@@ -2026,7 +2043,7 @@ void InitListChecker::CheckStructUnionTypes(
         while (std::next(F) != Field)
           ++F;
         QualType ET = SemaRef.Context.getBaseElementType(F->getType());
-        if (hasAccessibleDestructor(ET, InitLoc, SemaRef)) {
+        if (checkDestructorReference(ET, InitLoc, SemaRef)) {
           hadError = true;
           return;
         }
@@ -2075,7 +2092,7 @@ void InitListChecker::CheckStructUnionTypes(
 
     if (!VerifyOnly) {
       QualType ET = SemaRef.Context.getBaseElementType(Field->getType());
-      if (hasAccessibleDestructor(ET, InitLoc, SemaRef)) {
+      if (checkDestructorReference(ET, InitLoc, SemaRef)) {
         hadError = true;
         return;
       }
@@ -2131,7 +2148,7 @@ void InitListChecker::CheckStructUnionTypes(
                                                      : Field;
     for (RecordDecl::field_iterator E = RD->field_end(); I != E; ++I) {
       QualType ET = SemaRef.Context.getBaseElementType(I->getType());
-      if (hasAccessibleDestructor(ET, IList->getEndLoc(), SemaRef)) {
+      if (checkDestructorReference(ET, IList->getEndLoc(), SemaRef)) {
         hadError = true;
         return;
       }
@@ -2219,7 +2236,7 @@ class FieldInitializerValidatorCCC final : public CorrectionCandidateCallback {
   }
 
   std::unique_ptr<CorrectionCandidateCallback> clone() override {
-    return llvm::make_unique<FieldInitializerValidatorCCC>(*this);
+    return std::make_unique<FieldInitializerValidatorCCC>(*this);
   }
 
  private:
@@ -3274,7 +3291,6 @@ void InitializationSequence::Step::Destroy() {
   case SK_QualificationConversionXValue:
   case SK_QualificationConversionLValue:
   case SK_AtomicConversion:
-  case SK_LValueToRValue:
   case SK_ListInitialization:
   case SK_UnwrapInitList:
   case SK_RewrapInitList:
@@ -3336,6 +3352,7 @@ bool InitializationSequence::isAmbiguous() const {
   case FK_NonConstLValueReferenceBindingToVectorElement:
   case FK_NonConstLValueReferenceBindingToUnrelated:
   case FK_RValueReferenceBindingToLValue:
+  case FK_ReferenceAddrspaceMismatchTemporary:
   case FK_ReferenceInitDropsQualifiers:
   case FK_ReferenceInitFailed:
   case FK_ConversionFailed:
@@ -3453,15 +3470,6 @@ void InitializationSequence::AddQualificationConversionStep(QualType Ty,
 void InitializationSequence::AddAtomicConversionStep(QualType Ty) {
   Step S;
   S.Kind = SK_AtomicConversion;
-  S.Type = Ty;
-  Steps.push_back(S);
-}
-
-void InitializationSequence::AddLValueToRValueStep(QualType Ty) {
-  assert(!Ty.hasQualifiers() && "rvalues may not have qualifiers");
-
-  Step S;
-  S.Kind = SK_LValueToRValue;
   S.Type = Ty;
   Steps.push_back(S);
 }
@@ -3734,6 +3742,7 @@ ResolveConstructorOverload(Sema &S, SourceLocation DeclLoc,
                            bool OnlyListConstructors, bool IsListInit,
                            bool SecondStepOfCopyInit = false) {
   CandidateSet.clear(OverloadCandidateSet::CSK_InitByConstructor);
+  CandidateSet.setDestAS(DestType.getQualifiers().getAddressSpace());
 
   for (NamedDecl *D : Ctors) {
     auto Info = getConstructorInfo(D);
@@ -3931,7 +3940,7 @@ static void TryConstructorInitialization(Sema &S,
       Result = ResolveConstructorOverload(S, Kind.getLocation(), Args,
                                           CandidateSet, DestType, Ctors, Best,
                                           CopyInitialization, AllowExplicit,
-                                          /*OnlyListConstructor=*/true,
+                                          /*OnlyListConstructors=*/true,
                                           IsListInit);
   }
 
@@ -4118,7 +4127,7 @@ static void TryReferenceListInitialization(Sema &S,
   if (Sequence) {
     if (DestType->isRValueReferenceType() ||
         (T1Quals.hasConst() && !T1Quals.hasVolatile()))
-      Sequence.AddReferenceBindingStep(cv1T1, /*bindingTemporary=*/true);
+      Sequence.AddReferenceBindingStep(cv1T1, /*BindingTemporary=*/true);
     else
       Sequence.SetFailed(
           InitializationSequence::FK_NonConstLValueReferenceBindingToTemporary);
@@ -4631,7 +4640,10 @@ static void TryReferenceInitializationCore(Sema &S,
   //     - Otherwise, the reference shall be an lvalue reference to a
   //       non-volatile const type (i.e., cv1 shall be const), or the reference
   //       shall be an rvalue reference.
-  if (isLValueRef && !(T1Quals.hasConst() && !T1Quals.hasVolatile())) {
+  //       For address spaces, we interpret this to mean that an addr space
+  //       of a reference "cv1 T1" is a superset of addr space of "cv2 T2".
+  if (isLValueRef && !(T1Quals.hasConst() && !T1Quals.hasVolatile() &&
+                       T1Quals.isAddressSpaceSupersetOf(T2Quals))) {
     if (S.Context.getCanonicalType(T2) == S.Context.OverloadTy)
       Sequence.SetFailed(InitializationSequence::FK_AddressOfOverloadFailed);
     else if (ConvOvlResult && !Sequence.getFailedCandidateSet().empty())
@@ -4640,7 +4652,10 @@ static void TryReferenceInitializationCore(Sema &S,
                                   ConvOvlResult);
     else if (!InitCategory.isLValue())
       Sequence.SetFailed(
-          InitializationSequence::FK_NonConstLValueReferenceBindingToTemporary);
+          T1Quals.isAddressSpaceSupersetOf(T2Quals)
+              ? InitializationSequence::
+                    FK_NonConstLValueReferenceBindingToTemporary
+              : InitializationSequence::FK_ReferenceInitDropsQualifiers);
     else {
       InitializationSequence::FailureKind FK;
       switch (RefRelationship) {
@@ -4827,11 +4842,18 @@ static void TryReferenceInitializationCore(Sema &S,
     return;
   }
 
-  Sequence.AddReferenceBindingStep(cv1T1IgnoreAS, /*bindingTemporary=*/true);
+  Sequence.AddReferenceBindingStep(cv1T1IgnoreAS, /*BindingTemporary=*/true);
 
-  if (T1Quals.hasAddressSpace())
+  if (T1Quals.hasAddressSpace()) {
+    if (!Qualifiers::isAddressSpaceSupersetOf(T1Quals.getAddressSpace(),
+                                              LangAS::Default)) {
+      Sequence.SetFailed(
+          InitializationSequence::FK_ReferenceAddrspaceMismatchTemporary);
+      return;
+    }
     Sequence.AddQualificationConversionStep(cv1T1, isLValueRef ? VK_LValue
                                                                : VK_XValue);
+  }
 }
 
 /// Attempt character array initialization from a string literal
@@ -4979,6 +5001,7 @@ static void TryUserDefinedConversion(Sema &S,
   // structure, so that it will persist if we fail.
   OverloadCandidateSet &CandidateSet = Sequence.getFailedCandidateSet();
   CandidateSet.clear(OverloadCandidateSet::CSK_InitByUserDefinedConversion);
+  CandidateSet.setDestAS(DestType.getQualifiers().getAddressSpace());
 
   // Determine whether we are allowed to call explicit constructors or
   // explicit conversion operators.
@@ -5626,6 +5649,9 @@ void InitializationSequence::InitializeFrom(Sema &S,
   bool allowObjCWritebackConversion = S.getLangOpts().ObjCAutoRefCount &&
          Entity.isParameterKind();
 
+  if (TryOCLSamplerInitialization(S, *this, DestType, Initializer))
+    return;
+
   // We're at the end of the line for C: it's either a write-back conversion
   // or it's a C assignment. There's no need to check anything else.
   if (!S.getLangOpts().CPlusPlus) {
@@ -5634,9 +5660,6 @@ void InitializationSequence::InitializeFrom(Sema &S,
         tryObjCWritebackConversion(S, *this, Entity, Initializer)) {
       return;
     }
-
-    if (TryOCLSamplerInitialization(S, *this, DestType, Initializer))
-      return;
 
     if (TryOCLZeroOpaqueTypeInitialization(S, *this, DestType, Initializer))
       return;
@@ -6325,6 +6348,10 @@ PerformConstructorInitialization(Sema &S,
   if (S.DiagnoseUseOfDecl(Step.Function.FoundDecl, Loc))
     return ExprError();
 
+  if (const ArrayType *AT = S.Context.getAsArrayType(Entity.getType()))
+    if (checkDestructorReference(S.Context.getBaseElementType(AT), Loc, S))
+      return ExprError();
+
   if (shouldBindAsTemporary(Entity))
     CurInit = S.MaybeBindToTemporary(CurInit.get());
 
@@ -6487,6 +6514,7 @@ struct IndirectLocalPathEntry {
     VarInit,
     LValToRVal,
     LifetimeBoundCall,
+    GslPointerInit
   } Kind;
   Expr *E;
   const Decl *D = nullptr;
@@ -6530,6 +6558,125 @@ static void visitLocalsRetainedByInitializer(IndirectLocalPath &Path,
 static void visitLocalsRetainedByReferenceBinding(IndirectLocalPath &Path,
                                                   Expr *Init, ReferenceKind RK,
                                                   LocalVisitor Visit);
+
+template <typename T> static bool isRecordWithAttr(QualType Type) {
+  if (auto *RD = Type->getAsCXXRecordDecl())
+    return RD->hasAttr<T>();
+  return false;
+}
+
+// Decl::isInStdNamespace will return false for iterators in some STL
+// implementations due to them being defined in a namespace outside of the std
+// namespace.
+static bool isInStlNamespace(const Decl *D) {
+  const DeclContext *DC = D->getDeclContext();
+  if (!DC)
+    return false;
+  if (const auto *ND = dyn_cast<NamespaceDecl>(DC))
+    if (const IdentifierInfo *II = ND->getIdentifier()) {
+      StringRef Name = II->getName();
+      if (Name.size() >= 2 && Name.front() == '_' &&
+          (Name[1] == '_' || isUppercase(Name[1])))
+        return true;
+    }
+
+  return DC->isStdNamespace();
+}
+
+static bool shouldTrackImplicitObjectArg(const CXXMethodDecl *Callee) {
+  if (auto *Conv = dyn_cast_or_null<CXXConversionDecl>(Callee))
+    if (isRecordWithAttr<PointerAttr>(Conv->getConversionType()))
+      return true;
+  if (!isInStlNamespace(Callee->getParent()))
+    return false;
+  if (!isRecordWithAttr<PointerAttr>(Callee->getThisObjectType()) &&
+      !isRecordWithAttr<OwnerAttr>(Callee->getThisObjectType()))
+    return false;
+  if (Callee->getReturnType()->isPointerType() ||
+      isRecordWithAttr<PointerAttr>(Callee->getReturnType())) {
+    if (!Callee->getIdentifier())
+      return false;
+    return llvm::StringSwitch<bool>(Callee->getName())
+        .Cases("begin", "rbegin", "cbegin", "crbegin", true)
+        .Cases("end", "rend", "cend", "crend", true)
+        .Cases("c_str", "data", "get", true)
+        // Map and set types.
+        .Cases("find", "equal_range", "lower_bound", "upper_bound", true)
+        .Default(false);
+  } else if (Callee->getReturnType()->isReferenceType()) {
+    if (!Callee->getIdentifier()) {
+      auto OO = Callee->getOverloadedOperator();
+      return OO == OverloadedOperatorKind::OO_Subscript ||
+             OO == OverloadedOperatorKind::OO_Star;
+    }
+    return llvm::StringSwitch<bool>(Callee->getName())
+        .Cases("front", "back", "at", "top", "value", true)
+        .Default(false);
+  }
+  return false;
+}
+
+static bool shouldTrackFirstArgument(const FunctionDecl *FD) {
+  if (!FD->getIdentifier() || FD->getNumParams() != 1)
+    return false;
+  const auto *RD = FD->getParamDecl(0)->getType()->getPointeeCXXRecordDecl();
+  if (!FD->isInStdNamespace() || !RD || !RD->isInStdNamespace())
+    return false;
+  if (!isRecordWithAttr<PointerAttr>(QualType(RD->getTypeForDecl(), 0)) &&
+      !isRecordWithAttr<OwnerAttr>(QualType(RD->getTypeForDecl(), 0)))
+    return false;
+  if (FD->getReturnType()->isPointerType() ||
+      isRecordWithAttr<PointerAttr>(FD->getReturnType())) {
+    return llvm::StringSwitch<bool>(FD->getName())
+        .Cases("begin", "rbegin", "cbegin", "crbegin", true)
+        .Cases("end", "rend", "cend", "crend", true)
+        .Case("data", true)
+        .Default(false);
+  } else if (FD->getReturnType()->isReferenceType()) {
+    return llvm::StringSwitch<bool>(FD->getName())
+        .Cases("get", "any_cast", true)
+        .Default(false);
+  }
+  return false;
+}
+
+static void handleGslAnnotatedTypes(IndirectLocalPath &Path, Expr *Call,
+                                    LocalVisitor Visit) {
+  auto VisitPointerArg = [&](const Decl *D, Expr *Arg) {
+    Path.push_back({IndirectLocalPathEntry::GslPointerInit, Arg, D});
+    if (Arg->isGLValue())
+      visitLocalsRetainedByReferenceBinding(Path, Arg, RK_ReferenceBinding,
+                                            Visit);
+    else
+      visitLocalsRetainedByInitializer(Path, Arg, Visit, true);
+    Path.pop_back();
+  };
+
+  if (auto *MCE = dyn_cast<CXXMemberCallExpr>(Call)) {
+    const auto *MD = cast_or_null<CXXMethodDecl>(MCE->getDirectCallee());
+    if (MD && shouldTrackImplicitObjectArg(MD))
+      VisitPointerArg(MD, MCE->getImplicitObjectArgument());
+    return;
+  } else if (auto *OCE = dyn_cast<CXXOperatorCallExpr>(Call)) {
+    FunctionDecl *Callee = OCE->getDirectCallee();
+    if (Callee && Callee->isCXXInstanceMember() &&
+        shouldTrackImplicitObjectArg(cast<CXXMethodDecl>(Callee)))
+      VisitPointerArg(Callee, OCE->getArg(0));
+    return;
+  } else if (auto *CE = dyn_cast<CallExpr>(Call)) {
+    FunctionDecl *Callee = CE->getDirectCallee();
+    if (Callee && shouldTrackFirstArgument(Callee))
+      VisitPointerArg(Callee, CE->getArg(0));
+    return;
+  }
+
+  if (auto *CCE = dyn_cast<CXXConstructExpr>(Call)) {
+    const auto *Ctor = CCE->getConstructor();
+    const CXXRecordDecl *RD = Ctor->getParent();
+    if (CCE->getNumArgs() > 0 && RD->hasAttr<PointerAttr>())
+      VisitPointerArg(Ctor->getParamDecl(0), CCE->getArgs()[0]);
+  }
+}
 
 static bool implicitObjectParamIsLifetimeBound(const FunctionDecl *FD) {
   const TypeSourceInfo *TSI = FD->getTypeSourceInfo();
@@ -6652,8 +6799,10 @@ static void visitLocalsRetainedByReferenceBinding(IndirectLocalPath &Path,
                                        true);
   }
 
-  if (isa<CallExpr>(Init))
+  if (isa<CallExpr>(Init)) {
+    handleGslAnnotatedTypes(Path, Init, Visit);
     return visitLifetimeBoundArguments(Path, Init, Visit);
+  }
 
   switch (Init->getStmtClass()) {
   case Stmt::DeclRefExprClass: {
@@ -6840,6 +6989,9 @@ static void visitLocalsRetainedByInitializer(IndirectLocalPath &Path,
                                               RK_ReferenceBinding, Visit);
       else {
         unsigned Index = 0;
+        for (; Index < RD->getNumBases() && Index < ILE->getNumInits(); ++Index)
+          visitLocalsRetainedByInitializer(Path, ILE->getInit(Index), Visit,
+                                           RevisitSubinits);
         for (const auto *I : RD->fields()) {
           if (Index >= ILE->getNumInits())
             break;
@@ -6876,8 +7028,10 @@ static void visitLocalsRetainedByInitializer(IndirectLocalPath &Path,
     }
   }
 
-  if (isa<CallExpr>(Init) || isa<CXXConstructExpr>(Init))
+  if (isa<CallExpr>(Init) || isa<CXXConstructExpr>(Init)) {
+    handleGslAnnotatedTypes(Path, Init, Visit);
     return visitLifetimeBoundArguments(Path, Init, Visit);
+  }
 
   switch (Init->getStmtClass()) {
   case Stmt::UnaryOperatorClass: {
@@ -6959,16 +7113,29 @@ static SourceRange nextPathEntryRange(const IndirectLocalPath &Path, unsigned I,
     case IndirectLocalPathEntry::AddressOf:
     case IndirectLocalPathEntry::LValToRVal:
     case IndirectLocalPathEntry::LifetimeBoundCall:
+    case IndirectLocalPathEntry::GslPointerInit:
       // These exist primarily to mark the path as not permitting or
       // supporting lifetime extension.
       break;
 
-    case IndirectLocalPathEntry::DefaultInit:
     case IndirectLocalPathEntry::VarInit:
+      if (cast<VarDecl>(Path[I].D)->isImplicit())
+        return SourceRange();
+      LLVM_FALLTHROUGH;
+    case IndirectLocalPathEntry::DefaultInit:
       return Path[I].E->getSourceRange();
     }
   }
   return E->getSourceRange();
+}
+
+static bool pathOnlyInitializesGslPointer(IndirectLocalPath &Path) {
+  for (auto It = Path.rbegin(), End = Path.rend(); It != End; ++It) {
+    if (It->Kind == IndirectLocalPathEntry::VarInit)
+      continue;
+    return It->Kind == IndirectLocalPathEntry::GslPointerInit;
+  }
+  return false;
 }
 
 void Sema::checkInitializerLifetime(const InitializedEntity &Entity,
@@ -6987,18 +7154,47 @@ void Sema::checkInitializerLifetime(const InitializedEntity &Entity,
     SourceRange DiagRange = nextPathEntryRange(Path, 0, L);
     SourceLocation DiagLoc = DiagRange.getBegin();
 
+    auto *MTE = dyn_cast<MaterializeTemporaryExpr>(L);
+
+    bool IsGslPtrInitWithGslTempOwner = false;
+    bool IsLocalGslOwner = false;
+    if (pathOnlyInitializesGslPointer(Path)) {
+      if (isa<DeclRefExpr>(L)) {
+        // We do not want to follow the references when returning a pointer originating
+        // from a local owner to avoid the following false positive:
+        //   int &p = *localUniquePtr;
+        //   someContainer.add(std::move(localUniquePtr));
+        //   return p;
+        IsLocalGslOwner = isRecordWithAttr<OwnerAttr>(L->getType());
+        if (pathContainsInit(Path) || !IsLocalGslOwner)
+          return false;
+      } else {
+        IsGslPtrInitWithGslTempOwner = MTE && !MTE->getExtendingDecl() &&
+                            isRecordWithAttr<OwnerAttr>(MTE->getType());
+        // Skipping a chain of initializing gsl::Pointer annotated objects.
+        // We are looking only for the final source to find out if it was
+        // a local or temporary owner or the address of a local variable/param.
+        if (!IsGslPtrInitWithGslTempOwner)
+          return true;
+      }
+    }
+
     switch (LK) {
     case LK_FullExpression:
       llvm_unreachable("already handled this");
 
     case LK_Extended: {
-      auto *MTE = dyn_cast<MaterializeTemporaryExpr>(L);
       if (!MTE) {
         // The initialized entity has lifetime beyond the full-expression,
         // and the local entity does too, so don't warn.
         //
         // FIXME: We should consider warning if a static / thread storage
         // duration variable retains an automatic storage duration local.
+        return false;
+      }
+
+      if (IsGslPtrInitWithGslTempOwner && DiagLoc.isValid()) {
+        Diag(DiagLoc, diag::warn_dangling_lifetime_pointer) << DiagRange;
         return false;
       }
 
@@ -7043,6 +7239,14 @@ void Sema::checkInitializerLifetime(const InitializedEntity &Entity,
         // temporary, the program is ill-formed.
         if (auto *ExtendingDecl =
                 ExtendingEntity ? ExtendingEntity->getDecl() : nullptr) {
+          if (IsGslPtrInitWithGslTempOwner) {
+            Diag(DiagLoc, diag::warn_dangling_lifetime_pointer_member)
+                << ExtendingDecl << DiagRange;
+            Diag(ExtendingDecl->getLocation(),
+                 diag::note_ref_or_ptr_member_declared_here)
+                << true;
+            return false;
+          }
           bool IsSubobjectMember = ExtendingEntity != &Entity;
           Diag(DiagLoc, shouldLifetimeExtendThroughPath(Path)
                             ? diag::err_dangling_member
@@ -7073,6 +7277,11 @@ void Sema::checkInitializerLifetime(const InitializedEntity &Entity,
         if (pathContainsInit(Path))
           return false;
 
+        // Suppress false positives for code like the one below:
+        //   Ctor(unique_ptr<T> up) : member(*up), member2(move(up)) {}
+        if (IsLocalGslOwner && pathOnlyInitializesGslPointer(Path))
+          return false;
+
         auto *DRE = dyn_cast<DeclRefExpr>(L);
         auto *VD = DRE ? dyn_cast<VarDecl>(DRE->getDecl()) : nullptr;
         if (!VD) {
@@ -7083,7 +7292,7 @@ void Sema::checkInitializerLifetime(const InitializedEntity &Entity,
 
         if (auto *Member =
                 ExtendingEntity ? ExtendingEntity->getDecl() : nullptr) {
-          bool IsPointer = Member->getType()->isAnyPointerType();
+          bool IsPointer = !Member->getType()->isReferenceType();
           Diag(DiagLoc, IsPointer ? diag::warn_init_ptr_member_to_parameter_addr
                                   : diag::warn_bind_ref_member_to_parameter)
               << Member << VD << isa<ParmVarDecl>(VD) << DiagRange;
@@ -7097,10 +7306,13 @@ void Sema::checkInitializerLifetime(const InitializedEntity &Entity,
 
     case LK_New:
       if (isa<MaterializeTemporaryExpr>(L)) {
-        Diag(DiagLoc, RK == RK_ReferenceBinding
-                          ? diag::warn_new_dangling_reference
-                          : diag::warn_new_dangling_initializer_list)
-            << !Entity.getParent() << DiagRange;
+        if (IsGslPtrInitWithGslTempOwner)
+          Diag(DiagLoc, diag::warn_dangling_lifetime_pointer) << DiagRange;
+        else
+          Diag(DiagLoc, RK == RK_ReferenceBinding
+                            ? diag::warn_new_dangling_reference
+                            : diag::warn_new_dangling_initializer_list)
+              << !Entity.getParent() << DiagRange;
       } else {
         // We can't determine if the allocation outlives the local declaration.
         return false;
@@ -7143,7 +7355,8 @@ void Sema::checkInitializerLifetime(const InitializedEntity &Entity,
         break;
 
       case IndirectLocalPathEntry::LifetimeBoundCall:
-        // FIXME: Consider adding a note for this.
+      case IndirectLocalPathEntry::GslPointerInit:
+        // FIXME: Consider adding a note for these.
         break;
 
       case IndirectLocalPathEntry::DefaultInit: {
@@ -7195,27 +7408,34 @@ static void CheckMoveOnConstruction(Sema &S, const Expr *InitExpr,
   if (!DestType->isRecordType())
     return;
 
-  unsigned DiagID = 0;
-  if (IsReturnStmt) {
-    const CXXConstructExpr *CCE =
-        dyn_cast<CXXConstructExpr>(InitExpr->IgnoreParens());
-    if (!CCE || CCE->getNumArgs() != 1)
-      return;
+  const CXXConstructExpr *CCE =
+      dyn_cast<CXXConstructExpr>(InitExpr->IgnoreParens());
+  if (!CCE || CCE->getNumArgs() != 1)
+    return;
 
-    if (!CCE->getConstructor()->isCopyOrMoveConstructor())
-      return;
+  if (!CCE->getConstructor()->isCopyOrMoveConstructor())
+    return;
 
-    InitExpr = CCE->getArg(0)->IgnoreImpCasts();
-  }
+  InitExpr = CCE->getArg(0)->IgnoreImpCasts();
 
   // Find the std::move call and get the argument.
   const CallExpr *CE = dyn_cast<CallExpr>(InitExpr->IgnoreParens());
   if (!CE || !CE->isCallToStdMove())
     return;
 
-  const Expr *Arg = CE->getArg(0)->IgnoreImplicit();
+  const Expr *Arg = CE->getArg(0);
 
-  if (IsReturnStmt) {
+  unsigned DiagID = 0;
+
+  if (!IsReturnStmt && !isa<MaterializeTemporaryExpr>(Arg))
+    return;
+
+  if (isa<MaterializeTemporaryExpr>(Arg)) {
+    DiagID = diag::warn_pessimizing_move_on_initialization;
+    const Expr *ArgStripped = Arg->IgnoreImplicit()->IgnoreParens();
+    if (!ArgStripped->isRValue() || !ArgStripped->getType()->isRecordType())
+      return;
+  } else { // IsReturnStmt
     const DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(Arg->IgnoreParenImpCasts());
     if (!DRE || DRE->refersToEnclosingVariableOrCapture())
       return;
@@ -7242,24 +7462,18 @@ static void CheckMoveOnConstruction(Sema &S, const Expr *InitExpr,
       DiagID = diag::warn_redundant_move_on_return;
     else
       DiagID = diag::warn_pessimizing_move_on_return;
-  } else {
-    DiagID = diag::warn_pessimizing_move_on_initialization;
-    const Expr *ArgStripped = Arg->IgnoreImplicit()->IgnoreParens();
-    if (!ArgStripped->isRValue() || !ArgStripped->getType()->isRecordType())
-      return;
   }
 
   S.Diag(CE->getBeginLoc(), DiagID);
 
   // Get all the locations for a fix-it.  Don't emit the fix-it if any location
   // is within a macro.
-  SourceLocation CallBegin = CE->getCallee()->getBeginLoc();
-  if (CallBegin.isMacroID())
+  SourceLocation BeginLoc = CCE->getBeginLoc();
+  if (BeginLoc.isMacroID())
     return;
   SourceLocation RParen = CE->getRParenLoc();
   if (RParen.isMacroID())
     return;
-  SourceLocation LParen;
   SourceLocation ArgLoc = Arg->getBeginLoc();
 
   // Special testing for the argument location.  Since the fix-it needs the
@@ -7270,14 +7484,16 @@ static void CheckMoveOnConstruction(Sema &S, const Expr *InitExpr,
     ArgLoc = S.getSourceManager().getImmediateExpansionRange(ArgLoc).getBegin();
   }
 
+  SourceLocation LParen = ArgLoc.getLocWithOffset(-1);
   if (LParen.isMacroID())
     return;
-
-  LParen = ArgLoc.getLocWithOffset(-1);
+  SourceLocation EndLoc = CCE->getEndLoc();
+  if (EndLoc.isMacroID())
+    return;
 
   S.Diag(CE->getBeginLoc(), diag::note_remove_move)
-      << FixItHint::CreateRemoval(SourceRange(CallBegin, LParen))
-      << FixItHint::CreateRemoval(SourceRange(RParen, RParen));
+      << FixItHint::CreateRemoval(SourceRange(BeginLoc, LParen))
+      << FixItHint::CreateRemoval(SourceRange(RParen, EndLoc));
 }
 
 static void CheckForNullPointerDereference(Sema &S, const Expr *E) {
@@ -7482,7 +7698,6 @@ ExprResult InitializationSequence::Perform(Sema &S,
   case SK_QualificationConversionXValue:
   case SK_QualificationConversionRValue:
   case SK_AtomicConversion:
-  case SK_LValueToRValue:
   case SK_ConversionSequence:
   case SK_ConversionSequenceNoNarrowing:
   case SK_ListInitialization:
@@ -7751,14 +7966,6 @@ ExprResult InitializationSequence::Perform(Sema &S,
       assert(CurInit.get()->isRValue() && "cannot convert glvalue to atomic");
       CurInit = S.ImpCastExprToType(CurInit.get(), Step->Type,
                                     CK_NonAtomicToAtomic, VK_RValue);
-      break;
-    }
-
-    case SK_LValueToRValue: {
-      assert(CurInit.get()->isGLValue() && "cannot load from a prvalue");
-      CurInit = ImplicitCastExpr::Create(S.Context, Step->Type,
-                                         CK_LValueToRValue, CurInit.get(),
-                                         /*BasePath=*/nullptr, VK_RValue);
       break;
     }
 
@@ -8096,7 +8303,7 @@ ExprResult InitializationSequence::Perform(Sema &S,
       // argument passing.
       assert(Step->Type->isSamplerT() &&
              "Sampler initialization on non-sampler type.");
-      Expr *Init = CurInit.get();
+      Expr *Init = CurInit.get()->IgnoreParens();
       QualType SourceType = Init->getType();
       // Case 1
       if (Entity.isParameterKind()) {
@@ -8504,17 +8711,27 @@ bool InitializationSequence::Diagnose(Sema &S,
       << Args[0]->getSourceRange();
     break;
 
+  case FK_ReferenceAddrspaceMismatchTemporary:
+    S.Diag(Kind.getLocation(), diag::err_reference_bind_temporary_addrspace)
+        << DestType << Args[0]->getSourceRange();
+    break;
+
   case FK_ReferenceInitDropsQualifiers: {
     QualType SourceType = OnlyArg->getType();
     QualType NonRefType = DestType.getNonReferenceType();
     Qualifiers DroppedQualifiers =
         SourceType.getQualifiers() - NonRefType.getQualifiers();
 
-    S.Diag(Kind.getLocation(), diag::err_reference_bind_drops_quals)
-      << SourceType
-      << NonRefType
-      << DroppedQualifiers.getCVRQualifiers()
-      << Args[0]->getSourceRange();
+    if (!NonRefType.getQualifiers().isAddressSpaceSupersetOf(
+            SourceType.getQualifiers()))
+      S.Diag(Kind.getLocation(), diag::err_reference_bind_drops_quals)
+          << NonRefType << SourceType << 1 /*addr space*/
+          << Args[0]->getSourceRange();
+    else
+      S.Diag(Kind.getLocation(), diag::err_reference_bind_drops_quals)
+          << NonRefType << SourceType << 0 /*cv quals*/
+          << Qualifiers::fromCVRMask(DroppedQualifiers.getCVRQualifiers())
+          << DroppedQualifiers.getCVRQualifiers() << Args[0]->getSourceRange();
     break;
   }
 
@@ -8839,6 +9056,10 @@ void InitializationSequence::dump(raw_ostream &OS) const {
       OS << "reference initialization drops qualifiers";
       break;
 
+    case FK_ReferenceAddrspaceMismatchTemporary:
+      OS << "reference with mismatching address space bound to temporary";
+      break;
+
     case FK_ReferenceInitFailed:
       OS << "reference initialization failed";
       break;
@@ -8972,10 +9193,6 @@ void InitializationSequence::dump(raw_ostream &OS) const {
 
     case SK_AtomicConversion:
       OS << "non-atomic-to-atomic conversion";
-      break;
-
-    case SK_LValueToRValue:
-      OS << "load (lvalue to rvalue)";
       break;
 
     case SK_ConversionSequence:

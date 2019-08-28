@@ -54,7 +54,7 @@ struct PGOOptions {
     // a profile.
     assert(this->CSAction != CSIRUse || this->Action == IRUse);
 
-    // If neither CSAction nor CSAction, SamplePGOSupport needs to be true.
+    // If neither Action nor CSAction, SamplePGOSupport needs to be true.
     assert(this->Action != NoAction || this->CSAction != NoCSAction ||
            this->SamplePGOSupport);
   }
@@ -84,6 +84,13 @@ public:
   /// Tuning option to enable/disable slp loop vectorization. Its default value
   /// is that of the flag: `vectorize-slp`.
   bool SLPVectorization;
+
+  /// Tuning option to enable/disable loop unrolling. Its default value is true.
+  bool LoopUnrolling;
+
+  /// Tuning option to forget all SCEV loops in LoopUnroll. Its default value
+  /// is that of the flag: `-forget-scev-loop-unroll`.
+  bool ForgetAllSCEVInLoopUnroll;
 
   /// Tuning option to cap the number of calls to retrive clobbering accesses in
   /// MemorySSA, in LICM.
@@ -622,6 +629,12 @@ public:
     TopLevelPipelineParsingCallbacks.push_back(C);
   }
 
+  /// Add PGOInstrumenation passes for O0 only.
+  void addPGOInstrPassesForO0(ModulePassManager &MPM, bool DebugLogging,
+                              bool RunProfileGen, bool IsCS,
+                              std::string ProfileFile,
+                              std::string ProfileRemappingFile);
+
 private:
   static Optional<std::vector<PipelineElement>>
   parsePipelineText(StringRef Text);
@@ -653,7 +666,6 @@ private:
                          OptimizationLevel Level, bool RunProfileGen, bool IsCS,
                          std::string ProfileFile,
                          std::string ProfileRemappingFile);
-
   void invokePeepholeEPCallbacks(FunctionPassManager &, OptimizationLevel);
 
   // Extension Point callbacks

@@ -193,6 +193,7 @@ enum Format {
   eFormatHexFloat,    // ISO C99 hex float string
   eFormatInstruction, // Disassemble an opcode
   eFormatVoid,        // Do not print this
+  eFormatUnicode8,
   kNumFormats
 };
 
@@ -592,6 +593,8 @@ enum CommandArgumentType {
 };
 
 // Symbol types
+// Symbol holds the SymbolType in a 6-bit field (m_type), so if you get over 63
+// entries you will have to resize that field.
 enum SymbolType {
   eSymbolTypeAny = 0,
   eSymbolTypeInvalid = 0,
@@ -684,6 +687,7 @@ enum SectionType {
   eSectionTypeDWARFDebugInfoDwo,
   eSectionTypeDWARFDebugStrDwo,
   eSectionTypeDWARFDebugStrOffsetsDwo,
+  eSectionTypeDWARFDebugTypesDwo,
 };
 
 FLAGS_ENUM(EmulateInstructionOptions){

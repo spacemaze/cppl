@@ -7,10 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "Annotations.h"
+#include "ClangdUnit.h"
 #include "Context.h"
+#include "Diagnostics.h"
 #include "Matchers.h"
+#include "Path.h"
 #include "TUScheduler.h"
 #include "TestFS.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -56,15 +60,20 @@ protected:
   /// in updateWithDiags.
   static std::unique_ptr<ParsingCallbacks> captureDiags() {
     class CaptureDiags : public ParsingCallbacks {
-      void onDiagnostics(PathRef File, std::vector<Diag> Diags) override {
+      void onMainAST(PathRef File, ParsedAST &AST, PublishFn Publish) override {
+        auto Diags = AST.getDiagnostics();
         auto D = Context::current().get(DiagsCallbackKey);
         if (!D)
           return;
-        const_cast<llvm::unique_function<void(PathRef, std::vector<Diag>)> &> (
-            *D)(File, Diags);
+
+        Publish([&]() {
+          const_cast<
+              llvm::unique_function<void(PathRef, std::vector<Diag>)> &> (*D)(
+              File, std::move(Diags));
+        });
       }
     };
-    return llvm::make_unique<CaptureDiags>();
+    return std::make_unique<CaptureDiags>();
   }
 
   /// Schedule an update and call \p CB with the diagnostics it produces, if
@@ -74,14 +83,12 @@ protected:
                        WantDiagnostics WD,
                        llvm::unique_function<void(std::vector<Diag>)> CB) {
     Path OrigFile = File.str();
-    WithContextValue Ctx(
-        DiagsCallbackKey,
-        Bind(
-            [OrigFile](decltype(CB) CB, PathRef File, std::vector<Diag> Diags) {
-              assert(File == OrigFile);
-              CB(std::move(Diags));
-            },
-            std::move(CB)));
+    WithContextValue Ctx(DiagsCallbackKey,
+                         [OrigFile, CB = std::move(CB)](
+                             PathRef File, std::vector<Diag> Diags) mutable {
+                           assert(File == OrigFile);
+                           CB(std::move(Diags));
+                         });
     S.update(File, std::move(Inputs), WD);
   }
 
@@ -107,15 +114,17 @@ TEST_F(TUSchedulerTests, MissingFiles) {
                 ASTRetentionPolicy());
 
   auto Added = testPath("added.cpp");
-  Files[Added] = "";
+  Files[Added] = "x";
 
   auto Missing = testPath("missing.cpp");
   Files[Missing] = "";
 
-  S.update(Added, getInputs(Added, ""), WantDiagnostics::No);
+  EXPECT_EQ(S.getContents(Added), "");
+  S.update(Added, getInputs(Added, "x"), WantDiagnostics::No);
+  EXPECT_EQ(S.getContents(Added), "x");
 
-  // Assert each operation for missing file is an error (even if it's available
-  // in VFS).
+  // Assert each operation for missing file is an error (even if it's
+  // available in VFS).
   S.runWithAST("", Missing,
                [&](Expected<InputsAndAST> AST) { EXPECT_ERROR(AST); });
   S.runWithPreamble(
@@ -131,7 +140,9 @@ TEST_F(TUSchedulerTests, MissingFiles) {
                     [&](Expected<InputsAndPreamble> Preamble) {
                       EXPECT_TRUE(bool(Preamble));
                     });
+  EXPECT_EQ(S.getContents(Added), "x");
   S.remove(Added);
+  EXPECT_EQ(S.getContents(Added), "");
 
   // Assert that all operations fail after removing the file.
   S.runWithAST("", Added,
@@ -363,8 +374,8 @@ TEST_F(TUSchedulerTests, ManyUpdates) {
     StringRef AllContents[] = {Contents1, Contents2, Contents3};
     const int AllContentsSize = 3;
 
-    // Scheduler may run tasks asynchronously, but should propagate the context.
-    // We stash a nonce in the context, and verify it in the task.
+    // Scheduler may run tasks asynchronously, but should propagate the
+    // context. We stash a nonce in the context, and verify it in the task.
     static Key<int> NonceKey;
     int Nonce = 0;
 
@@ -461,8 +472,8 @@ TEST_F(TUSchedulerTests, EvictedAST) {
   ASSERT_TRUE(S.blockUntilIdle(timeoutSeconds(10)));
   ASSERT_EQ(BuiltASTCounter.load(), 1);
 
-  // Build two more files. Since we can retain only 2 ASTs, these should be the
-  // ones we see in the cache later.
+  // Build two more files. Since we can retain only 2 ASTs, these should be
+  // the ones we see in the cache later.
   updateWithCallback(S, Bar, SourceContents, WantDiagnostics::Yes,
                      [&BuiltASTCounter]() { ++BuiltASTCounter; });
   updateWithCallback(S, Baz, SourceContents, WantDiagnostics::Yes,
@@ -673,10 +684,14 @@ TEST_F(TUSchedulerTests, TUStatus) {
       AllStatus.push_back(Status);
     }
 
-    std::vector<TUStatus> AllStatus;
+    std::vector<TUStatus> allStatus() {
+      std::lock_guard<std::mutex> Lock(Mutex);
+      return AllStatus;
+    }
 
   private:
     std::mutex Mutex;
+    std::vector<TUStatus> AllStatus;
   } CaptureTUStatus;
   MockFSProvider FS;
   MockCompilationDatabase CDB;
@@ -693,7 +708,7 @@ TEST_F(TUSchedulerTests, TUStatus) {
 
   ASSERT_TRUE(Server.blockUntilIdleForTest());
 
-  EXPECT_THAT(CaptureTUStatus.AllStatus,
+  EXPECT_THAT(CaptureTUStatus.allStatus(),
               ElementsAre(
                   // Statuses of "Update" action.
                   TUState(TUAction::RunningAction, "Update"),

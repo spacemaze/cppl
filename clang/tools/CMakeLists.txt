@@ -8,13 +8,19 @@ add_clang_subdirectory(clang-format-vs)
 add_clang_subdirectory(clang-fuzzer)
 add_clang_subdirectory(clang-import-test)
 add_clang_subdirectory(clang-offload-bundler)
+add_clang_subdirectory(clang-scan-deps)
 
 add_clang_subdirectory(c-index-test)
 
 add_clang_subdirectory(clang-rename)
 add_clang_subdirectory(clang-refactor)
+
 add_clang_subdirectory(levitation-cppl)
 add_clang_subdirectory(levitation-deps)
+
+if(UNIX)
+  add_clang_subdirectory(clang-shlib)
+endif()
 
 if(CLANG_ENABLE_ARCMT)
   add_clang_subdirectory(arcmt-test)

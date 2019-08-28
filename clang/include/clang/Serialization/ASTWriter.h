@@ -36,7 +36,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Bitcode/BitstreamWriter.h"
+#include "llvm/Bitstream/BitstreamWriter.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -866,6 +866,9 @@ public:
 
   /// Emit a floating-point value.
   void AddAPFloat(const llvm::APFloat &Value);
+
+  /// Emit an APvalue.
+  void AddAPValue(const APValue &Value);
 
   /// Emit a reference to an identifier.
   void AddIdentifierRef(const IdentifierInfo *II) {
