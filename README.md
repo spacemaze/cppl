@@ -460,22 +460,22 @@ C++ Levitation Compiler implementation is based on LLVM Clang frontend.
  
 So far, the only way to obtain C++ Levitation Compiler is to get sources and build them.
 
-1. `git clone <todo:url> llvm-cppl`
-2. Create directory for binaries, for example 'llvm-cppl.build'
-3. `cd llvm-cppl.build`
-4. Run _cmake_ (assuming you want use 'llvm-cppl.instal' as directory
-with installed binaries, and 'llvm-cppl' is accessable as '../llvm-cppl').
+1. `git clone https://gitlab.com/dyatkovskiy/cppl.git cppl`
+2. Create directory for binaries, for example 'cppl.build'
+3. `cd cppl.build`
+4. Run _cmake_ (assuming you want use 'cppl.instal' as directory
+with installed binaries, and 'cppl' is accessable as '../cppl').
 
 	```sh
 	cmake -DLLVM_ENABLE_PROJECTS=clang \
-	      -DCMAKE_INSTALL_PREFIX=llvm-cppl.install \
-	      -G "Unix Makefiles" ../llvm-cppl
+	      -DCMAKE_INSTALL_PREFIX=cppl.install \
+	      -G "Unix Makefiles" ../cppl
 	```
 
 5. `make`
 6. `make check-clang`
 7. `make install`
-8. `alias cppl=<path-to-llvm-cppl.install>\bin\cppl`
+8. `alias cppl=<path-to-cppl.install>\bin\cppl`
 
 ### How to build executable
 _Related tasks: L-4_
