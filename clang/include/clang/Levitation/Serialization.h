@@ -17,9 +17,9 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Levitation/Common/IndexedSet.h"
 #include "clang/Levitation/Common/StringsPool.h"
+#include "llvm/Bitstream/BitCodes.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Bitcode/BitCodes.h"
 #include <map>
 #include <memory>
 

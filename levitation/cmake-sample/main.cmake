@@ -130,9 +130,9 @@ macro(setupLevitationParseTarget)
 
     set(LEVITATION_PARSED_AST_FILES)
     set(LEVITATION_PARSED_DEPS_FILES)
-        
+
     foreach(levitationSource ${LEVITATION_SOURCES})
-        
+
         setupOutputFile(levitationParsedAST
             ${levitationSource}
             ${LEVITATION_ParsedAST_EXTENSION}

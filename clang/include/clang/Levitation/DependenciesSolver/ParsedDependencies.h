@@ -30,7 +30,7 @@ public:
   ParsedDependencies(DependenciesStringsPool &Strings) : Strings(Strings) {}
 
   void add(const DependenciesData &Deps) {
-    auto NewDeps = llvm::make_unique<DependenciesData>(&Strings);
+    auto NewDeps = std::make_unique<DependenciesData>(&Strings);
 
     llvm::DenseMap<StringID, StringID> OldToNew;
 

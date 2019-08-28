@@ -19,8 +19,8 @@
 #include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Common/WithOperator.h"
 #include "llvm/ADT/ScopeExit.h"
-#include "llvm/Bitcode/BitstreamReader.h"
-#include "llvm/Bitcode/BitstreamWriter.h"
+#include "llvm/Bitstream/BitstreamReader.h"
+#include "llvm/Bitstream/BitstreamWriter.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -364,7 +364,7 @@ namespace levitation {
   std::unique_ptr<DependenciesWriter> CreateBitstreamWriter(
       llvm::raw_ostream &OS
   ) {
-    return llvm::make_unique<DependenciesBitstreamWriter>(OS);
+    return std::make_unique<DependenciesBitstreamWriter>(OS);
   }
 
   // ==========================================================================
@@ -396,10 +396,15 @@ namespace levitation {
 
     bool readSignature() {
       return Reader.canSkipToPos(4) &&
-             Reader.Read(8) == 'L' &&
-             Reader.Read(8) == 'D' &&
-             Reader.Read(8) == 'E' &&
-             Reader.Read(8) == 'P';
+          readAndCheckByte('L') &&
+          readAndCheckByte('D') &&
+          readAndCheckByte('E') &&
+          readAndCheckByte('P');
+    }
+
+    bool readAndCheckByte(char B) {
+        auto Res = Reader.Read(8);
+        return Res && Res.get();
     }
 
     bool readData(DependenciesData &Data) {
@@ -409,7 +414,14 @@ namespace levitation {
       if (enterBlock(DEPS_DEPENDENCIES_MAIN_BLOCK_ID)) {
         bool EndOfBlock = false;
         while (!EndOfBlock) {
-          auto Entry = Reader.advance();
+
+          auto EntryRes = Reader.advance();
+          if (!EntryRes) {
+            setFailure("Failed to advance on reading bitstream.");
+            return false;
+          }
+
+          auto &Entry = EntryRes.get();
           switch (Entry.Kind) {
             case BitstreamEntry::Error:
               setFailure("Failed to enter read bitstream.");
@@ -475,22 +487,35 @@ namespace levitation {
 
       while (!Reader.AtEndOfStream()) {
 
-        if (Reader.ReadCode() != llvm::bitc::ENTER_SUBBLOCK) {
+        auto CodeRes = Reader.ReadCode();
+
+        if (!CodeRes || CodeRes.get() != llvm::bitc::ENTER_SUBBLOCK) {
           setFailure("Expected BlockInfo Subblock, malformed file.");
           return false;
         }
 
-
         std::error_code EC;
-        switch (Reader.ReadSubBlockID()) {
-          case llvm::bitc::BLOCKINFO_BLOCK_ID:
-            if ((BlockInfo = Reader.ReadBlockInfoBlock())) {
+        auto SubBlockIDRes = Reader.ReadSubBlockID();
+        if (!SubBlockIDRes) {
+          setFailure("Failed to read subblock ID");
+          return false;
+        }
+
+        switch (SubBlockIDRes.get()) {
+          case llvm::bitc::BLOCKINFO_BLOCK_ID: {
+            auto BlockInfoRes = Reader.ReadBlockInfoBlock();
+            if (!BlockInfoRes) {
+              setFailure("Failed to read block info.");
+              return false;
+            }
+            if ((BlockInfo = BlockInfoRes.get())) {
               Reader.setBlockInfo(BlockInfo.getPointer());
               return true;
             } else {
               setFailure("Malformed BlockInfo.");
               return false;
             }
+          }
           case DEPS_DEPENDENCIES_MAIN_BLOCK_ID:
             setFailure("Blockinfo missed");
             return false;
@@ -564,7 +589,14 @@ namespace levitation {
 
     bool readPackageFilePath(unsigned int AbbrevID, DependenciesData &Data) {
       RecordTy Record;
-      auto RecordID = Reader.readRecord(AbbrevID, Record, nullptr);
+
+      auto RecordIDRes = Reader.readRecord(AbbrevID, Record, nullptr);
+      if (!RecordIDRes) {
+        setFailure("Failed to read record ID");
+        return false;
+      }
+      auto &RecordID = RecordIDRes.get();
+
       Data.PackageFilePathID = normalizeIfNeeded(
           *Data.Strings, (StringID)Record[0]
       );
@@ -610,7 +642,13 @@ namespace levitation {
         bool WithBlob,
         const OnReadRecordFn &OnReadRecord
     ) {
-      auto Entry = Reader.advanceSkippingSubblocks();
+      auto EntryRes = Reader.advanceSkippingSubblocks();
+      if (!EntryRes) {
+        setFailure("Failed to read record");
+        return false;
+      }
+      auto &Entry = EntryRes.get();
+
       switch (Entry.Kind) {
         case BitstreamEntry::Error:
           setFailure("Failed to read strings");
@@ -620,8 +658,13 @@ namespace levitation {
 
             StringRef *BlobPtr = WithBlob ? &BlobRef : nullptr;
 
-            unsigned int ObtainedRecordID =
-              Reader.readRecord(Entry.ID, RecordStorage, BlobPtr);
+            auto ObtainedRecordIDRes = Reader.readRecord(Entry.ID, RecordStorage, BlobPtr);
+            if (!ObtainedRecordIDRes) {
+                setFailure("Failed to read record ID");
+                return false;
+            }
+
+            unsigned int ObtainedRecordID = ObtainedRecordIDRes.get();
 
             if (!checkRecordType(RecordID, ObtainedRecordID))
               return false;
@@ -651,7 +694,12 @@ namespace levitation {
       if (!isValid()) return false;
 
       while (true) {
-        auto Entry = Reader.advance();
+        auto EntryRes = Reader.advance();
+        if (!EntryRes) {
+          setFailure("Failed to advance on record reading (enterBlock)");
+          return false;
+        }
+        auto &Entry = EntryRes.get();
 
         switch (Entry.Kind) {
           case BitstreamEntry::Error:
@@ -683,7 +731,7 @@ namespace levitation {
   std::unique_ptr<DependenciesReader> CreateBitstreamReader(
       const llvm::MemoryBuffer &MB
   ) {
-    return llvm::make_unique<DependenciesBitstreamReader>(MB);
+    return std::make_unique<DependenciesBitstreamReader>(MB);
   }
 }
 }

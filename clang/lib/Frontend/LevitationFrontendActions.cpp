@@ -115,7 +115,7 @@ CreateGeneratePCHConsumer(
   auto Buffer = std::make_shared<PCHBuffer>();
   std::vector<std::unique_ptr<ASTConsumer>> Consumers;
 
-  Consumers.push_back(llvm::make_unique<PCHGenerator>(
+  Consumers.push_back(std::make_unique<PCHGenerator>(
       CI.getPreprocessor(),
       CI.getModuleCache(),
       OutputFile.Path,
@@ -135,7 +135,7 @@ CreateGeneratePCHConsumer(
       Buffer
   ));
 
-  return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
+  return std::make_unique<MultiplexConsumer>(std::move(Consumers));
 }
 
 class MultiplexConsumerBuilder {
@@ -169,7 +169,7 @@ public:
 
   std::unique_ptr<MultiplexConsumer> done() {
     return Successful ?
-        llvm::make_unique<MultiplexConsumer>(std::move(Consumers)) :
+        std::make_unique<MultiplexConsumer>(std::move(Consumers)) :
         nullptr;
   }
 };

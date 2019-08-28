@@ -470,7 +470,7 @@ protected:
   PackageInfo &createPackageInfo(StringID PackagePathID) {
 
     auto PackageRes = PackageInfos.insert({
-      PackagePathID, llvm::make_unique<PackageInfo>()
+      PackagePathID, std::make_unique<PackageInfo>()
     });
 
     PackageInfo &Package = *PackageRes.first->second;
@@ -499,7 +499,7 @@ protected:
   PackageInfo &createMainFilePackage(StringID MainFileID) {
 
     auto PackageRes = PackageInfos.insert({
-      MainFileID, llvm::make_unique<PackageInfo>()
+      MainFileID, std::make_unique<PackageInfo>()
     });
 
     PackageInfo &Package = *PackageRes.first->second;

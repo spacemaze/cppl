@@ -28,7 +28,7 @@
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Serialization.h"
-#include "llvm/Bitcode/BitstreamWriter.h"
+#include "llvm/Bitstream/BitstreamWriter.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
@@ -247,7 +247,7 @@ namespace {
 namespace clang {
 
 std::unique_ptr<ASTConsumer> CreateParserPostProcessor() {
-  return llvm::make_unique<ParserPostProcessor>();
+  return std::make_unique<ParserPostProcessor>();
 }
 
 std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
@@ -262,11 +262,11 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
       CI.getFrontendOpts().LevitationSourcesRootDir
   );
 
-  return llvm::make_unique<ASTDependenciesProcessor>(CI, std::move(InFileRel));
+  return std::make_unique<ASTDependenciesProcessor>(CI, std::move(InFileRel));
 }
 
 std::unique_ptr<ASTConsumer> CreatePackageInstantiator() {
-  return llvm::make_unique<PackageInstantiator>();
+  return std::make_unique<PackageInstantiator>();
 }
 
 }

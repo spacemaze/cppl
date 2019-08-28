@@ -2,7 +2,7 @@ package namespace P1 {
   struct A {
     static void f();
   };
-  
+
   void A::f() {
     levitation::Test::context() << "P1::A::f()";
   };

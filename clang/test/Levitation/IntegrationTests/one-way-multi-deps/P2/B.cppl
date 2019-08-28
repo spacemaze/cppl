@@ -1,5 +1,5 @@
 package namespace P2 {
-  class B {    
+  class B {
   public:
     static int f() {
       levitation::Test::context() << "P2::B::f()";

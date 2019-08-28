@@ -249,7 +249,7 @@ protected:
     auto ListRes = FullDepsMap.insert({ NID, nullptr });
 
     if (ListRes.second)
-      ListRes.first->second = llvm::make_unique<FullDependencies>();
+      ListRes.first->second = std::make_unique<FullDependencies>();
 
     return *ListRes.first->second;
   }
@@ -276,7 +276,7 @@ protected:
       auto InsertionRes = DestList.insert( {NID, nullptr} );
 
       if (InsertionRes.second) {
-        InsertionRes.first->second = llvm::make_unique<DependencyWithDistance>(
+        InsertionRes.first->second = std::make_unique<DependencyWithDistance>(
             DependencyWithDistance {NID, Range}
         );
       } else {
@@ -289,7 +289,7 @@ protected:
     for (auto &NodeIt : FullDepsMap) {
       auto Res = FullDepsSortedMap.insert({
         NodeIt.first,
-        llvm::make_unique<FullDependenciesList>()
+        std::make_unique<FullDependenciesList>()
       });
 
       FullDependencies &NodeDeps = *NodeIt.second;

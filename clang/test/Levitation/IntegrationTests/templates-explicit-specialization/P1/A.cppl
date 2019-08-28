@@ -3,7 +3,7 @@ package namespace P1 {
   struct A {
     static void f();
   };
-  
+
   template<>
   struct A<int> {
     void f() {

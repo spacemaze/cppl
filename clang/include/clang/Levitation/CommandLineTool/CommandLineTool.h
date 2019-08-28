@@ -267,7 +267,7 @@ protected:
   template<class ParserTy>
   ArgumentsParser *createParser() {
     llvm::StringRef ParserName = ParserTy::getName();
-    auto P = llvm::make_unique<ParserTy>();
+    auto P = std::make_unique<ParserTy>();
     auto InsertRes = Parsers.insert({ParserName, std::move(P)});
     return InsertRes.first->second.get();
   }

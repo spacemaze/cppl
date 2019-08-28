@@ -76,11 +76,11 @@ namespace clang { namespace levitation { namespace tools {
     void setSourcesRoot(llvm::StringRef SourcesRoot) {
       LevitationDriver::SourcesRoot = SourcesRoot;
     }
-      
+
     void setBuildRoot(llvm::StringRef BuildRoot) {
       LevitationDriver::BuildRoot = BuildRoot;
     }
-    
+
     llvm::StringRef getMainSource() const {
       return MainSource;
     }

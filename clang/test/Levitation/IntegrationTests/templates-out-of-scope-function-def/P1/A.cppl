@@ -24,10 +24,10 @@ package namespace P1 {
   void A<T>::f() {
     levitation::Test::context() << "P1::A::f()";
   }
-  
+
   template<typename T>
   A<T>& A<T>::operator<<(int) {
     levitation::Test::context() << "P1::A::operator<<(int)";
     return *this;
-  }  
+  }
 }

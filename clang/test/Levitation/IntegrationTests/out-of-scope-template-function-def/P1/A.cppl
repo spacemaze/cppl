@@ -1,9 +1,12 @@
-#include <assert.h>
-
 package namespace P1 {
   struct A {
+    void crash() {
+      // assert(0):
+      unsigned i = 1;
+      i /= 0;
+    }
     A() {
-      assert(0);
+      crash();
     }
 
     template <typename T>
@@ -25,10 +28,10 @@ package namespace P1 {
   A::A(double p) {
     levitation::Test::context() << "P1::A::A(double)";
   }
-  
+
   template<typename T>
   void A::f() {
-    assert(0);
+    crash();
   }
 
   template<>
@@ -40,7 +43,7 @@ package namespace P1 {
   void A::f<double>() {
     levitation::Test::context() << "P1::A::f<double>()";
   }
-  
+
   template<typename U>
   A &A::operator<<(U v) {
     levitation::Test::context() << "P1::A<T>::operator<<(U)";

@@ -17,7 +17,7 @@ source ../common.sh
 #          `---------^
 
 # 1. When we parse B, it creates implicit instantiation of Dummy::f<int>()
-# 2. When we parse C, it also creates implicit instantiation of Dummy::f<int>() 
+# 2. When we parse C, it also creates implicit instantiation of Dummy::f<int>()
 # 3. When we instantiate C it already has package instantiated
 # version of f<int>,
 # and it has non-instantiated version of its own f<int>. So it creates
@@ -26,7 +26,7 @@ source ../common.sh
 
 # FIXME: we could probably fix step 3.
 
-# 4. D also requires to load C and it also loads another clone if  
+# 4. D also requires to load C and it also loads another clone if
 
 initTests $@
 

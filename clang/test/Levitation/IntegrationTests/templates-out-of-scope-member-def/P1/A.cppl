@@ -3,7 +3,7 @@ package namespace P1 {
   struct A {
     struct AA;
   };
-  
+
   // Bug: generates duplicates of AA
   template<typename T>
   struct A<T>::AA {

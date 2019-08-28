@@ -4,7 +4,7 @@ package namespace P1 {
     void f() {
     }
   };
-  
+
   template<>
   void A::f<int>() {
     levitation::Test::context() << "P1::A::f<int>()";

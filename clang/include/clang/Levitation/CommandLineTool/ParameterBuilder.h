@@ -34,7 +34,7 @@ namespace clang { namespace levitation { namespace command_line_tool {
   public:
 
     ParameterBuilder(OnDoneFn &&onDone) : OnDone(onDone) {
-      P = llvm::make_unique<Parameter>();
+      P = std::make_unique<Parameter>();
     }
 
     ParameterBuilder(ParameterBuilder &&Src)

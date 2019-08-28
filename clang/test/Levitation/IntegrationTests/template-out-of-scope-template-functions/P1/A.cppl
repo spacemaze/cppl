@@ -3,7 +3,7 @@ package namespace P1 {
   struct A {
     template <typename U>
     void f();
-    
+
     template <typename U>
     A& operator<<(U v);
   };

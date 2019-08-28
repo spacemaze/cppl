@@ -8,4 +8,3 @@
 #else
   Dummy d;
 #endif
-  
