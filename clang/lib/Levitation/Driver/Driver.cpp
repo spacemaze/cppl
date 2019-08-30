@@ -352,16 +352,12 @@ public:
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getBase(
-          BinDir,
-          /*PrecompiledPreamble=*/ "",
-          verbose,
-          dryRun
+      auto Cmd = getClangXXCommand(
+          BinDir, verbose, dryRun
       );
 
       Cmd
-      .addArg("-xc++")
-      .addArg("-levitation-build-preamble");
+      .addArg("-cppl-preamble");
 
       return Cmd;
     }
@@ -372,10 +368,14 @@ public:
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getBase(BinDir, PrecompiledPreamble, verbose, dryRun);
-      Cmd
-      .addArg("-levitation-build-ast")
-      .addArg("-xc++");
+      auto Cmd = getClangXXCommand(
+          BinDir, verbose, dryRun
+      );
+
+      Cmd.addArg("-cppl-parse");
+
+      if (PrecompiledPreamble.size())
+        Cmd.addKVArgEq("-cppl-include-preamble", PrecompiledPreamble);
 
       return Cmd;
     }
@@ -410,11 +410,13 @@ public:
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getBase(BinDir, PrecompiledPreamble, verbose, dryRun);
-      Cmd
-      .addArg("-flevitation-build-object")
-      .addArg("-xc++")
-      .addArg("-emit-obj");
+      auto Cmd = getClangXXCommand(BinDir, verbose, dryRun);
+
+      Cmd.addArg("-cppl-compile");
+
+      if (PrecompiledPreamble.size())
+        Cmd.addKVArgEq("-cppl-include-preamble", PrecompiledPreamble);
+
       return Cmd;
     }
     static CommandInfo getLink(
@@ -536,6 +538,19 @@ public:
       return SinglePath(ClangBin);
     }
 
+    static CommandInfo getClangXXCommand(
+        llvm::StringRef BinDir,
+        bool verbose,
+        bool dryRun
+    ) {
+      CommandInfo Cmd(getClangXXPath(BinDir), verbose, dryRun);
+      Cmd
+      .addArg("-std=c++17")
+      .addKVArgEq("-stdlib", "libstdc++");
+
+      return Cmd;
+    }
+
     static CommandInfo getBase(
         llvm::StringRef BinDir,
         llvm::StringRef PrecompiledPreamble,
@@ -591,14 +606,8 @@ public:
     auto ExecutionStatus = CommandInfo::getParse(
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
-    .addKVArgEq(
-        "-levitation-sources-root-dir",
-        SourcesRoot
-    )
-    .addKVArgEq(
-        "-levitation-deps-output-file",
-        OutLDepsFile
-    )
+    .addKVArgEq("-cppl-src-root", SourcesRoot)
+    .addKVArgEq("-cppl-deps-out", OutLDepsFile)
     .addArgs(ExtraArgs)
     .addArg(SourceFile)
     .addKVArgSpace("-o", OutASTFile)
