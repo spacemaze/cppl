@@ -195,6 +195,10 @@ def err_drv_dllexport_inlines_and_fallback : Error<
   "option '/Zc:dllexportInlines-' is ABI-changing and not compatible with '/fallback'">;
 
 def err_drv_invalid_value : Error<"invalid value '%1' in '%0'">;
+
+// C++ Levitation extension
+def err_drv_missed_cppl_value : Error<"missed value for C++ Levitation stage '%1': '%0'">;
+
 def err_drv_invalid_int_value : Error<"invalid integral value '%1' in '%0'">;
 def err_drv_invalid_remap_file : Error<
     "invalid option '%0' not of the form <from-file>;<to-file>">;

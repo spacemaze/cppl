@@ -289,6 +289,14 @@ phases::ID Driver::getFinalPhase(const DerivedArgList &DAL,
              (PhaseArg = DAL.getLastArg(options::OPT_emit_iterface_stubs)) ||
              (PhaseArg = DAL.getLastArg(options::OPT__analyze,
                                         options::OPT__analyze_auto)) ||
+
+             // C++ Levitation
+
+             (PhaseArg = DAL.getLastArg(options::OPT_cppl_parse)) ||
+             (PhaseArg = DAL.getLastArg(options::OPT_cppl_preamble)) ||
+
+             // end of C++ Levitation
+
              (PhaseArg = DAL.getLastArg(options::OPT_emit_ast))) {
     FinalPhase = phases::Compile;
 
@@ -3499,6 +3507,16 @@ Action *Driver::ConstructPhaseAction(
       return C.MakeAction<MigrateJobAction>(Input, types::TY_Remap);
     if (Args.hasArg(options::OPT_emit_ast))
       return C.MakeAction<CompileJobAction>(Input, types::TY_AST);
+
+    // C++ Levitation
+
+    if (Args.hasArg(options::OPT_cppl_parse))
+      return C.MakeAction<CompileJobAction>(Input, types::TY_AST);
+    if (Args.hasArg(options::OPT_cppl_preamble))
+      return C.MakeAction<CompileJobAction>(Input, types::TY_PCH);
+
+    // end of C++ Levitation
+
     if (Args.hasArg(options::OPT_module_file_info))
       return C.MakeAction<CompileJobAction>(Input, types::TY_ModuleFile);
     if (Args.hasArg(options::OPT_verify_pch))

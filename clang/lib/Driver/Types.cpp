@@ -248,6 +248,10 @@ types::ID types::lookupTypeForExtension(llvm::StringRef Ext) {
            .Case("ast", TY_AST)
            .Case("ccm", TY_CXXModule)
            .Case("cpp", TY_CXX)
+
+           // C++ Levitation extension
+           .Case("cppl", TY_CXX)
+
            .Case("CPP", TY_CXX)
            .Case("c++", TY_CXX)
            .Case("C++", TY_CXX)
@@ -329,6 +333,14 @@ void types::getCompilationPhases(const clang::driver::Driver &Driver,
            DAL.getLastArg(options::OPT__migrate) ||
            DAL.getLastArg(options::OPT_emit_iterface_stubs) ||
            DAL.getLastArg(options::OPT__analyze, options::OPT__analyze_auto) ||
+
+           // C++ Levitation
+
+           DAL.getLastArg(options::OPT_cppl_parse) ||
+           DAL.getLastArg(options::OPT_cppl_preamble) ||
+
+           // end of C++ Levitation
+
            DAL.getLastArg(options::OPT_emit_ast))
     llvm::copy_if(PhaseList, std::back_inserter(P),
                   [](phases::ID Phase) { return Phase <= phases::Compile; });

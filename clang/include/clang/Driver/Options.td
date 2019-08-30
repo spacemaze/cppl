@@ -622,6 +622,29 @@ def d_Flag : Flag<["-"], "d">, Group<d_Group>;
 def d_Joined : Joined<["-"], "d">, Group<d_Group>;
 def emit_ast : Flag<["-"], "emit-ast">,
   HelpText<"Emit Clang AST files for source inputs">;
+
+// C++ Levitation mode
+
+def cppl_parse : Flag<["-"], "cppl-parse">,
+  HelpText<"Runs Levitation Parse stage for input file">;
+
+def cppl_compile : Flag<["-"], "cppl-compile">,
+  HelpText<"Runs Levitation Compilation stage for input file (combines parse, instantiation and codegen stages)">;
+
+def cppl_src_root_EQ : Joined<["-"], "cppl-src-root=">, Flags<[DriverOption, HelpHidden]>,
+HelpText<"Sources root directory for C++ Levitation parse stage">;
+def cppl_deps_out_EQ : Joined<["-"], "cppl-deps-out=">, Flags<[DriverOption, HelpHidden]>,
+HelpText<"Dependencies output file for C++ Levitation parse stage">;
+def cppl_include_preamble_EQ : Joined<["-"], "cppl-include-preamble=">, Flags<[DriverOption, HelpHidden]>,
+HelpText<"Include C++ Levitation precompiled preamble">;
+def cppl_include_dependency_EQ : Joined<["-"], "cppl-include-dependency=">, Flags<[DriverOption, HelpHidden]>,
+HelpText<"Include C++ Levitation dependency file">;
+
+def cppl_preamble : Flag<["-"], "cppl-preamble">,
+  HelpText<"Runs Levitation Preamble stage for input file">;
+
+// end of C++ Levitation
+
 def emit_llvm : Flag<["-"], "emit-llvm">, Flags<[CC1Option]>, Group<Action_Group>,
   HelpText<"Use the LLVM representation for assembler and object files">;
 def emit_iterface_stubs : Flag<["-"], "emit-interface-stubs">, Flags<[CC1Option]>, Group<Action_Group>,

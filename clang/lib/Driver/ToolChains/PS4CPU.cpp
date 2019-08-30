@@ -401,6 +401,14 @@ toolchains::PS4CPU::PS4CPU(const Driver &D, const llvm::Triple &Triple,
       !Args.hasArg(options::OPT_nodefaultlibs) &&
       !Args.hasArg(options::OPT__sysroot_EQ) && !Args.hasArg(options::OPT_E) &&
       !Args.hasArg(options::OPT_c) && !Args.hasArg(options::OPT_S) &&
+
+      // C++ Levitation
+
+      !Args.hasArg(options::OPT_cppl_parse) &&
+      !Args.hasArg(options::OPT_cppl_preamble) &&
+
+      // end of C++ Levitation
+
       !Args.hasArg(options::OPT_emit_ast) &&
       !llvm::sys::fs::exists(PS4SDKLibDir)) {
     getDriver().Diag(clang::diag::warn_drv_unable_to_find_directory_expected)
