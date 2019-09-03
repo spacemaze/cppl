@@ -1,0 +1,40 @@
+project("cppl-sandbox")
+cmake_minimum_required (VERSION 2.6)
+
+include(log.cmake)
+include(file.cmake)
+
+# set(LEVITATION_LOG_LEVEL ${LEVITATION_TRACE_LEVEL})
+
+auxSources(${CMAKE_SOURCE_DIR} SOURCES)
+
+# Path to cppl compiler
+set(CPPL "/Users/stepan/projects/shared/toolchains/llvm.git.darwin-debug-x86_64/install/bin/cppl")
+
+set(BUILD_DIR ${PROJECT_BINARY_DIR}/build)
+
+set(EXECUTABLE "sandbox.out")
+
+set_property(DIRECTORY APPEND PROPERTY
+  ADDITIONAL_MAKE_CLEAN_FILES
+  ${BUILD_DIR} ${EXECUTABLE}
+)
+
+set(COMPILE_COMMAND
+    ${CPPL}
+    -root=${CMAKE_SOURCE_DIR}
+    -buildRoot=${BUILD_DIR}
+    -o ${EXECUTABLE}
+)
+
+add_custom_command(
+    OUTPUT ${EXECUTABLE}
+    DEPENDS ${SOURCES}
+    COMMAND ${COMPILE_COMMAND}
+)
+
+add_custom_target(
+    build ALL
+    DEPENDS
+    ${EXECUTABLE}
+)
