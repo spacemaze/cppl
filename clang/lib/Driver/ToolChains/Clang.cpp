@@ -3671,7 +3671,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
     // Also ignore explicit -force_cpusubtype_ALL option.
     (void)Args.hasArg(options::OPT_force__cpusubtype__ALL);
-
   } else if (isa<PrecompileJobAction>(JA)) {
 
     // C++ Levitation mode
