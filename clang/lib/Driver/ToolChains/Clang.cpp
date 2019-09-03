@@ -3446,6 +3446,27 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
   RenderDebugInfoCompressionArgs(Args, CmdArgs, D, TC);
 }
 
+void levitationParseIncludePreamble(
+    ArgStringList &CmdArgs, const ArgList &Args
+) {
+  StringRef IncludePreamble = Args.getLastArgValue(options::OPT_cppl_include_preamble_EQ);
+  if (IncludePreamble.size()) {
+    CmdArgs.push_back(Args.MakeArgString(
+        Twine("-levitation-preamble=") + IncludePreamble)
+    );
+  }
+}
+
+void levitationParseIncludeDeps(
+    ArgStringList &CmdArgs, const ArgList &Args
+) {
+  for (const auto &Dep : Args.getAllArgValues(options::OPT_cppl_include_dependency_EQ)) {
+    CmdArgs.push_back(Args.MakeArgString(
+        Twine("-levitation-dependency=") + Dep)
+    );
+  }
+}
+
 void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                          const InputInfo &Output, const InputInfoList &Inputs,
                          const ArgList &Args, const char *LinkingOutput) const {
@@ -3651,30 +3672,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     // Also ignore explicit -force_cpusubtype_ALL option.
     (void)Args.hasArg(options::OPT_force__cpusubtype__ALL);
 
-    // C++ Levitation mode
-
-    if (Args.hasArg(options::OPT_cppl_compile)) {
-
-      assert(JA.getType() == types::TY_Object && "Type must be Object");
-
-      CmdArgs.push_back("-flevitation-build-object");
-
-      StringRef IncludePreamble = Args.getLastArgValue(options::OPT_cppl_include_preamble_EQ);
-      if (IncludePreamble.size()) {
-        CmdArgs.push_back(Args.MakeArgString(
-            Twine("-levitation-preamble=") + IncludePreamble)
-        );
-      }
-
-      for (const auto &Dep : Args.getAllArgValues(options::OPT_cppl_include_dependency_EQ)) {
-        CmdArgs.push_back(Args.MakeArgString(
-            Twine("-levitation-dependency=") + Dep)
-        );
-      }
-    }
-
-    // end of C++ Levitation mode
-
   } else if (isa<PrecompileJobAction>(JA)) {
 
     // C++ Levitation mode
@@ -3734,7 +3731,19 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
           Args.MakeArgString(Twine("-interface-stub-version=") + StubFormat));
     } else if (JA.getType() == types::TY_PP_Asm) {
       CmdArgs.push_back("-S");
-    } else
+    } else if (JA.getType() == types::TY_AST) {
+      CmdArgs.push_back("-emit-pch");
+    } else if (JA.getType() == types::TY_ModuleFile) {
+      CmdArgs.push_back("-module-file-info");
+    } else if (JA.getType() == types::TY_RewrittenObjC) {
+      CmdArgs.push_back("-rewrite-objc");
+      rewriteKind = RK_NonFragile;
+    } else if (JA.getType() == types::TY_RewrittenLegacyObjC) {
+      CmdArgs.push_back("-rewrite-objc");
+      rewriteKind = RK_Fragile;
+    } else {
+      assert(JA.getType() == types::TY_PP_Asm && "Unexpected output type!");
+    }
 
     // C++ Levitation mode
 
@@ -3771,23 +3780,36 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
             Args.MakeArgString(Twine("-levitation-preamble=") + IncludePreamble));
       }
 
+    } else if (Args.hasArg(options::OPT_cppl_inst_decl)) {
+
+      assert(JA.getType() == types::TY_AST && "Type must be AST or Object");
+
+      CmdArgs.push_back("-flevitation-build-decl");
+      CmdArgs.push_back("-emit-pch");
+      CmdArgs.push_back("-fcxx-exceptions");
+      CmdArgs.push_back("-fexceptions");
+      CmdArgs.push_back("-fdeprecated-macro");
+
+      levitationParseIncludePreamble(CmdArgs, Args);
+      levitationParseIncludeDeps(CmdArgs, Args);
+
+    } else if (Args.hasArg(options::OPT_cppl_compile)) {
+
+      // assert(JA.getType() == types::TY_Object && "Type must be Object");
+
+      CmdArgs.push_back("-flevitation-build-object");
+
+      if (Inputs.size() && Inputs.front().getType() == types::TY_AST) {
+        CmdArgs.push_back("-fcxx-exceptions");
+        CmdArgs.push_back("-fexceptions");
+        CmdArgs.push_back("-fdeprecated-macro");
+      }
+
+      levitationParseIncludePreamble(CmdArgs, Args);
+      levitationParseIncludeDeps(CmdArgs, Args);
     }
 
     // end of C++ Levitation
-
-    else if (JA.getType() == types::TY_AST) {
-      CmdArgs.push_back("-emit-pch");
-    } else if (JA.getType() == types::TY_ModuleFile) {
-      CmdArgs.push_back("-module-file-info");
-    } else if (JA.getType() == types::TY_RewrittenObjC) {
-      CmdArgs.push_back("-rewrite-objc");
-      rewriteKind = RK_NonFragile;
-    } else if (JA.getType() == types::TY_RewrittenLegacyObjC) {
-      CmdArgs.push_back("-rewrite-objc");
-      rewriteKind = RK_Fragile;
-    } else {
-      assert(JA.getType() == types::TY_PP_Asm && "Unexpected output type!");
-    }
 
     // Preserve use-list order by default when emitting bitcode, so that
     // loading the bitcode up in 'opt' or 'llc' and running passes gives the

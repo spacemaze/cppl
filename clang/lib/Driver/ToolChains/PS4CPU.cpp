@@ -406,6 +406,7 @@ toolchains::PS4CPU::PS4CPU(const Driver &D, const llvm::Triple &Triple,
 
       !Args.hasArg(options::OPT_cppl_parse) &&
       !Args.hasArg(options::OPT_cppl_preamble) &&
+      !Args.hasArg(options::OPT_cppl_inst_decl) &&
 
       // end of C++ Levitation
 

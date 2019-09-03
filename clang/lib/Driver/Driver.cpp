@@ -294,6 +294,7 @@ phases::ID Driver::getFinalPhase(const DerivedArgList &DAL,
 
              (PhaseArg = DAL.getLastArg(options::OPT_cppl_parse)) ||
              (PhaseArg = DAL.getLastArg(options::OPT_cppl_preamble)) ||
+             (PhaseArg = DAL.getLastArg(options::OPT_cppl_inst_decl)) ||
 
              // end of C++ Levitation
 
@@ -3514,6 +3515,8 @@ Action *Driver::ConstructPhaseAction(
       return C.MakeAction<CompileJobAction>(Input, types::TY_AST);
     if (Args.hasArg(options::OPT_cppl_preamble))
       return C.MakeAction<CompileJobAction>(Input, types::TY_PCH);
+    if (Args.hasArg(options::OPT_cppl_inst_decl))
+      return C.MakeAction<CompileJobAction>(Input, types::TY_AST);
 
     // end of C++ Levitation
 

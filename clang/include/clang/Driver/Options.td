@@ -631,6 +631,9 @@ def cppl_parse : Flag<["-"], "cppl-parse">,
 def cppl_compile : Flag<["-"], "cppl-compile">,
   HelpText<"Runs Levitation Compilation stage for input file (combines parse, instantiation and codegen stages)">;
 
+def cppl_inst_decl : Flag<["-"], "cppl-inst-decl">,
+  HelpText<"Runs Levitation Instantiation stage for declarations inputs.">;
+
 def cppl_src_root_EQ : Joined<["-"], "cppl-src-root=">, Flags<[DriverOption, HelpHidden]>,
 HelpText<"Sources root directory for C++ Levitation parse stage">;
 def cppl_deps_out_EQ : Joined<["-"], "cppl-deps-out=">, Flags<[DriverOption, HelpHidden]>,
