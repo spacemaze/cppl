@@ -385,10 +385,9 @@ public:
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getBase(BinDir, PrecompiledPreamble, verbose, dryRun);
+      auto Cmd = getClangXXCommand(BinDir, verbose, dryRun);
       Cmd
-      .addArg("-flevitation-build-decl")
-      .addArg("-emit-pch");
+      .addArg("-cppl-inst-decl");
       return Cmd;
     }
 
@@ -398,10 +397,9 @@ public:
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getBase(BinDir, PrecompiledPreamble, verbose, dryRun);
+      auto Cmd = getClangXXCommand(BinDir, verbose, dryRun);
       Cmd
-      .addArg("-flevitation-build-object")
-      .addArg("-emit-obj");
+      .addArg("-cppl-compile");
       return Cmd;
     }
     static CommandInfo getCompileSrc(
@@ -447,6 +445,12 @@ public:
     CommandInfo& addKVArgEq(StringRef Arg, StringRef Value) {
       OwnArgs.emplace_back((Arg + "=" + Value).str());
       CommandArgs.emplace_back(OwnArgs.back());
+      return *this;
+    }
+
+    CommandInfo& addKVArgEqIfNotEmpty(StringRef Arg, StringRef Value) {
+      if (Value.size())
+        addKVArgEq(Arg, Value);
       return *this;
     }
 
@@ -636,7 +640,8 @@ public:
     auto ExecutionStatus = CommandInfo::getInstDecl(
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
-    .addKVArgsEq("-levitation-dependency", Deps)
+    .addKVArgEqIfNotEmpty("-cppl-include-preamble", PrecompiledPreamble)
+    .addKVArgsEq("-cppl-include-dependency", Deps)
     .addArgs(ExtraArgs)
     .addArg(InputObject)
     .addKVArgSpace("-o", OutDeclASTFile)
@@ -665,7 +670,8 @@ public:
     auto ExecutionStatus = CommandInfo::getInstObj(
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
-    .addKVArgsEq("-levitation-dependency", Deps)
+    .addKVArgEqIfNotEmpty("-cppl-include-preamble", PrecompiledPreamble)
+    .addKVArgsEq("-cppl-include-dependency", Deps)
     .addArgs(ExtraArgs)
     .addArg(InputObject)
     .addKVArgSpace("-o", OutObjFile)
@@ -721,7 +727,7 @@ public:
     auto ExecutionStatus = CommandInfo::getCompileSrc(
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
-    .addKVArgsEq("-levitation-dependency", Deps)
+    .addKVArgsEq("-cppl-include-dependency", Deps)
     .addArgs(ExtraParseArgs)
     .addArgs(ExtraCodeGenArgs)
     .addArg(InputObject)
