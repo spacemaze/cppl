@@ -11390,6 +11390,11 @@ public:
 // Levitation Package instantiation
 public:
 
+  /// Should be called for parse manual dependencies mode.
+  /// reads all #import directives from Preprocessor and puts them
+  /// into LevitationDependency form.
+  void ActOnLevitationManualDeps();
+
   /// Registers instantiation of package dependent declaration.
   /// \param PackageDependent package dependent declaration
   /// \param Instantiation instantiation
@@ -11416,6 +11421,17 @@ public:
   bool HandleLevitationPackageDependency(
       const NestedNameSpecifierLoc &Loc,
       const IdentifierInfo *Name
+  );
+
+  /// Called during manual dependencies parsing phase.
+  /// \param DepIdParts parts of identifier. Each except the last part is
+  ///   nested name specifier component.
+  /// \param IsBodyDependency indicates whether were dealing with body or declaration dependency.
+  /// \return
+  void HandleLevitationPackageDependency(
+      const SmallVectorImpl<StringRef> &DepIdParts,
+      bool IsBodyDependency,
+      const SourceRange &Loc
   );
 
   /// Called during parsing or template instantiation for new dependent type

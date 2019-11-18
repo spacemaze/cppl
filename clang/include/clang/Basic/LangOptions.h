@@ -88,7 +88,8 @@ public:
       LBSK_None,
       LBSK_BuildPreamble,
       LBSK_BuildAST,
-      LBSK_BuildObjectFile
+      LBSK_BuildObjectFile,
+      LBSK_ParseManualDeps
   };
 
   bool isLevitationMode(LevitationBuildStageKind Stage) const {

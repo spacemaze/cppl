@@ -2209,6 +2209,49 @@ void Preprocessor::HandleIncludeNextDirective(SourceLocation HashLoc,
                                 LookupFromFile);
 }
 
+/// Handles C++ Levitation #import directive
+///
+/// Syntax is as follows:
+///   import-directive:
+///     '#import' attributes[opt] identifier
+///   attributes:
+///     'bodydep'
+///   identifier:
+///     enclosing-namespace-specifier '::' identifier
+///
+/// \param HashLoc location of '#' symbol
+/// \param Tok reference to 'import' token next to '#' symbol
+void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token &Tok) {
+  Token NextTok;
+
+  Lex(NextTok);
+
+  bool BodyDep = TryLexLevitationBodyDepAttr(NextTok);
+
+  SmallVector<StringRef, 16> IdentifierParts = LexLevitationImportIdentifier(
+    BodyDep ? tok::unknown : NextTok.getKind()
+  );
+
+  SourceRange Loc(HashLoc, getLastCachedTokenLocation());
+
+  if (BodyDep)
+    PPLevitationDeclDeps.emplace_back(std::move(IdentifierParts), Loc);
+  else
+    PPLevitationBodyDeps.emplace_back(std::move(IdentifierParts), Loc);
+}
+
+const Preprocessor::PPLevitationDepsVector&
+    Preprocessor::getLevitationDeclDeps() const
+{
+  return PPLevitationDeclDeps;
+}
+
+const Preprocessor::PPLevitationDepsVector&
+    Preprocessor::getLevitationBodyDeps() const
+{
+  return PPLevitationBodyDeps;
+}
+
 /// HandleMicrosoftImportDirective - Implements \#import for Microsoft Mode
 void Preprocessor::HandleMicrosoftImportDirective(Token &Tok) {
   // The Microsoft #import directive takes a type library and generates header

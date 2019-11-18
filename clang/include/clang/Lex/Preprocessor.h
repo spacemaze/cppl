@@ -2223,6 +2223,26 @@ private:
   void HandleImportDirective(SourceLocation HashLoc, Token &Tok);
   void HandleMicrosoftImportDirective(Token &Tok);
 
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+public:
+  typedef SmallVector<StringRef, 16> PPLevitationDepIdParts;
+  typedef std::pair<PPLevitationDepIdParts, SourceRange> PPLevitationDep;
+  typedef SmallVector<PPLevitationDep, 16> PPLevitationDepsVector;
+private:
+  PPLevitationDepsVector PPLevitationDeclDeps;
+  PPLevitationDepsVector PPLevitationBodyDeps;
+
+public:
+  void HandleLevitationImportDirective(SourceLocation HashLoc, Token &Tok);
+  const PPLevitationDepsVector& getLevitationDeclDeps() const;
+  const PPLevitationDepsVector& getLevitationBodyDeps() const;
+
+  //
+  // end of C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
+
 public:
   /// Check that the given module is available, producing a diagnostic if not.
   /// \return \c true if the check failed (because the module is not available).

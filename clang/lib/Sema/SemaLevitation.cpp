@@ -19,6 +19,7 @@
 #include "clang/Basic/LangOptions.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
+#include "clang/Lex/Preprocessor.h"
 
 #include <iterator>
 using namespace clang;
@@ -185,6 +186,20 @@ levitation::PackageDependency computeAutoDependency(
   return std::move(DependencyBuilder.getDependency());
 }
 
+levitation::PackageDependency makePackageDependency(
+    const SmallVectorImpl<llvm::StringRef> &DepIdParts,
+    const SourceRange &Loc
+) {
+  levitation::PackageDependencyBuilder DependencyBuilder;
+  for (const auto &Component : DepIdParts) {
+    DependencyBuilder.addComponent(Component);
+  }
+
+  DependencyBuilder.addUse(nullptr, Loc);
+
+  return std::move(DependencyBuilder.getDependency());
+}
+
 void dumpDependency(
     const SourceManager &SourceMgr,
     const NamedDecl *DependentDeclaration,
@@ -289,6 +304,17 @@ bool Sema::HandleLevitationPackageDependency(
   ) {
   HandleLevitationPackageDependency(Loc, Name.getName().getAsIdentifierInfo());
   return true;
+}
+
+void Sema::HandleLevitationPackageDependency(
+    const SmallVectorImpl<llvm::StringRef> &DepIdParts,
+    bool IsBodyDependency,
+    const SourceRange &Loc) {
+  auto Dependency = makePackageDependency(DepIdParts, Loc);
+  if (IsBodyDependency)
+    LevitationDefinitionDependencies.mergeDependency(std::move(Dependency));
+  else
+    LevitationDeclarationDependencies.mergeDependency(std::move(Dependency))
 }
 
 //===--------------------------------------------------------------------===//
@@ -440,6 +466,14 @@ NamedDecl *Sema::substLevitationPackageDependentDecl(const NamedDecl *D) {
       return cast<NamedDecl>(Found);
   }
   return nullptr;
+}
+
+void Sema::ActOnLevitationManualDeps() {
+  for (const auto &DepParts : PP.getLevitationDeclDeps())
+    HandleLevitationPackageDependency(DepParts.first, false, DepParts.second);
+
+  for (const auto &DepParts : PP.getLevitationBodyDeps())
+    HandleLevitationPackageDependency(DepParts.first, true, DepParts.second);
 }
 
 void Sema::addLevitationPackageDependentInstatiation(

@@ -553,6 +553,12 @@ void Parser::LateTemplateParserCleanupCallback(void *P) {
 bool Parser::ParseFirstTopLevelDecl(DeclGroupPtrTy &Result) {
   Actions.ActOnStartOfTranslationUnit();
 
+  // C++ Levitation
+  if (Actions.getLangOpts().isLevitationMode(LangOptions::LBSK_ParseManualDeps)) {
+    Actions.ActOnLevitationManualDeps();
+    return true; // Force parser to stop.
+  }
+
   // C11 6.9p1 says translation units must have at least one top-level
   // declaration. C++ doesn't have this restriction. We also don't want to
   // complain if we have a precompiled header, although technically if the PCH
