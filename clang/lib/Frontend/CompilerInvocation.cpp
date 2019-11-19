@@ -1732,6 +1732,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
       Opts.ProgramAction = frontend::GeneratePCH; break;
     case OPT_levitation_build_ast:
       Opts.ProgramAction = frontend::LevitationBuildAST; break;
+    case OPT_levitation_parse_import:
+      Opts.ProgramAction = frontend::LevitationParseImport; break;
     case OPT_levitation_build_preamble:
       Opts.ProgramAction = frontend::LevitationBuildPreamble; break;
     case OPT_emit_iterface_stubs: {
@@ -3219,6 +3221,7 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::TemplightDump:
   case frontend::MigrateSource:
   case frontend::LevitationBuildAST:
+  case frontend::LevitationParseImport:
   case frontend::LevitationBuildPreamble:
     return false;
 
@@ -3429,6 +3432,48 @@ static void parseLevitationBuildASTArgs(
   LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildAST);
 }
 
+static void parseLevitationManualImportArgs(
+  LangOptions &LangOpts,
+  const FrontendOptions &FrontendOpts,
+  const PreprocessorOptions &PreprocessorOpts,
+  DiagnosticsEngine &Diags
+) {
+  const char* Stage = "C++ Levitation parse #import directives";
+
+  if (FrontendOpts.LevitationBuildDeclaration) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-flevitation-build-decl" << Stage;
+  }
+  if (!FrontendOpts.LevitationDependencyDeclASTs.empty()) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-levitation-dependency" << Stage;
+  }
+
+  if (!FrontendOpts.LevitationDependenciesOutputFile.empty()) {
+    if (FrontendOpts.LevitationSourcesRootDir.empty()) {
+      Diags.Report(diag::err_fe_levitation_missed_option)
+      << "-levitation-sources-root-dir" << Stage;
+    }
+  } else {
+    if (!FrontendOpts.LevitationSourcesRootDir.empty()) {
+      Diags.Report(diag::err_fe_levitation_wrong_option)
+      << "-levitation-sources-root-dir" << Stage;
+    }
+  }
+
+  if (FrontendOpts.LevitationBuildObject) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-flevitation-build-object" << Stage;
+  }
+  if (FrontendOpts.LevitationBuildDeclaration) {
+    Diags.Report(diag::err_fe_levitation_wrong_option)
+    << "-flevitation-build-decl" << Stage;
+  }
+
+  LangOpts.LevitationMode = 1;
+  LangOpts.setLevitationBuildStage(LangOptions::LBSK_ParseManualDeps);
+}
+
 static void parseLevitationBuildPreambleArgs(
   LangOptions &LangOpts,
   FrontendOptions &FrontendOpts,
@@ -3599,6 +3644,15 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
 
   if (Res.getFrontendOpts().ProgramAction == frontend::LevitationBuildAST) {
     parseLevitationBuildASTArgs(
+        LangOpts,
+        Res.getFrontendOpts(),
+        Res.getPreprocessorOpts(),
+        Diags
+    );
+  }
+
+  if (Res.getFrontendOpts().ProgramAction == frontend::LevitationParseImport) {
+    parseLevitationManualImportArgs(
         LangOpts,
         Res.getFrontendOpts(),
         Res.getPreprocessorOpts(),

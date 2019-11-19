@@ -816,6 +816,19 @@ def err_pp_include_in_assume_nonnull : Error<
 def err_pp_eof_in_assume_nonnull : Error<
   "'#pragma clang assume_nonnull' was not ended within this file">;
 
+// C++ Levitation
+
+def err_pp_levitation_unknown_import_attribute : Error<
+  "unknown attribute for #import directive">;
+
+def err_pp_levitation_import_missed_dep_part : Error<
+  "missed scope name between '::' symbols'">;
+
+def err_pp_levitation_import_missed_dep_part_semi : Error<
+  "missed scope name'">;
+
+// end of C++ Levitation
+
 }
 
 let CategoryName = "Dependency Directive Source Minimization Issue" in {

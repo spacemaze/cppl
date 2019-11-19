@@ -284,7 +284,10 @@ KEYWORD(for                         , KEYALL)
 KEYWORD(goto                        , KEYALL)
 KEYWORD(if                          , KEYALL)
 KEYWORD(inline                      , KEYC99|KEYCXX|KEYGNU)
+// C++ Levitation
 KEYWORD(package                     , KEYLEVITATION)
+KEYWORD(bodydep                     , KEYLEVITATION)
+// end of C++ Levitation
 KEYWORD(int                         , KEYALL)
 KEYWORD(long                        , KEYALL)
 KEYWORD(register                    , KEYALL)

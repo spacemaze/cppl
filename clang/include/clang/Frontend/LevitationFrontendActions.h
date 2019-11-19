@@ -29,7 +29,17 @@ public:
       StringRef InFile
   ) override;
 
-    bool BeginInvocation(CompilerInstance &CI) override;
+  bool BeginInvocation(CompilerInstance &CI) override;
+};
+
+class LevitationParseImportAction : public GeneratePCHAction {
+public:
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(
+      CompilerInstance &CI,
+      StringRef InFile
+  ) override;
+
+  bool BeginInvocation(CompilerInstance &CI) override;
 };
 
 class LevitationBuildPreambleAction : public GeneratePCHAction {

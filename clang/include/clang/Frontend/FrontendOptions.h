@@ -100,6 +100,12 @@ enum ActionKind {
   /// * creates package dependent declaration and definition AST files.
   LevitationBuildAST,
 
+  /// Levitation mode: Parse #import directives
+  /// It is almost preprocessor only action, except that
+  /// it still have to initialize Sema and fullfill it with
+  /// parsed dependencies.
+  LevitationParseImport,
+
   /// Levitation mode: Build Preamble AST action.
   /// * Parses source code
   /// * precompiled preamble file.

@@ -2228,16 +2228,133 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
 
   bool BodyDep = TryLexLevitationBodyDepAttr(NextTok);
 
-  SmallVector<StringRef, 16> IdentifierParts = LexLevitationImportIdentifier(
-    BodyDep ? tok::unknown : NextTok.getKind()
-  );
+  if (BodyDep) Lex(NextTok);
 
-  SourceRange Loc(HashLoc, getLastCachedTokenLocation());
+  auto IdentifierParts = LexLevitationImportIdentifier(NextTok);
 
-  if (BodyDep)
-    PPLevitationDeclDeps.emplace_back(std::move(IdentifierParts), Loc);
+  const auto &Loc = IdentifierParts.second;
+  auto &Parts = IdentifierParts.first;
+
+  if (!BodyDep)
+    PPLevitationDeclDeps.emplace_back(std::move(Parts), Loc);
   else
-    PPLevitationBodyDeps.emplace_back(std::move(IdentifierParts), Loc);
+    PPLevitationBodyDeps.emplace_back(std::move(Parts), Loc);
+}
+
+bool Preprocessor::TryLexLevitationBodyDepAttr(const Token &FirstToken) {
+  if (FirstToken.getKind() != tok::l_square)
+    return false;
+
+  Token CurTok;
+  Lex(CurTok);
+
+  if (CurTok.getKind() != tok::kw_bodydep) {
+    Diag(CurTok, diag::err_pp_levitation_unknown_import_attribute);
+    if (CurTok.isNot(tok::eod))
+      DiscardUntilEndOfDirective();
+    return false;
+  }
+
+  bool UnexpectedTokens = false;
+  Token FirstUnexpectedToken;
+  do {
+    Lex(CurTok);
+    if (CurTok.getKind() != tok::r_square)
+      if (!UnexpectedTokens) {
+        UnexpectedTokens = true;
+        FirstUnexpectedToken = CurTok;
+      }
+  }
+  while (!CurTok.isOneOf(tok::eof, tok::eod, tok::r_square));
+
+  if (CurTok.getKind() != tok::r_square) {
+    Diag(CurTok.getLocation(), diag::err_expected) << tok::r_square;
+    Diag(FirstToken, diag::note_matching) << tok::l_square;
+    return false;
+  }
+
+  if (UnexpectedTokens) {
+    Diag(FirstUnexpectedToken, diag::err_expected) << tok::r_square;
+    Diag(FirstToken, diag::note_matching) << tok::l_square;
+    return false;
+  }
+
+  return true;
+}
+
+std::pair<SmallVector<StringRef, 16>, SourceRange> Preprocessor::LexLevitationImportIdentifier(
+    const Token &FirstTok
+) {
+  Token FilenameTok = FirstTok;
+
+  bool PrefixedByColonColon = false;
+  std::pair<SmallVector<StringRef, 16>, SourceRange> Res;
+  auto &DepParts = Res.first;
+  Res.second.setBegin(FirstTok.getLocation());
+  Res.second.setEnd(FirstTok.getLocation());
+  PPLevitationPartBuff PartBuffer;
+
+  while (FilenameTok.isNot(tok::eod)) {
+
+    // FIXME Levitation: Allow multiline imports?
+
+    if (FilenameTok.is(tok::coloncolon)) {
+      if (PrefixedByColonColon) {
+        Diag(FilenameTok, diag::err_pp_levitation_import_missed_dep_part);
+        return Res;
+      }
+
+      PrefixedByColonColon = true;
+      if (!PartBuffer.empty()) {
+        PPLevitationDepIdBuffs.emplace_back(std::move(PartBuffer));
+        DepParts.push_back(PPLevitationDepIdBuffs.back());
+      }
+    } else {
+      PrefixedByColonColon = false;
+
+      // FIXME Levitation: Provide code completion for #import.
+      if (FilenameTok.is(tok::code_completion)) {
+        setCodeCompletionReached();
+        Lex(FilenameTok);
+        continue;
+      }
+
+      if (FilenameTok.isNot(tok::identifier)) {
+        Diag(FilenameTok, diag::err_expected) << tok::identifier;
+        return Res;
+      }
+
+      // Get the spelling of the token, directly into FilenameBuffer if
+      // possible.
+      // FIXME Levitation: PartBuffer.size() should be zero.
+      size_t PreAppendSize = PartBuffer.size();
+      PartBuffer.resize(PreAppendSize + FilenameTok.getLength());
+
+      const char *BufPtr = &PartBuffer[PreAppendSize];
+      unsigned ActualLen = getSpelling(FilenameTok, BufPtr);
+
+      // If the token was spelled somewhere else, copy it into FilenameBuffer.
+      if (BufPtr != &PartBuffer[PreAppendSize])
+        memcpy(&PartBuffer[PreAppendSize], BufPtr, ActualLen);
+
+      // Resize FilenameBuffer to the correct size.
+      if (FilenameTok.getLength() != ActualLen)
+        PartBuffer.resize(PreAppendSize + ActualLen);
+    }
+
+    Res.second.setEnd(FirstTok.getLocation());
+    Lex(FilenameTok);
+  }
+
+  if (PartBuffer.empty()) {
+    Diag(FilenameTok, diag::err_pp_levitation_import_missed_dep_part_semi);
+    return Res;
+  }
+
+  PPLevitationDepIdBuffs.emplace_back(std::move(PartBuffer));
+  DepParts.push_back(PPLevitationDepIdBuffs.back());
+
+  return Res;
 }
 
 const Preprocessor::PPLevitationDepsVector&
@@ -2273,6 +2390,8 @@ void Preprocessor::HandleImportDirective(SourceLocation HashLoc,
   if (!LangOpts.ObjC) {  // #import is standard for ObjC.
     if (LangOpts.MSVCCompat)
       return HandleMicrosoftImportDirective(ImportTok);
+    if (LangOpts.isLevitationMode(LangOptions::LBSK_ParseManualDeps))
+      return HandleLevitationImportDirective(HashLoc, ImportTok);
     Diag(ImportTok, diag::ext_pp_import_directive);
   }
   return HandleIncludeDirective(HashLoc, ImportTok);

@@ -617,6 +617,9 @@ def emit_obj : Flag<["-"], "emit-obj">,
 def levitation_build_ast : Flag<["-"], "levitation-build-ast">,
    HelpText<"Build C++ Levitation AST files.">;
 
+def levitation_parse_import : Flag<["-"], "levitation-parse-import">,
+   HelpText<"Parse C++ Levitation #import directives.">;
+
 def levitation_build_preamble : Flag<["-"], "levitation-build-preamble">,
    HelpText<"Build C++ Levitation Preamble AST files.">;
 

@@ -388,6 +388,23 @@ bool LevitationBuildASTAction::BeginInvocation(CompilerInstance &CI) {
   return FrontendAction::BeginInvocation(CI);
 }
 
+std::unique_ptr<ASTConsumer> LevitationParseImportAction::CreateASTConsumer(
+    clang::CompilerInstance &CI,
+    llvm::StringRef InFile
+) {
+  return MultiplexConsumerBuilder()
+      .addRequired(CreateDependenciesASTProcessor(CI, InFile))
+  .done();
+}
+
+bool LevitationParseImportAction::BeginInvocation(CompilerInstance &CI) {
+  if (CI.getFrontendOpts().LevitationPreambleFileName.size()) {
+    CI.getPreprocessorOpts().ImplicitPCHInclude =
+        CI.getFrontendOpts().LevitationPreambleFileName;
+  }
+  return FrontendAction::BeginInvocation(CI);
+}
+
 void LevitationBuildObjectAction::ExecuteAction() {
   // ASTFrontendAction is used as source
 

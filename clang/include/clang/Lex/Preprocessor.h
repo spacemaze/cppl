@@ -2231,8 +2231,13 @@ public:
   typedef std::pair<PPLevitationDepIdParts, SourceRange> PPLevitationDep;
   typedef SmallVector<PPLevitationDep, 16> PPLevitationDepsVector;
 private:
+  typedef SmallString<32> PPLevitationPartBuff;
+  SmallVector<PPLevitationPartBuff, 64> PPLevitationDepIdBuffs;
   PPLevitationDepsVector PPLevitationDeclDeps;
   PPLevitationDepsVector PPLevitationBodyDeps;
+
+  bool TryLexLevitationBodyDepAttr(const Token &FirstToken);
+  std::pair<SmallVector<StringRef, 16>, SourceRange> LexLevitationImportIdentifier(const Token &FirstTok);
 
 public:
   void HandleLevitationImportDirective(SourceLocation HashLoc, Token &Tok);

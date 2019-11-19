@@ -314,7 +314,7 @@ void Sema::HandleLevitationPackageDependency(
   if (IsBodyDependency)
     LevitationDefinitionDependencies.mergeDependency(std::move(Dependency));
   else
-    LevitationDeclarationDependencies.mergeDependency(std::move(Dependency))
+    LevitationDeclarationDependencies.mergeDependency(std::move(Dependency));
 }
 
 //===--------------------------------------------------------------------===//

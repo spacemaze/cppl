@@ -104,6 +104,7 @@ namespace {
 
       if (!validated) {
         Map.setHasMissingDependencies();
+        // FIXME Levitation: add diags
         return;
       }
 
