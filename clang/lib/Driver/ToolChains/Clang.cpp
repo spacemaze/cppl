@@ -3806,6 +3806,56 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
       levitationParseIncludePreamble(CmdArgs, Args);
       levitationParseIncludeDeps(CmdArgs, Args);
+    } else if (Args.hasArg(options::OPT_cppl_import)) {
+
+      CmdArgs.push_back("-levitation-parse-import");
+
+      StringRef SrcRoot = Args.getLastArgValue(options::OPT_cppl_src_root_EQ);
+      StringRef DepsOutput = Args.getLastArgValue(options::OPT_cppl_deps_out_EQ);
+      StringRef IncludePreamble = Args.getLastArgValue(options::OPT_cppl_include_preamble_EQ);
+
+      if (SrcRoot.empty())
+        D.Diag(diag::err_drv_missed_cppl_value)
+            << "-cppl-src-root="
+            << "PARSE";
+
+      if (DepsOutput.empty())
+        D.Diag(diag::err_drv_missed_cppl_value)
+            << "-cppl-deps-out="
+            << "PARSE";
+
+      CmdArgs.push_back(Args.MakeArgString(
+          Twine("-levitation-sources-root-dir=") + SrcRoot
+      ));
+
+      CmdArgs.push_back(Args.MakeArgString(
+          Twine("-levitation-deps-output-file=") + DepsOutput
+      ));
+
+      if (IncludePreamble.size()) {
+        CmdArgs.push_back(
+            Args.MakeArgString(Twine("-levitation-preamble=") + IncludePreamble));
+      }
+
+    } else if (Args.hasArg(options::OPT_cppl_decl)) {
+
+      // assert(JA.getType() == types::TY_AST && "Type must be AST");
+
+      CmdArgs.push_back("-flevitation-build-decl");
+      CmdArgs.push_back("-emit-pch");
+
+      levitationParseIncludePreamble(CmdArgs, Args);
+      levitationParseIncludeDeps(CmdArgs, Args);
+
+    } else if (Args.hasArg(options::OPT_cppl_obj)) {
+
+      // assert(JA.getType() == types::TY_Object && "Type must be Object");
+
+      CmdArgs.push_back("-flevitation-build-object");
+      CmdArgs.push_back("-emit-obj");
+
+      levitationParseIncludePreamble(CmdArgs, Args);
+      levitationParseIncludeDeps(CmdArgs, Args);
     }
 
     // end of C++ Levitation

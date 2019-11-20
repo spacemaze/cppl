@@ -571,10 +571,10 @@ public:
       // Declaration AST is instantiated from parsed AST,
       // and thus latter depends on former.
       // The only exception is main file.
-      DependenciesSolverPath::addDepPathsFor(
-        Paths, Context.Solver.BuildRoot,
-        Package,
-        N.PackageInfo->IsMainFile
+      DependenciesSolverPath::addDepPathsForDeprecated(
+          Paths, Context.Solver.BuildRoot,
+          Package,
+          N.PackageInfo->IsMainFile
       );
     }
 

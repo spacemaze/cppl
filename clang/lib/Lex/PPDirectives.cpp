@@ -1644,6 +1644,11 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   if (LexHeaderName(FilenameTok))
     return;
 
+  if (LangOpts.isLevitationMode(LangOptions::LBSK_ParseManualDeps)) {
+    DiscardUntilEndOfDirective();
+    return;
+  }
+
   if (FilenameTok.isNot(tok::header_name)) {
     Diag(FilenameTok.getLocation(), diag::err_pp_expects_filename);
     if (FilenameTok.isNot(tok::eod))

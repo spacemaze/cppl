@@ -56,6 +56,7 @@ namespace clang { namespace levitation { namespace tools {
 
     Args ExtraPreambleArgs;
     Args ExtraParseArgs;
+    Args ExtraParseImportArgs;
     Args ExtraCodeGenArgs;
     Args ExtraLinkerArgs;
 

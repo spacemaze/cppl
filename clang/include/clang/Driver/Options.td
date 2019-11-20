@@ -628,6 +628,15 @@ def emit_ast : Flag<["-"], "emit-ast">,
 def cppl_parse : Flag<["-"], "cppl-parse">,
   HelpText<"Runs Levitation Parse stage for input file">;
 
+def cppl_import : Flag<["-"], "cppl-import">,
+  HelpText<"Runs Levitation #import (dependencies) parsing">;
+
+def cppl_decl : Flag<["-"], "cppl-decl">,
+  HelpText<"Runs Levitation decl AST building stage">;
+
+def cppl_obj : Flag<["-"], "cppl-obj">,
+  HelpText<"Runs Levitation object file creation stage">;
+
 def cppl_compile : Flag<["-"], "cppl-compile">,
   HelpText<"Runs Levitation Compilation stage for input file (combines parse, instantiation and codegen stages)">;
 

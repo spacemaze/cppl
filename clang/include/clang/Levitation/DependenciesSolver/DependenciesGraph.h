@@ -154,6 +154,14 @@ public:
           PackageDependencies.DeclarationDependencies
       );
 
+      // For definition we have to add both declaration and definition
+      // dependencies.
+
+      DGraphPtr->addDependenciesTo(
+          *Package.Definition,
+          PackageDependencies.DeclarationDependencies
+      );
+
       DGraphPtr->addDependenciesTo(
           *Package.Definition,
           PackageDependencies.DefinitionDependencies
@@ -269,7 +277,8 @@ public:
     out
     << "Node[";
     dumpNodeID(out, NodeID);
-    out << "]\n";
+    out << "], "
+        << PackagePathStr << ":\n";
 
     if (!Node.PackageInfo)
       out << "  ERROR: NO PACKAGE INFO, Path is recovered from Node ID\n"
@@ -483,8 +492,8 @@ protected:
     Node &DeclNode = getOrCreateNode(NodeKind::Declaration, PackagePathID);
     Node &DefNode = getOrCreateNode(NodeKind::Definition, PackagePathID);
 
-    DeclNode.DependentNodes.insert(DefNode.ID);
-    DefNode.Dependencies.insert(DeclNode.ID);
+    // DeclNode.DependentNodes.insert(DefNode.ID);
+    // DefNode.Dependencies.insert(DeclNode.ID);
 
     DeclNode.PackageInfo = &Package;
     DefNode.PackageInfo = &Package;

@@ -96,14 +96,19 @@ public:
 
   void buildPreamble();
   void runParse();
+  void runParseImport();
   void solveDependencies();
   void instantiateAndCodeGen();
+  void codeGen();
   void runLinker();
 
   void collectSources();
 
   void addMainFileInfo();
 
+  bool processDependencyNodeDeprecated(
+      const DependenciesGraph::Node &N
+  );
   bool processDependencyNode(
       const DependenciesGraph::Node &N
   );
@@ -379,6 +384,23 @@ public:
 
       return Cmd;
     }
+    static CommandInfo getParseImport(
+        StringRef BinDir,
+        StringRef PrecompiledPreamble,
+        bool verbose,
+        bool dryRun
+    ) {
+      auto Cmd = getClangXXCommand(
+          BinDir, verbose, dryRun
+      );
+
+      Cmd.addArg("-cppl-import");
+
+      if (PrecompiledPreamble.size())
+        Cmd.addKVArgEq("-cppl-include-preamble", PrecompiledPreamble);
+
+      return Cmd;
+    }
     static CommandInfo getInstDecl(
         StringRef BinDir,
         StringRef PrecompiledPreamble,
@@ -402,6 +424,31 @@ public:
       .addArg("-cppl-compile");
       return Cmd;
     }
+
+    static CommandInfo getBuildDecl(
+        StringRef BinDir,
+        StringRef PrecompiledPreamble,
+        bool verbose,
+        bool dryRun
+    ) {
+      auto Cmd = getClangXXCommand(BinDir, verbose, dryRun);
+      Cmd
+      .addArg("-cppl-decl");
+      return Cmd;
+    }
+
+    static CommandInfo getBuildObj(
+        StringRef BinDir,
+        StringRef PrecompiledPreamble,
+        bool verbose,
+        bool dryRun
+    ) {
+      auto Cmd = getClangXXCommand(BinDir, verbose, dryRun);
+      Cmd
+      .addArg("-cppl-obj");
+      return Cmd;
+    }
+
     static CommandInfo getCompileSrc(
         StringRef BinDir,
         StringRef PrecompiledPreamble,
@@ -620,6 +667,33 @@ public:
     return processStatus(ExecutionStatus);
   }
 
+  static bool parseImport(
+      StringRef BinDir,
+      StringRef PrecompiledPreamble,
+      StringRef OutLDepsFile,
+      StringRef SourceFile,
+      StringRef SourcesRoot,
+      const LevitationDriver::Args &ExtraArgs,
+      bool Verbose,
+      bool DryRun
+  ) {
+    if (!DryRun || Verbose)
+      dumpParseImport(OutLDepsFile, SourceFile);
+
+    levitation::Path::createDirsForFile(OutLDepsFile);
+
+    auto ExecutionStatus = CommandInfo::getParseImport(
+        BinDir, PrecompiledPreamble, Verbose, DryRun
+    )
+    .addKVArgEq("-cppl-src-root", SourcesRoot)
+    .addKVArgEq("-cppl-deps-out", OutLDepsFile)
+    .addArgs(ExtraArgs)
+    .addArg(SourceFile)
+    .execute();
+
+    return processStatus(ExecutionStatus);
+  }
+
   static bool instantiateDecl(
       StringRef BinDir,
       StringRef PrecompiledPreamble,
@@ -668,6 +742,66 @@ public:
     levitation::Path::createDirsForFile(OutObjFile);
 
     auto ExecutionStatus = CommandInfo::getInstObj(
+        BinDir, PrecompiledPreamble, Verbose, DryRun
+    )
+    .addKVArgEqIfNotEmpty("-cppl-include-preamble", PrecompiledPreamble)
+    .addKVArgsEq("-cppl-include-dependency", Deps)
+    .addArgs(ExtraArgs)
+    .addArg(InputObject)
+    .addKVArgSpace("-o", OutObjFile)
+    .execute();
+
+    return processStatus(ExecutionStatus);
+  }
+
+  static bool buildDecl(
+      StringRef BinDir,
+      StringRef PrecompiledPreamble,
+      StringRef OutDeclASTFile,
+      StringRef InputFile,
+      const Paths &Deps,
+      const LevitationDriver::Args &ExtraArgs,
+      bool Verbose,
+      bool DryRun
+  ) {
+    assert(OutDeclASTFile.size() && InputFile.size());
+
+    if (!DryRun || Verbose)
+      dumpBuildDecl(OutDeclASTFile, InputFile, Deps);
+
+    levitation::Path::createDirsForFile(OutDeclASTFile);
+
+    auto ExecutionStatus = CommandInfo::getBuildDecl(
+        BinDir, PrecompiledPreamble, Verbose, DryRun
+    )
+    .addKVArgEqIfNotEmpty("-cppl-include-preamble", PrecompiledPreamble)
+    .addKVArgsEq("-cppl-include-dependency", Deps)
+    .addArgs(ExtraArgs)
+    .addArg(InputFile)
+    .addKVArgSpace("-o", OutDeclASTFile)
+    .execute();
+
+    return processStatus(ExecutionStatus);
+  }
+
+  static bool buildObject(
+      StringRef BinDir,
+      StringRef PrecompiledPreamble,
+      StringRef OutObjFile,
+      StringRef InputObject,
+      const Paths &Deps,
+      const LevitationDriver::Args &ExtraArgs,
+      bool Verbose,
+      bool DryRun
+  ) {
+    assert(OutObjFile.size() && InputObject.size());
+
+    if (!DryRun || Verbose)
+      dumpBuildObject(OutObjFile, InputObject, Deps);
+
+    levitation::Path::createDirsForFile(OutObjFile);
+
+    auto ExecutionStatus = CommandInfo::getBuildObj(
         BinDir, PrecompiledPreamble, Verbose, DryRun
     )
     .addKVArgEqIfNotEmpty("-cppl-include-preamble", PrecompiledPreamble)
@@ -789,6 +923,18 @@ protected:
     << "\n";
   }
 
+  static void dumpParseImport(
+      StringRef OutLDepsFile,
+      StringRef SourceFile
+  ) {
+    auto &LogInfo = log::Logger::get().info();
+    LogInfo
+    << "PARSE IMPT" << SourceFile << " -> "
+    << "(ldeps: " << OutLDepsFile << ")"
+    << "\n";
+  }
+
+
   static void dumpInstantiateDecl(
       StringRef OutDeclASTFile,
       StringRef InputObject,
@@ -797,6 +943,26 @@ protected:
     assert(OutDeclASTFile.size() && InputObject.size());
 
     dumpInstantiate(OutDeclASTFile, InputObject, Deps, "INST DECL", "decl-ast");
+  }
+
+  static void dumpBuildDecl(
+      StringRef OutDeclASTFile,
+      StringRef InputObject,
+      const Paths &Deps
+  ) {
+    assert(OutDeclASTFile.size() && InputObject.size());
+
+    dumpInstantiate(OutDeclASTFile, InputObject, Deps, "BUILD DECL", "decl-ast");
+  }
+
+  static void dumpBuildObject(
+      StringRef OutObjFile,
+      StringRef InputObject,
+      const Paths &Deps
+  ) {
+    assert(OutObjFile.size() && InputObject.size());
+
+    dumpInstantiate(OutObjFile, InputObject, Deps, "BUILD OBJ ", "object");
   }
 
   static void dumpInstantiateObject(
@@ -953,6 +1119,34 @@ void LevitationDriverImpl::runParse() {
     << "Parse: phase failed.";
 }
 
+void LevitationDriverImpl::runParseImport() {
+  auto &TM = TasksManager::get();
+
+  for (auto PackagePath : Context.Packages) {
+
+    auto Files = Context.Files[PackagePath];
+
+    TM.addTask([=] (TasksManager::TaskContext &TC) {
+      TC.Successful = Commands::parseImport(
+          Context.Driver.BinDir,
+          Context.Driver.PreambleOutput,
+          Files.LDeps,
+          Files.Source,
+          Context.Driver.SourcesRoot,
+          Context.Driver.ExtraParseImportArgs,
+          Context.Driver.Verbose,
+          Context.Driver.DryRun
+      );
+    });
+  }
+
+  auto Res = TM.waitForTasks();
+
+  if (!Res)
+    Status.setFailure()
+    << "Parse: phase failed.";
+}
+
 void LevitationDriverImpl::solveDependencies() {
   if (!Status.isValid())
     return;
@@ -975,6 +1169,22 @@ void LevitationDriverImpl::solveDependencies() {
 }
 
 void LevitationDriverImpl::instantiateAndCodeGen() {
+  if (!Status.isValid())
+    return;
+
+  bool Res =
+    Context.DependenciesInfo->getDependenciesGraph().dsfJobs(
+        [&] (const DependenciesGraph::Node &N) {
+          return processDependencyNodeDeprecated(N);
+        }
+    );
+
+  if (!Res)
+    Status.setFailure()
+    << "Instantiate and codegen: phase failed.";
+}
+
+void LevitationDriverImpl::codeGen() {
   if (!Status.isValid())
     return;
 
@@ -1148,6 +1358,88 @@ bool LevitationDriverImpl::processDependencyNode(
   switch (N.Kind) {
 
     case DependenciesGraph::NodeKind::Declaration:
+      return Commands::buildDecl(
+          Context.Driver.BinDir,
+          Context.Driver.PreambleOutput,
+          Files.DeclAST,
+          Files.Source,
+          fullDependencies,
+          Context.Driver.ExtraCodeGenArgs,
+          Context.Driver.Verbose,
+          Context.Driver.DryRun
+      );
+
+    case DependenciesGraph::NodeKind::Definition: {
+      if (N.PackageInfo->IsMainFile) {
+        return Commands::compileMain(
+          Context.Driver.BinDir,
+          Context.Driver.PreambleOutput,
+          Files.Object,
+          Files.Source,
+          fullDependencies,
+          Context.Driver.ExtraParseArgs,
+          Context.Driver.ExtraCodeGenArgs,
+          Context.Driver.Verbose,
+          Context.Driver.DryRun
+        );
+      } else {
+        return Commands::buildObject(
+          Context.Driver.BinDir,
+          Context.Driver.PreambleOutput,
+          Files.Object,
+          Files.Source,
+          fullDependencies,
+          Context.Driver.ExtraCodeGenArgs,
+          Context.Driver.Verbose,
+          Context.Driver.DryRun
+        );
+      }
+    }
+
+    default:
+      llvm_unreachable("Unknown dependency kind");
+  }
+}
+
+bool LevitationDriverImpl::processDependencyNodeDeprecated(
+    const DependenciesGraph::Node &N
+) {
+  const auto &Strings = CreatableSingleton<DependenciesStringsPool>::get();
+  const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
+
+  const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
+
+  auto FoundFiles = Context.Files.find(SrcRel);
+  if(FoundFiles == Context.Files.end()) {
+    Log.error()
+    << "Package '" << SrcRel << "' is present in dependencies, but not found.\n";
+    llvm_unreachable("Package not found");
+  }
+
+  const auto &Files = FoundFiles->second;
+
+  auto &fullDependencieIDs = Context.DependenciesInfo->getDependenciesList(N.ID);
+
+  Paths fullDependencies;
+  for (auto DID : fullDependencieIDs) {
+    auto &DNode = Graph.getNode(DID.NodeID);
+    auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
+
+    DependenciesSolverPath::addDepPathsForDeprecated(
+        fullDependencies,
+        Context.Driver.BuildRoot,
+        DepPath
+    );
+
+    assert(
+        DepPath != Context.MainFileNormilized &&
+        "Main file can't be a dependency"
+    );
+  }
+
+  switch (N.Kind) {
+
+    case DependenciesGraph::NodeKind::Declaration:
       return Commands::instantiateDecl(
           Context.Driver.BinDir,
           Context.Driver.PreambleOutput,
@@ -1237,10 +1529,12 @@ bool LevitationDriver::run() {
 
   Impl.collectSources();
   Impl.buildPreamble();
-  Impl.runParse();
+  //   Impl.runParse();
+  Impl.runParseImport();
   Impl.solveDependencies();
   Impl.addMainFileInfo();
-  Impl.instantiateAndCodeGen();
+  Impl.codeGen();
+  //  Impl.instantiateAndCodeGen();
 
   if (LinkPhaseEnabled)
     Impl.runLinker();
