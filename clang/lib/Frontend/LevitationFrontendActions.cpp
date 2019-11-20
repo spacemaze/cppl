@@ -480,6 +480,14 @@ static void diagFailedToLoadASTFiles(
 
 void LevitationBuildObjectAction::loadASTFiles() {
 
+  StringRef MainFile =
+      getCurrentFileKind().getFormat() == InputKind::Precompiled ?
+      getCurrentFile() :
+      StringRef();
+
+  if (MainFile.empty() && ASTFiles.empty())
+    return;
+
   CompilerInstance &CI = getCompilerInstance();
 
   CI.getDiagnostics().getClient()->BeginSourceFile(
@@ -498,11 +506,6 @@ void LevitationBuildObjectAction::loadASTFiles() {
   ASTImporterLookupTable LookupTable(
       *CI.getASTContext().getTranslationUnitDecl()
   );
-
-  StringRef MainFile =
-      getCurrentFileKind().getFormat() == InputKind::Precompiled ?
-      getCurrentFile() :
-      StringRef();
 
   IntrusiveRefCntPtr<LevitationModulesReader>
       Reader(new LevitationModulesReader(
@@ -592,7 +595,8 @@ LevitationBuildObjectAction::createASTConsumerInternal(
     return AdoptedConsumer;
 
   return MultiplexConsumerBuilder()
-      .addNotNull(CreatePackageInstantiator())
+      // Deprecated: auto deps resolution is no longer supported
+      // .addNotNull(CreatePackageInstantiator())
       .addRequired(std::move(AdoptedConsumer))
   .done();
 }

@@ -2222,6 +2222,16 @@ void Preprocessor::HandleIncludeNextDirective(SourceLocation HashLoc,
 /// \param HashLoc location of '#' symbol
 /// \param Tok reference to 'import' token next to '#' symbol
 void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token &Tok) {
+
+  // FIXME Levitation: On parse-import remember the end of last #import directive
+  //  on later stages start parsing straight from that offset.
+  //
+  // Ignore #import directive if we are at later stages.
+  if (LangOpts.isLevitationMode(LangOptions::LBSK_BuildObjectFile)) {
+    DiscardUntilEndOfDirective();
+    return;
+  }
+
   Token NextTok;
 
   Lex(NextTok);
@@ -2390,7 +2400,10 @@ void Preprocessor::HandleImportDirective(SourceLocation HashLoc,
   if (!LangOpts.ObjC) {  // #import is standard for ObjC.
     if (LangOpts.MSVCCompat)
       return HandleMicrosoftImportDirective(ImportTok);
-    if (LangOpts.isLevitationMode(LangOptions::LBSK_ParseManualDeps))
+    if (LangOpts.isLevitationMode(
+          LangOptions::LBSK_ParseManualDeps,
+          LangOptions::LBSK_BuildObjectFile
+    ))
       return HandleLevitationImportDirective(HashLoc, ImportTok);
     Diag(ImportTok, diag::ext_pp_import_directive);
   }

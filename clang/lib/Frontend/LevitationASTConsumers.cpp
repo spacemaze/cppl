@@ -266,6 +266,8 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
   return std::make_unique<ASTDependenciesProcessor>(CI, std::move(InFileRel));
 }
 
+/// CreatePackageInstantiator (Deprecated)
+/// \return
 std::unique_ptr<ASTConsumer> CreatePackageInstantiator() {
   return std::make_unique<PackageInstantiator>();
 }

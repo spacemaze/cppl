@@ -2811,11 +2811,13 @@ Sema::InstantiateClassMembers(SourceLocation PointOfInstantiation,
         InstantiateInClassInitializer(PointOfInstantiation, Field, Pattern,
                                       TemplateArgs);
       }
-    } else if (auto *FT = dyn_cast<FunctionTemplateDecl>(D)) {
-      if (isLevitationMode(LangOptions::LBSK_BuildObjectFile)) {
-        postFunctionTemplateDefinitionInstantiation(FT, PointOfInstantiation);
-      }
     }
+// C++ Levitation, deprecated, auto deps resolution code.
+//    else if (auto *FT = dyn_cast<FunctionTemplateDecl>(D)) {
+//      if (isLevitationMode(LangOptions::LBSK_BuildObjectFile)) {
+//        postFunctionTemplateDefinitionInstantiation(FT, PointOfInstantiation);
+//      }
+//    }
   }
 }
 

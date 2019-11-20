@@ -8713,8 +8713,9 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     // no alterations, but it gives you a hint what exactly "inline" term
     // means for linkage.
     bool LevitationExternalFunctionDefinition =
-        getLangOpts().LevitationMode &&
-        getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildAST &&
+        // Deprecated: auto dep resolution feature is no longer supported
+        // getLangOpts().isLevitationMode(LangOptions::LBSK_BuildAST)
+        getLangOpts().isLevitationMode(LangOptions::LBSK_BuildObjectFile) &&
         !NewFD->isInlineSpecified();
 
     if (isa<CXXMethodDecl>(NewFD) && DC == CurContext &&

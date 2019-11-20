@@ -96,6 +96,14 @@ public:
     return LevitationMode && getLevitationBuildStage() == Stage;
   }
 
+  bool isLevitationMode(
+      LevitationBuildStageKind StageA,
+      LevitationBuildStageKind OrStageB
+  ) const {
+    auto stage = getLevitationBuildStage();
+    return LevitationMode && (stage == StageA || stage == OrStageB);
+  }
+
   enum PragmaMSPointersToMembersKind {
     PPTMK_BestCase,
     PPTMK_FullGeneralitySingleInheritance,
