@@ -50,6 +50,8 @@ public:
       Unknown
   };
 
+  // TODO Levitation: Rename NodeID into NodeIDUtils
+  //                  NodeID::Type then may became a NodeID
   struct NodeID {
       using Type = uint64_t;
 
