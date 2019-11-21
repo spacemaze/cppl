@@ -52,6 +52,12 @@ namespace levitation {
     return ScopeExit<Callable>(std::move(ExitF));
   }
 
+  // Just a shorter synonym
+  template <typename Callable>
+  ScopeExit<Callable> on_exit(Callable &&ExitF) {
+    return ScopeExit<Callable>(std::move(ExitF));
+  }
+
 }
 }
 
