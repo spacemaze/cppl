@@ -105,20 +105,6 @@ private:
   /// Nodes whithout dependencies.
   NodesSet Roots;
 
-  /// Declaration nodes without dependent declaration nodes.
-  /// E.g. "B" depends on declaration of "A", wich means
-  ///   that "B" definition depends on "B" declaration and
-  ///   "B" declaration in turn depends on declaration of "A".
-  ///   In this case "B" declaration is terminal declaration node,
-  ///   even though it has dependent node (definition of "B").
-  ///
-  /// This tricky collection is required for .h files generation.
-  /// For each declaration node we should generate .h file, but
-  /// declaration terminal nodes provide us with hint of minimum
-  /// possible .h files to be included in order to include
-  /// everything.
-  NodesSet DeclarationTerminals;
-
   /// Graph terminal nodes. Contains nodes without dependent nodes.
   /// Should be used as starting points from build process.
   NodesSet Terminals;
@@ -131,8 +117,7 @@ private:
 public:
 
   static std::shared_ptr<DependenciesGraph> build(
-      const ParsedDependencies &ParsedDeps,
-      StringID MainFileID
+      const ParsedDependencies &ParsedDeps
   ) {
     auto DGraphPtr = std::make_shared<DependenciesGraph>();
     auto &Log = log::Logger::get();
@@ -173,12 +158,6 @@ public:
     if (!DGraphPtr->AllNodes.empty() && DGraphPtr->Roots.empty()) {
       DGraphPtr->Invalid = true;
     }
-
-    // Create node which will represent main file
-    PackageInfo &MainFilePackage = DGraphPtr->createMainFilePackage(MainFileID);
-
-    // Scan for declaration terminal nodes.
-    DGraphPtr->collectDeclarationTerminals(MainFilePackage);
 
     // Scan for regular terminal nodes
     DGraphPtr->collectTerminals();
@@ -240,13 +219,13 @@ public:
     // we have non-empty graph and empty Terminals collection.
     // Don't fire error yet, do it later during dependency solve
     // stage.
-    if (DeclarationTerminals.empty()) {
+    if (Terminals.empty()) {
       out << "No terminal nodes found. Graph has cycles.\n";
       return;
     }
 
-    out << "Declaration terminals:\n";
-    for (auto TerminalNodeID : DeclarationTerminals) {
+    out << "Terminals:\n";
+    for (auto TerminalNodeID : Terminals) {
       out << "    ";
       dumpNodeID(out, TerminalNodeID);
       out << "\n";
@@ -344,7 +323,7 @@ public:
 
   const NodesMap &allNodes() const { return AllNodes; }
   const NodesSet &roots() const { return Roots; }
-  const NodesSet &declarationTerminals() const { return DeclarationTerminals; }
+  const NodesSet &terminals() const { return Terminals; }
 
 protected:
 
@@ -542,36 +521,6 @@ protected:
       InsertionRes.first->second.reset(new Node(ID, Kind));
 
     return *InsertionRes.first->second;
-  }
-
-  void collectDeclarationTerminals(PackageInfo &MainFilePackage) {
-    for (auto &NodeIt : AllNodes) {
-      auto &N = *NodeIt.second;
-
-      if (N.Kind != NodeKind::Declaration)
-        continue;
-
-      bool HasDependentDeclarationNodes = false;
-
-      for (auto &DependentNodeID : N.DependentNodes) {
-        NodeKind DependentNodeKind = NodeID::getKind(DependentNodeID);
-
-        if (DependentNodeKind == NodeKind::Declaration) {
-          HasDependentDeclarationNodes = true;
-          break;
-        }
-      }
-
-      if (!HasDependentDeclarationNodes) {
-        auto &N = *NodeIt.second;
-        auto &MainFileNode = *MainFilePackage.Definition;
-
-        DeclarationTerminals.insert(N.ID);
-
-        MainFileNode.Dependencies.insert(N.ID);
-        N.DependentNodes.insert(MainFileNode.ID);
-      }
-    }
   }
 
   void collectTerminals() {

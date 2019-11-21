@@ -38,7 +38,6 @@ namespace clang { namespace levitation { namespace tools {
     levitation::SinglePath BinDir;
     llvm::StringRef SourcesRoot = DriverDefaults::SOURCES_ROOT;
     llvm::StringRef BuildRoot = DriverDefaults::BUILD_ROOT;
-    llvm::StringRef MainSource = DriverDefaults::MAIN_SOURCE;
 
     llvm::StringRef PreambleSource;
     levitation::SinglePath PreambleOutput;
@@ -82,14 +81,6 @@ namespace clang { namespace levitation { namespace tools {
 
     void setBuildRoot(llvm::StringRef BuildRoot) {
       LevitationDriver::BuildRoot = BuildRoot;
-    }
-
-    llvm::StringRef getMainSource() const {
-      return MainSource;
-    }
-
-    void setMainSource(llvm::StringRef MainSource) {
-      LevitationDriver::MainSource = MainSource;
     }
 
     llvm::StringRef getPreambleSource() const {

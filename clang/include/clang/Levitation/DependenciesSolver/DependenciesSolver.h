@@ -38,7 +38,6 @@ class SolvedDependenciesInfo;
 class DependenciesSolver : public Failable {
   llvm::StringRef SourcesRoot;
   llvm::StringRef BuildRoot;
-  llvm::StringRef MainFile;
   bool Verbose = false;
 public:
 
@@ -52,10 +51,6 @@ public:
 
   void setBuildRoot(llvm::StringRef BuildRoot) {
     DependenciesSolver::BuildRoot = BuildRoot;
-  }
-
-  void setMainFile(llvm::StringRef MainFile) {
-    DependenciesSolver::MainFile = MainFile;
   }
 
   std::shared_ptr<SolvedDependenciesInfo> solve(const Paths &LDepsFiles);

@@ -65,15 +65,11 @@ namespace {
 
     Paths Packages;
     llvm::DenseMap<StringRef, FilesInfo> Files;
-    SinglePath MainFileNormilized;
 
     std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
 
     RunContext(LevitationDriver &driver)
-    : Driver(driver),
-      MainFileNormilized(levitation::Path::makeRelative<SinglePath>(
-          driver.getMainSource(), driver.getSourcesRoot()
-      ))
+    : Driver(driver)
     {}
   };
 }
@@ -109,6 +105,10 @@ public:
   bool processDependencyNodeDeprecated(
       const DependenciesGraph::Node &N
   );
+
+  /// Dependency node processing
+  /// \param N node to be processed
+  /// \return true is successful
   bool processDependencyNode(
       const DependenciesGraph::Node &N
   );
@@ -840,37 +840,6 @@ public:
     return processStatus(ExecutionStatus);
   }
 
-  static bool compileMain(
-      StringRef BinDir,
-      StringRef PrecompiledPreamble,
-      StringRef OutObjFile,
-      StringRef InputObject,
-      const Paths &Deps,
-      const LevitationDriver::Args &ExtraParseArgs,
-      const LevitationDriver::Args &ExtraCodeGenArgs,
-      bool Verbose,
-      bool DryRun
-  ) {
-    assert(OutObjFile.size() && InputObject.size());
-
-    if (!DryRun || Verbose)
-      dumpCompileMain(OutObjFile, InputObject, Deps);
-
-    levitation::Path::createDirsForFile(OutObjFile);
-
-    auto ExecutionStatus = CommandInfo::getCompileSrc(
-        BinDir, PrecompiledPreamble, Verbose, DryRun
-    )
-    .addKVArgsEq("-cppl-include-dependency", Deps)
-    .addArgs(ExtraParseArgs)
-    .addArgs(ExtraCodeGenArgs)
-    .addArg(InputObject)
-    .addKVArgSpace("-o", OutObjFile)
-    .execute();
-
-    return processStatus(ExecutionStatus);
-  }
-
   static bool link(
       StringRef BinDir,
       StringRef OutputFile,
@@ -1154,7 +1123,6 @@ void LevitationDriverImpl::solveDependencies() {
   DependenciesSolver Solver;
   Solver.setSourcesRoot(Context.Driver.SourcesRoot);
   Solver.setBuildRoot(Context.Driver.BuildRoot);
-  Solver.setMainFile(Context.MainFileNormilized);
   Solver.setVerbose(Context.Driver.Verbose);
 
   Paths LDepsFiles;
@@ -1288,37 +1256,6 @@ void LevitationDriverImpl::collectSources() {
   << " '." << FileExtensions::SourceCode << "' files.\n\n";
 }
 
-void LevitationDriverImpl::addMainFileInfo() {
-  if (!Context.Status.isValid())
-    return;
-
-  // Inject main file package
-  Context.Packages.emplace_back(Context.MainFileNormilized);
-
-  const auto &PackagePath = Context.Packages.back();
-
-  FilesInfo Files;
-
-  // In current implementation package path is equal to relative source path.
-
-  Files.Source = Path::getPath<SinglePath>(
-      Context.Driver.SourcesRoot,
-      PackagePath
-  );
-
-  Files.Object = Path::getPath<SinglePath>(
-      Context.Driver.BuildRoot,
-      PackagePath,
-      FileExtensions::Object
-  );
-
-  Log.verbose() << "Injected main file '" << PackagePath << "'\n";
-
-  auto Res = Context.Files.insert({ PackagePath, Files });
-
-  assert(Res.second);
-}
-
 bool LevitationDriverImpl::processDependencyNode(
     const DependenciesGraph::Node &N
 ) {
@@ -1348,16 +1285,18 @@ bool LevitationDriverImpl::processDependencyNode(
         Context.Driver.BuildRoot,
         DepPath
     );
-
-    assert(
-        DepPath != Context.MainFileNormilized &&
-        "Main file can't be a dependency"
-    );
   }
 
   switch (N.Kind) {
 
     case DependenciesGraph::NodeKind::Declaration:
+      if (N.DependentNodes.empty()) {
+        auto &Verbose = Log.verbose();
+        Verbose << "Skip building unused declaration for ";
+        Graph.dumpNodeShort(Verbose, N.ID, Strings);
+        Verbose << "\n";
+        return true;
+      }
       return Commands::buildDecl(
           Context.Driver.BinDir,
           Context.Driver.PreambleOutput,
@@ -1370,30 +1309,16 @@ bool LevitationDriverImpl::processDependencyNode(
       );
 
     case DependenciesGraph::NodeKind::Definition: {
-      if (N.PackageInfo->IsMainFile) {
-        return Commands::compileMain(
-          Context.Driver.BinDir,
-          Context.Driver.PreambleOutput,
-          Files.Object,
-          Files.Source,
-          fullDependencies,
-          Context.Driver.ExtraParseArgs,
-          Context.Driver.ExtraCodeGenArgs,
-          Context.Driver.Verbose,
-          Context.Driver.DryRun
-        );
-      } else {
-        return Commands::buildObject(
-          Context.Driver.BinDir,
-          Context.Driver.PreambleOutput,
-          Files.Object,
-          Files.Source,
-          fullDependencies,
-          Context.Driver.ExtraCodeGenArgs,
-          Context.Driver.Verbose,
-          Context.Driver.DryRun
-        );
-      }
+      return Commands::buildObject(
+        Context.Driver.BinDir,
+        Context.Driver.PreambleOutput,
+        Files.Object,
+        Files.Source,
+        fullDependencies,
+        Context.Driver.ExtraCodeGenArgs,
+        Context.Driver.Verbose,
+        Context.Driver.DryRun
+      );
     }
 
     default:
@@ -1430,11 +1355,6 @@ bool LevitationDriverImpl::processDependencyNodeDeprecated(
         Context.Driver.BuildRoot,
         DepPath
     );
-
-    assert(
-        DepPath != Context.MainFileNormilized &&
-        "Main file can't be a dependency"
-    );
   }
 
   switch (N.Kind) {
@@ -1452,30 +1372,16 @@ bool LevitationDriverImpl::processDependencyNodeDeprecated(
       );
 
     case DependenciesGraph::NodeKind::Definition: {
-      if (N.PackageInfo->IsMainFile) {
-        return Commands::compileMain(
-          Context.Driver.BinDir,
-          Context.Driver.PreambleOutput,
-          Files.Object,
-          Files.Source,
-          fullDependencies,
-          Context.Driver.ExtraParseArgs,
-          Context.Driver.ExtraCodeGenArgs,
-          Context.Driver.Verbose,
-          Context.Driver.DryRun
-        );
-      } else {
-        return Commands::instantiateObject(
-          Context.Driver.BinDir,
-          Context.Driver.PreambleOutput,
-          Files.Object,
-          Files.AST,
-          fullDependencies,
-          Context.Driver.ExtraCodeGenArgs,
-          Context.Driver.Verbose,
-          Context.Driver.DryRun
-        );
-      }
+      return Commands::instantiateObject(
+        Context.Driver.BinDir,
+        Context.Driver.PreambleOutput,
+        Files.Object,
+        Files.AST,
+        fullDependencies,
+        Context.Driver.ExtraCodeGenArgs,
+        Context.Driver.Verbose,
+        Context.Driver.DryRun
+      );
     }
 
     default:
@@ -1529,12 +1435,9 @@ bool LevitationDriver::run() {
 
   Impl.collectSources();
   Impl.buildPreamble();
-  //   Impl.runParse();
   Impl.runParseImport();
   Impl.solveDependencies();
-  Impl.addMainFileInfo();
   Impl.codeGen();
-  //  Impl.instantiateAndCodeGen();
 
   if (LinkPhaseEnabled)
     Impl.runLinker();
@@ -1575,7 +1478,6 @@ void LevitationDriver::dumpParameters() {
   << "  Running driver with following parameters:\n\n"
   << "    BinaryDir: " << BinDir << "\n"
   << "    SourcesRoot: " << SourcesRoot << "\n"
-  << "    MainSource: " << MainSource << "\n"
   << "    PreambleSource: " << (PreambleSource.empty() ? "<preamble compilation not requested>" : PreambleSource) << "\n"
   << "    JobsNumber: " << JobsNumber << "\n"
   << "    Output: " << Output << "\n"

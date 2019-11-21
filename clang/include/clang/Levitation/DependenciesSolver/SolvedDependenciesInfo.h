@@ -208,7 +208,7 @@ private:
 
     size_t Range = 0;
 
-    for (auto &NID : G.declarationTerminals())
+    for (auto &NID : G.terminals())
       dfsSolveRoot(G, G.getNode(NID), Range);
 
     findIsolatedCycles(G);

@@ -54,8 +54,8 @@ int levitation_driver_main(int argc, char **argv) {
       .description(
           "Is a C++ Levitation Compiler. Depending on mode it's "
           "ran in, it can go through preamble compilation, "
-          "initial parsing, dependencies solving, instantiation "
-          "and code generation, and finally linker stages."
+          "initial parsing, dependencies solving, "
+          "code generation, and finally linker stages."
       )
       .registerParser<KeySpaceValueParser>()
       .registerParser<KeyValueInOneWordParser>()
@@ -68,11 +68,6 @@ int levitation_driver_main(int argc, char **argv) {
           "-buildRoot", "<directory>",
           "Build root directory.",
           [&](StringRef v) { Driver.setBuildRoot(v); }
-      )
-      .optional(
-          "-main", "<path>",
-          "Main source file.",
-          [&](StringRef v) { Driver.setMainSource(v); }
       )
       .optional(
           "-preamble", "<path>",

@@ -297,14 +297,7 @@ public:
     if (!Solver->isValid())
       return;
 
-    auto MainFileRel = levitation::Path::makeRelative<DependencyPath>(
-        Context.Solver.MainFile,
-        Context.Solver.SourcesRoot
-    );
-
-    auto MainFileID = Context.StringsPool.addItem(std::move(MainFileRel));
-
-    auto DGraph = DependenciesGraph::build(Context.getParsedDependencies(), MainFileID);
+    auto DGraph = DependenciesGraph::build(Context.getParsedDependencies());
 
     Context.DepsGraph = DGraph;
 
