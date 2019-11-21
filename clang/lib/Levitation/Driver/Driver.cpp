@@ -1336,11 +1336,11 @@ bool LevitationDriverImpl::processDependencyNode(
 
   const auto &Files = FoundFiles->second;
 
-  auto &fullDependencieIDs = Context.DependenciesInfo->getDependenciesList(N.ID);
+  auto &fullDepsRanged = Context.DependenciesInfo->getRangedDependencies(N.ID);
 
   Paths fullDependencies;
-  for (auto DID : fullDependencieIDs) {
-    auto &DNode = Graph.getNode(DID.NodeID);
+  for (auto RangeNID : fullDepsRanged) {
+    auto &DNode = Graph.getNode(RangeNID.second);
     auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
 
     DependenciesSolverPath::addDepPathsFor(
@@ -1418,11 +1418,11 @@ bool LevitationDriverImpl::processDependencyNodeDeprecated(
 
   const auto &Files = FoundFiles->second;
 
-  auto &fullDependencieIDs = Context.DependenciesInfo->getDependenciesList(N.ID);
+  auto &RangedDeps = Context.DependenciesInfo->getRangedDependencies(N.ID);
 
   Paths fullDependencies;
-  for (auto DID : fullDependencieIDs) {
-    auto &DNode = Graph.getNode(DID.NodeID);
+  for (auto RangeNID : RangedDeps) {
+    auto &DNode = Graph.getNode(RangeNID.second);
     auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
 
     DependenciesSolverPath::addDepPathsForDeprecated(

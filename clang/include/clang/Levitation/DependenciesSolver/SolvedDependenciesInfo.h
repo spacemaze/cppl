@@ -16,16 +16,19 @@
 
 #include "clang/Levitation/DependenciesSolver/DependenciesGraph.h"
 #include "clang/Levitation/Common/Failable.h"
+#include "clang/Levitation/Common/WithOperator.h"
 #include "clang/Levitation/Serialization.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
 #include <memory>
+#include <map>
 #include <utility>
 
 namespace clang { namespace levitation { namespace dependencies_solver {
@@ -34,27 +37,27 @@ class SolvedDependenciesInfo : public Failable {
 
   using NodeID = DependenciesGraph::NodeID;
   using Node = DependenciesGraph::Node;
+  using NodesSet = DependenciesGraph::NodesSet;
 
-  struct DependencyWithDistance {
-    NodeID::Type NodeID;
-    int Range;
-  };
+  typedef DenseMap<NodeID::Type, size_t> TopologicallyOrderedNodesTy;
+  TopologicallyOrderedNodesTy TopologicallyOrderedNodes;
 
-  using FullDependencies =
-      llvm::DenseMap<NodeID::Type, std::unique_ptr<DependencyWithDistance>>;
+  typedef DenseMap<NodeID::Type, size_t /*distance from terminal*/> PathTy;
+  typedef SmallVector<PathTy, 4> CyclesTy;
 
-  using FullDependenciesMap =
-      llvm::DenseMap<NodeID::Type, std::unique_ptr<FullDependencies>>;
 public:
-  using FullDependenciesList = SmallVector<DependencyWithDistance, 16>;
+  using RangedDependenciesMap = std::map<size_t, NodeID::Type>;
+  using FullDepsMapTy =
+      llvm::DenseMap<NodeID::Type, RangedDependenciesMap>;
 
-  using FullDependenciesSortedMap =
-      llvm::DenseMap<NodeID::Type, std::unique_ptr<FullDependenciesList>>;
+  using OnDiagCyclesFoundFn = std::function<void(
+      const RangedDependenciesMap &, NodeID::Type
+  )>;
 
 private:
   std::shared_ptr<DependenciesGraph> DGraph;
-  FullDependenciesMap FullDepsMap;
-  FullDependenciesSortedMap FullDepsSortedMap;
+  FullDepsMapTy FullDepsMap;
+  CyclesTy Cycles;
 
   SolvedDependenciesInfo(
       std::shared_ptr<DependenciesGraph> &&DGraph
@@ -62,116 +65,188 @@ private:
   : DGraph(std::move(DGraph))
   {}
 
-public:
+  void addCycle(const PathTy &C) {
+    static const size_t MAX_CYCLES = 10;
+    if (Cycles.size() >= MAX_CYCLES) return;
 
-  using OnDiagCyclesFoundFn = std::function<void(
-      const FullDependenciesList &, NodeID::Type
-  )>;
-
-  static std::shared_ptr<SolvedDependenciesInfo> build(
-      std::shared_ptr<DependenciesGraph> DGraphPtr,
-      OnDiagCyclesFoundFn OnDiagCyclesFound
-  ) {
-
-    std::shared_ptr<SolvedDependenciesInfo> SolvedInfoPtr;
-
-    SolvedInfoPtr.reset(new SolvedDependenciesInfo(
-        std::move(DGraphPtr)
-    ));
-
-    SolvedDependenciesInfo &SolvedInfo = *SolvedInfoPtr;
-
-    FullDependencies EmptyList;
-
-    const auto &DGraph = SolvedInfoPtr->getDependenciesGraph();
-
-    // TODO Levitation: if after BFS walk we have unvisited nodes,
-    //   such unvisited nodes belong to isolated cycle islands,
-    //   check those nodes and diagnose cycles.
-    DependenciesGraph::NodesSet Unvisited;
-    for (auto &NodeIt : DGraph.allNodes()) {
-      Unvisited.insert(NodeIt.first);
-    }
-
-    bool Successfull =
-      DGraph.bsfWalk([&] (const Node &N) {
-        NodeID::Type NID = N.ID;
-
-        const auto &CurrentDependencies = N.Dependencies.size() ?
-            SolvedInfo.getDependencies(NID) :
-            EmptyList;
-
-        for (auto DependentNodeID : N.DependentNodes) {
-
-          auto &NextDependencies =
-              SolvedInfo.getOrCreateDependencies(DependentNodeID);
-
-          SolvedInfo.merge(NextDependencies, CurrentDependencies, NID);
-
-          // Diagnose cycles.
-          if (NextDependencies.count(DependentNodeID)) {
-            FullDependenciesList DepsList;
-            sortNodeDependencies(DepsList, NextDependencies);
-            OnDiagCyclesFound(DepsList, DependentNodeID);
-            return false;
-          }
-        }
-
-        Unvisited.erase(NID);
-        return true;
-      });
-
-    if (!Successfull) {
-      SolvedInfo.setFailure("Found cycles.");
-      return SolvedInfoPtr;
-    }
-
-    if (Unvisited.size()) {
-      SolvedInfo.setFailure("Found isolated cycles.");
-      return SolvedInfoPtr;
-    }
-
-    // Put empty list for roots
-    // Not sure we need it, but it will force dep-solver to
-    // create empty dependency files.
-    // And thus project build system will think everything is good.
-    // For absence of dependency files looks like a trouble case.
-    for (auto RootID : DGraph.roots()) {
-      SolvedInfo.getOrCreateDependencies(RootID);
-    }
-
-    SolvedInfo.sortAllDependencies();
-
-    return SolvedInfoPtr;
+    Cycles.push_back(C);
   }
 
-  const FullDependencies &getDependencies(NodeID::Type NID) const {
-    auto Found = FullDepsMap.find(NID);
-    assert(
-        Found != FullDepsMap.end() &&
-        "Deps list should be present in FullDepsMap"
-    );
+  /// Finds topological order by means of DFS, and for each node
+  /// collects direct or indirect dependencies set (topologically ordered deps, aka TOD).
+  /// Note, there is no stack of topological ordered nodes. It's only
+  /// current stack size of that stack (Range) we need to create TOD for each node.
+  /// \param G Graph method operates on
+  /// \param N Current node
+  /// \param DistFromTerm distance from terminal node, which was used as root
+  ///        for recursive call. Is required for diagnostics, for proper cycles info.
+  /// \param StackSize distance from leaf node, equal to stack size which is used in
+  ///        classical DFS topological ordering algorithm.
+  /// \param CycleCandidate Set of nodes which are currently participate
+  ///        recursive call chain. If on some call we bump into duplicate,
+  ///        then it's a cycle.
+  void dfsSolve(
+      const DependenciesGraph &G,
+      const Node &N,
+      size_t DistFromTerm,
+      size_t &StackSize,
+      PathTy& CycleCandidate
+  ) {
 
-    return *Found->second;
+    static auto &Strings = CreatableSingleton<DependenciesStringsPool>::get();
+    static auto &Trace = log::Logger::get().verbose();
+
+    Trace.indent(DistFromTerm)
+    << "dfsSolve for "; G.dumpNodeShort(Trace, N.ID, Strings);
+    Trace << "\n";
+
+    // Detect cycles if any.
+    auto InsCycle = CycleCandidate.insert({N.ID, DistFromTerm});
+    if (!InsCycle.second) {
+      addCycle(CycleCandidate);
+      return;
+    }
+
+    // Guard CycleCandidate, so current node would be removed automatically,
+    // once we exit this call.
+    with (auto _ = on_exit([&] { CycleCandidate.erase(N.ID); }))
+    {
+      // Don't go through already visited nodes.
+      auto InsRes = FullDepsMap.insert({N.ID, RangedDependenciesMap()});
+      if (!InsRes.second)
+        return;
+
+      // Go over all dependency nodes and do DFS.
+
+      auto &FullDeps = InsRes.first->second;
+      size_t NextDistFromTerm = DistFromTerm + 1;
+
+      for (auto InNID : N.Dependencies) {
+        const auto &InN = G.getNode(InNID);
+
+        dfsSolve(G, InN, NextDistFromTerm, StackSize, CycleCandidate);
+
+        auto InNFullDepsIt = FullDepsMap.find(InNID);
+        if (InNFullDepsIt != FullDepsMap.end()) {
+          const auto &InNFullDeps = InNFullDepsIt->second;
+          for (auto InDepkv : InNFullDeps)
+            FullDeps.insert(InDepkv);
+        }
+        FullDeps.insert({StackSize, InNID});
+      }
+
+      // At this point we supposed to put current node into stack.
+      // But we don't need stack itself, we just need current stack size.
+      // Note we can't use FullDepsMap.size(), because it is increased before
+      // recursive call. For example for sequence A->B->C, we start calls from C:
+      // when we go down to A, StackSize will remain 0, whilst
+      // FullDepsMap.size() will be 3.
+      ++StackSize;
+
+      Trace.indent(DistFromTerm) << "Stack size " << StackSize << "\n";
+    }
+  }
+
+  void dfsSolveRoot(const DependenciesGraph &G, const Node &N, size_t &Range) {
+    PathTy CycleCandidate;
+    dfsSolve(G, N, 0, Range, CycleCandidate);
+  }
+
+  void findCycles(const DependenciesGraph &G, const NodesSet &SubGraph) {
+    NodesSet Visited;
+    for (auto &NID : SubGraph) {
+      if (!Visited.count(NID)) {
+        PathTy CycleCandidate;
+        findCyclesDfs(G, SubGraph, NID, Visited, 0, CycleCandidate);
+      }
+    }
+  }
+
+  void findCyclesDfs(
+      const DependenciesGraph &G,
+      const NodesSet &SubGraph,
+      NodeID::Type NID,
+      NodesSet &Visited,
+      size_t DistFromRoot,
+      PathTy &CycleCandidate
+  ) {
+    auto InsCycle = CycleCandidate.insert({NID, DistFromRoot});
+    if (!InsCycle.second) {
+      addCycle(CycleCandidate);
+      return;
+    }
+
+    with (auto _ = on_exit([&] { CycleCandidate.erase(NID); })) {
+      auto InsRes = Visited.insert(NID);
+      if (!InsRes.second)
+        return;
+
+      auto &N = G.getNode(NID);
+      auto NextDist = DistFromRoot + 1;
+
+      for (auto InNID : N.Dependencies) if (SubGraph.count(InNID))
+        findCyclesDfs(G, SubGraph, InNID, Visited, NextDist, CycleCandidate);
+    }
+  }
+
+  void findIsolatedCycles(const DependenciesGraph &G) {
+    const auto &AllNodes = G.allNodes();
+    NodesSet IsolatedCycles;
+
+    if (TopologicallyOrderedNodes.size() != AllNodes.size()) {
+      for (const auto &Nkv : AllNodes) {
+        auto NID = Nkv.first;
+        if (!TopologicallyOrderedNodes.count(NID))
+          IsolatedCycles.insert(NID);
+      }
+      findCycles(G, IsolatedCycles);
+    }
+  }
+
+  void build() {
+    const auto &G = getDependenciesGraph();
+
+    size_t Range = 0;
+
+    for (auto &NID : G.declarationTerminals())
+      dfsSolveRoot(G, G.getNode(NID), Range);
+
+    findIsolatedCycles(G);
+
+    if (!Cycles.empty()) {
+      setFailure("Found cycles.");
+      return;
+    }
+  }
+
+public:
+
+  static std::shared_ptr<SolvedDependenciesInfo> build(
+      std::shared_ptr<DependenciesGraph> Graph
+  ) {
+    std::shared_ptr<SolvedDependenciesInfo>
+        Info(new SolvedDependenciesInfo(std::move(Graph)));
+    Info->build();
+    return Info;
   }
 
   const DependenciesGraph &getDependenciesGraph() const {
     return *DGraph;
   }
 
-  const FullDependenciesSortedMap &getDependenciesMap() const {
-    return FullDepsSortedMap;
+  const FullDepsMapTy &getDependenciesMap() const {
+    return FullDepsMap;
   }
 
-  const FullDependenciesList &getDependenciesList(NodeID::Type NID) const {
-    static FullDependenciesList EmptyList;
+  const RangedDependenciesMap &getRangedDependencies(NodeID::Type NID) const {
+    static RangedDependenciesMap EmptyMap;
 
-    auto Found = FullDepsSortedMap.find(NID);
+    auto Found = FullDepsMap.find(NID);
 
-    if (Found == FullDepsSortedMap.end())
-      return EmptyList;
+    if (Found == FullDepsMap.end())
+      return EmptyMap;
 
-    return *Found->second;
+    return Found->second;
   }
 
   void dump(
@@ -183,7 +258,7 @@ public:
 
     DGraphRef.bsfWalkSkipVisited([&](const Node &N) {
       auto NID = N.ID;
-      const FullDependenciesList &FullDeps = getDependenciesList(NID);
+      const RangedDependenciesMap &FullDeps = getRangedDependencies(NID);
 
       const auto &Path = *Strings.getItem(N.PackageInfo->PackagePath);
       out << "[";
@@ -195,12 +270,12 @@ public:
         out
                 << "    Full dependencies:\n";
 
-        for (const auto &DepWithDist : FullDeps) {
-          const auto &Dep = DGraphRef.getNode(DepWithDist.NodeID);
+        for (const auto &DepSzNID : FullDeps) {
+          const auto &Dep = DGraphRef.getNode(DepSzNID.second);
           const auto &DepPath = *Strings.getItem(Dep.PackageInfo->PackagePath);
 
           out.indent(8) << "[";
-          DependenciesGraph::dumpNodeID(out, DepWithDist.NodeID);
+          DependenciesGraph::dumpNodeID(out, DepSzNID.second);
           out
                   << "]: " << DepPath << "\n";
         }
@@ -219,100 +294,29 @@ public:
         out << "    (root)\n";
       }
     });
-  }
 
-  static void dumpDependencies(
-      llvm::raw_ostream &out,
-      const DependenciesGraph &DGraph,
-      const DependenciesStringsPool &Strings,
-      const FullDependenciesList &Deps
-  ) {
-    if (Deps.empty()) {
-      out << "(empty chain)";
-      return;
-    }
+    // Dump cycles if any.
+    size_t ci = 0;
+    for (const PathTy &C : Cycles) {
+      out << "Cycle #" << ci++ << "\n";
 
-    size_t NumNodes = Deps.size();
+      using kv_t = std::pair<PathTy::key_type, PathTy::mapped_type>;
+      SmallVector<kv_t, 16> Path;
+      for (const auto &NIDRange : C) Path.push_back(NIDRange);
 
-    DGraph.dumpNodeShort(out, Deps[NumNodes-1].NodeID, Strings);
-
-    for (size_t i = 1; i != NumNodes; ++i) {
-      out << "\ndepends on: ";
-      DGraph.dumpNodeShort(out, Deps[NumNodes-1-i].NodeID, Strings);
-    }
-    out << "\n\n";
-  }
-
-protected:
-
-  FullDependencies &getOrCreateDependencies(NodeID::Type NID) {
-    auto ListRes = FullDepsMap.insert({ NID, nullptr });
-
-    if (ListRes.second)
-      ListRes.first->second = std::make_unique<FullDependencies>();
-
-    return *ListRes.first->second;
-  }
-
-  void merge(
-      FullDependencies &DestList,
-      const FullDependencies &PrevList,
-      NodeID::Type DirectDependencyNodeID
-  ) {
-    for (const auto &DepWithDistIt : PrevList) {
-      const auto &DepWithDist = *DepWithDistIt.second;
-
-      insertOrUpdDepWithDistance(DestList, DepWithDist.NodeID, DepWithDist.Range + 1);
-    }
-
-    insertOrUpdDepWithDistance(DestList, DirectDependencyNodeID, 1);
-  }
-
-  void insertOrUpdDepWithDistance(
-          FullDependencies &DestList,
-          NodeID::Type NID,
-          int Range
-  ) {
-      auto InsertionRes = DestList.insert( {NID, nullptr} );
-
-      if (InsertionRes.second) {
-        InsertionRes.first->second = std::make_unique<DependencyWithDistance>(
-            DependencyWithDistance {NID, Range}
-        );
-      } else {
-        auto &ExistingList = *InsertionRes.first->second;
-        ExistingList.Range = std::max(ExistingList.Range, Range);
-      }
-  }
-
-  void sortAllDependencies() {
-    for (auto &NodeIt : FullDepsMap) {
-      auto Res = FullDepsSortedMap.insert({
-        NodeIt.first,
-        std::make_unique<FullDependenciesList>()
+      std::sort(
+          Path.begin(),
+          Path.end(),
+          [&] (const kv_t &L, const kv_t &R) {
+        return L.second < R.second;
       });
 
-      FullDependencies &NodeDeps = *NodeIt.second;
-      FullDependenciesList &List = *Res.first->second;
-      sortNodeDependencies(List, NodeDeps);
+      for (auto NIDRange : Path) {
+        out << "  ";
+        DGraphRef.dumpNodeShort(out, NIDRange.first, Strings);
+        out << "\n";
+      }
     }
-  }
-
-  static void sortNodeDependencies(
-      FullDependenciesList &Dest, const FullDependencies &Src
-  ) {
-    for (const auto &DepWithDistIt : Src) {
-      const DependencyWithDistance &Dep = *DepWithDistIt.second;
-      Dest.push_back(Dep);
-    }
-
-    std::sort(
-        Dest.begin(),
-        Dest.end(),
-        [=](const DependencyWithDistance &L, const DependencyWithDistance &R) {
-            return L.Range > R.Range;
-        }
-    );
   }
 };
 
