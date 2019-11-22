@@ -93,12 +93,14 @@ private:
       PathTy& CycleCandidate
   ) {
 
+#if 0
     static auto &Strings = CreatableSingleton<DependenciesStringsPool>::get();
     static auto &Trace = log::Logger::get().verbose();
 
     Trace.indent(DistFromTerm)
     << "dfsSolve for "; G.dumpNodeShort(Trace, N.ID, Strings);
     Trace << "\n";
+#endif
 
     // Detect cycles if any.
     auto InsCycle = CycleCandidate.insert({N.ID, DistFromTerm});
@@ -142,8 +144,9 @@ private:
       // when we go down to A, StackSize will remain 0, whilst
       // FullDepsMap.size() will be 3.
       ++StackSize;
-
+#if 0
       Trace.indent(DistFromTerm) << "Stack size " << StackSize << "\n";
+#endif
     }
   }
 
