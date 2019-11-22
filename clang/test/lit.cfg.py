@@ -26,6 +26,7 @@ config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files.
 config.suffixes = ['.c', '.cpp', '.cppm', '.m', '.mm', '.cu',
+                   '.cppl',
                    '.ll', '.cl', '.s', '.S', '.modulemap', '.test', '.rs']
 
 # excludes: A list of directories to exclude from the testsuite. The 'Inputs'
