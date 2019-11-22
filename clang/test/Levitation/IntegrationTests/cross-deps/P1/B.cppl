@@ -1,7 +1,0 @@
-package namespace P1 {
-  struct B : public global::P1::A {
-    static void f() {
-      levitation::Test::context() << "P1::B::f()";
-    }
-  };
-}

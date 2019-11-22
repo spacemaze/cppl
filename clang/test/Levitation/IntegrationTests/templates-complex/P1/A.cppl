@@ -1,4 +1,0 @@
-package namespace P1 {
-  struct A {
-  };
-}
