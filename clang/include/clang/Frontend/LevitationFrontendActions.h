@@ -38,8 +38,6 @@ public:
       CompilerInstance &CI,
       StringRef InFile
   ) override;
-
-  bool BeginInvocation(CompilerInstance &CI) override;
 };
 
 class LevitationBuildPreambleAction : public GeneratePCHAction {

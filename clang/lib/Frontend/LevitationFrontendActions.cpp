@@ -397,14 +397,6 @@ std::unique_ptr<ASTConsumer> LevitationParseImportAction::CreateASTConsumer(
   .done();
 }
 
-bool LevitationParseImportAction::BeginInvocation(CompilerInstance &CI) {
-  if (CI.getFrontendOpts().LevitationPreambleFileName.size()) {
-    CI.getPreprocessorOpts().ImplicitPCHInclude =
-        CI.getFrontendOpts().LevitationPreambleFileName;
-  }
-  return FrontendAction::BeginInvocation(CI);
-}
-
 void LevitationBuildObjectAction::ExecuteAction() {
   // ASTFrontendAction is used as source
 
@@ -485,7 +477,7 @@ void LevitationBuildObjectAction::loadASTFiles() {
       getCurrentFile() :
       StringRef();
 
-  if (MainFile.empty() && ASTFiles.empty())
+  if (MainFile.empty() && ASTFiles.empty() && PreambleFileName.empty())
     return;
 
   CompilerInstance &CI = getCompilerInstance();
