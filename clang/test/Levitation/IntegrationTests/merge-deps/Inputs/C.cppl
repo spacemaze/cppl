@@ -1,0 +1,8 @@
+#import Inputs::A
+
+namespace Inputs {
+  class C {
+  public:
+    static int foo() { return 2 + Inputs::A::foo(); }
+  };
+}
