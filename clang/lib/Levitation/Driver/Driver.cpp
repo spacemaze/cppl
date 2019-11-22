@@ -760,7 +760,7 @@ public:
       StringRef OutDeclASTFile,
       StringRef InputFile,
       const Paths &Deps,
-      const LevitationDriver::Args &ExtraArgs,
+      const LevitationDriver::Args &ExtraParserArgs,
       bool Verbose,
       bool DryRun
   ) {
@@ -776,7 +776,7 @@ public:
     )
     .addKVArgEqIfNotEmpty("-cppl-include-preamble", PrecompiledPreamble)
     .addKVArgsEq("-cppl-include-dependency", Deps)
-    .addArgs(ExtraArgs)
+    .addArgs(ExtraParserArgs)
     .addArg(InputFile)
     .addKVArgSpace("-o", OutDeclASTFile)
     .execute();
@@ -790,7 +790,8 @@ public:
       StringRef OutObjFile,
       StringRef InputObject,
       const Paths &Deps,
-      const LevitationDriver::Args &ExtraArgs,
+      const LevitationDriver::Args &ExtraParserArgs,
+      const LevitationDriver::Args &ExtraCodeGenArgs,
       bool Verbose,
       bool DryRun
   ) {
@@ -806,7 +807,8 @@ public:
     )
     .addKVArgEqIfNotEmpty("-cppl-include-preamble", PrecompiledPreamble)
     .addKVArgsEq("-cppl-include-dependency", Deps)
-    .addArgs(ExtraArgs)
+    .addArgs(ExtraParserArgs)
+    .addArgs(ExtraCodeGenArgs)
     .addArg(InputObject)
     .addKVArgSpace("-o", OutObjFile)
     .execute();
@@ -898,7 +900,7 @@ protected:
   ) {
     auto &LogInfo = log::Logger::get().info();
     LogInfo
-    << "PARSE IMPT" << SourceFile << " -> "
+    << "PARSE IMP " << SourceFile << " -> "
     << "(ldeps: " << OutLDepsFile << ")"
     << "\n";
   }
@@ -1303,7 +1305,7 @@ bool LevitationDriverImpl::processDependencyNode(
           Files.DeclAST,
           Files.Source,
           fullDependencies,
-          Context.Driver.ExtraCodeGenArgs,
+          Context.Driver.ExtraParseArgs,
           Context.Driver.Verbose,
           Context.Driver.DryRun
       );
@@ -1315,6 +1317,7 @@ bool LevitationDriverImpl::processDependencyNode(
         Files.Object,
         Files.Source,
         fullDependencies,
+        Context.Driver.ExtraParseArgs,
         Context.Driver.ExtraCodeGenArgs,
         Context.Driver.Verbose,
         Context.Driver.DryRun
