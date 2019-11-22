@@ -8712,15 +8712,19 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     // also see ASTContext.cpp, basicGVALinkageForFunction, there are
     // no alterations, but it gives you a hint what exactly "inline" term
     // means for linkage.
-    bool LevitationExternalFunctionDefinition =
+    // In C++ Levitation we only treat functions as inline in following cases:
+    //  * If "inline" is explicitly specified.
+    //  * If function belongs to template declaration.
+    bool LevitationCancelInline =
         // Deprecated: auto dep resolution feature is no longer supported
         // getLangOpts().isLevitationMode(LangOptions::LBSK_BuildAST)
         getLangOpts().isLevitationMode(LangOptions::LBSK_BuildObjectFile) &&
-        !NewFD->isInlineSpecified();
+        !NewFD->isInlineSpecified() &&
+        !NewFD->isTemplated();
 
     if (isa<CXXMethodDecl>(NewFD) && DC == CurContext &&
         D.isFunctionDefinition() &&
-        !LevitationExternalFunctionDefinition) {
+        !LevitationCancelInline) {
       // C++ [class.mfct]p2:
       //   A member function may be defined (8.4) in its class definition, in
       //   which case it is an inline member function (7.1.2)

@@ -210,14 +210,6 @@ public:
   {
     LevitationMode = true;
     ModuleMgr.LevitationMode = true;
-
-    if (
-      CompilerInst.getFrontendOpts().LevitationBuildDeclaration ||
-
-      CompilerInst.getLangOpts().getLevitationBuildStage() ==
-        LangOptions::LBSK_BuildPreamble
-    )
-      ForceReadDeclarationsOnly = true;
   }
 
   using OpenedScope = levitation::ScopeExit<std::function<void()>>;

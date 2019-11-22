@@ -3525,6 +3525,7 @@ static void parseLevitationBuildPreambleArgs(
   // in places we need just declarations.
   // (see LevitationModulesReader constructor)
   LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildPreamble);
+  FrontendOpts.SkipFunctionBodies = 1;
 }
 
 static void parseLevitationBuildObjectArgs(

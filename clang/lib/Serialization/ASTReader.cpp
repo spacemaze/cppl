@@ -10265,8 +10265,6 @@ void ASTReader::finishPendingActions() {
       bool LevitationBuildObject = ContextObj->getLangOpts().isLevitationMode(
           LangOptions::LBSK_BuildObjectFile
       );
-      if (LevitationBuildObject && levitationShouldSkipBody(FD))
-        continue;
 
       // For a function defined inline within a class template, force the
       // canonical definition to be the one inside the canonical definition of
