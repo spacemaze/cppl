@@ -3,6 +3,6 @@
 namespace Inputs {
   class C {
   public:
-    static int foo() { return 2 + Inputs::A::foo(); }
+    static int foo() { return Inputs::A<int>::foo(789); }
   };
 }

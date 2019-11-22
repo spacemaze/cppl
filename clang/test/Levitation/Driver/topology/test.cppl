@@ -27,7 +27,7 @@ int main() {
         .expect("Inputs::Root::f()")
         .expect("Inputs::MyClass::m()")
 
-        // Inputs::BodyDepClass::f()
+        // call Inputs::BodyDepClass::f()
         .expect("Inputs::Root::f()")
         .expect("Inputs::MyClass::f()")
         .expect("Inputs::BodyDepClass::f()")

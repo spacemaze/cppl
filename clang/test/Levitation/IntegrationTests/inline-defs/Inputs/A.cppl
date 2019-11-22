@@ -1,0 +1,18 @@
+// CHECK-NOT: return 1111;
+// CHECK: return 5555;
+// CHECK-NOT: return 11111;
+
+namespace Inputs {
+  class A {
+  public:
+    static int thisSkip() { return 1111; }
+  };
+
+  template <typename T>
+  class AA {
+  public:
+    static int thisLeave() { return 5555; }
+  };
+
+  int thisSkipToo() { return 11111; }
+}

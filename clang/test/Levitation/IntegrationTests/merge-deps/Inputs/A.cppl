@@ -1,6 +1,7 @@
 namespace Inputs {
+  template <typename T>
   class A {
   public:
-    static int foo() { return 787; }
+    static T foo(const T& v) { return v; }
   };
 }
