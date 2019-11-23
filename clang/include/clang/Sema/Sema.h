@@ -11323,9 +11323,29 @@ public:
     return LevitationDefinitionDependencies;
   }
 
+  /// Check whether levitation mode is on.
+  /// \return
+  bool isLevitationMode() const {
+    return getLangOpts().LevitationMode;
+  }
+
+  /// Checks levitation stage,
+  /// but guards this check by LevitationMode flag check.
+  /// Is is reduntant, but this is a strict guarantee, that even stage check
+  /// code won't be activated without LevitationMode flag check.
+  /// \param Args true if one of stages is activated
   template <typename ...ArgsT>
-  bool isLevitationMode(ArgsT&& ... Args) {
+  bool isLevitationMode(ArgsT&& ... Args) const {
     return getLangOpts().isLevitationMode(std::forward<ArgsT>(Args)...);
+  }
+
+  /// Check levitatation stage without LevitationMode guard check.
+  /// That guard must be present somewhere aroung isLevitationStage
+  /// check anyways.
+  /// \param Stage stage to be checked
+  /// \return true if stage is activated
+  bool isLevitationStage(LangOptions::LevitationBuildStageKind Stage) const {
+    return getLangOpts().getLevitationBuildStage() == Stage;
   }
 
   /// Should be called for parse manual dependencies mode.
