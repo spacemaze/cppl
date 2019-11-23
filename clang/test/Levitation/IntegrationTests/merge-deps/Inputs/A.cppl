@@ -3,5 +3,20 @@ namespace Inputs {
   class A {
   public:
     static T foo(const T& v) { return v; }
+    int someField = 330;
+    static int staticField;
   };
+
+  class AA {
+  public:
+    int someField = 3;
+    static int staticField;
+  };
+
+  static int someStaticVariable = 777;
+
+  template<typename T>
+  int A<T>::staticField = 440;
+
+  int AA::staticField = 4;
 }

@@ -3,6 +3,12 @@
 namespace Inputs {
   class C {
   public:
-    static int foo() { return Inputs::A<int>::foo(789); }
+    static int foo() {
+      Inputs::A<int> a;
+      Inputs::AA aa;
+      return Inputs::A<int>::foo(
+        a.someField + aa.someField + A<int>::staticField + AA::staticField
+      );
+    }
   };
 }
