@@ -336,10 +336,7 @@ void types::getCompilationPhases(const clang::driver::Driver &Driver,
 
            // C++ Levitation
 
-           DAL.getLastArg(options::OPT_cppl_parse) ||
            DAL.getLastArg(options::OPT_cppl_preamble) ||
-           DAL.getLastArg(options::OPT_cppl_inst_decl) ||
-           DAL.getLastArg(options::OPT_cppl_compile) ||
            DAL.getLastArg(options::OPT_cppl_import) ||
            DAL.getLastArg(options::OPT_cppl_decl) ||
            DAL.getLastArg(options::OPT_cppl_obj) ||

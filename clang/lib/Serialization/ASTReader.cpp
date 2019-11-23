@@ -1508,7 +1508,6 @@ bool ASTReader::ReadSLocEntry(int ID) {
       return true;
 
     SourceLocation IncludeLoc = ReadSourceLocation(*F, Record[1]);
-
     if (IncludeLoc.isInvalid() && F->Kind != MK_MainFile) {
       // This is the module's main file.
       IncludeLoc = getImportLocation(F);
@@ -8989,17 +8988,6 @@ void ASTReader::ReadLateParsedTemplates(
   LateParsedTemplates.clear();
 }
 
-void ASTReader::ReadLevitationPackageInstantiations(
-    NamedDecl *PackageDependent,
-    SmallVectorImpl<NamedDecl *> &Instantiations
-) {
-  auto Found = PendingLevitationPackageInstantiations.find(PackageDependent);
-  if (Found != PendingLevitationPackageInstantiations.end()) {
-    for (serialization::DeclID InstantiationID : Found->second)
-      Instantiations.push_back(cast<NamedDecl>(GetDecl(InstantiationID)));
-  }
-}
-
 void ASTReader::LoadSelector(Selector Sel) {
   // It would be complicated to avoid reading the methods anyway. So don't.
   ReadMethodPool(Sel);
@@ -10059,47 +10047,6 @@ std::string ASTReader::getOwningModuleNameForDiagnostic(const Decl *D) {
 
   // Not from a module.
   return {};
-}
-
-bool ASTReader::levitationReadDeclarationsOnly(const Decl *CurDecl) const {
-  // FIXME Levitation: why there is no const getModuleManager version?
-  const auto *M =
-      const_cast<ASTReader*>(this)->getModuleManager()
-      .lookupByDeclID(CurDecl->getGlobalID());
-  assert(
-    M &&
-    "As long as we're in reader, each decl should be "
-    "associated with module"
-  );
-
-  return
-      ForceReadDeclarationsOnly ||
-      M->Kind == serialization::MK_LevitationDependency;
-}
-
-bool ASTReader::levitationShouldSkipBody(const FunctionDecl *FD) const {
-  if (levitationReadDeclarationsOnly(FD)) {
-    // Skip definition if function has external linkage, and thus
-    // can be detached from declaration
-    GVALinkage Linkage =
-        // FIXME Levitation: why there is no const getContext version?
-        const_cast<ASTReader*>(this)->getContext()
-        .GetGVALinkageForFunction(FD);
-
-    switch (Linkage) {
-      case GVA_AvailableExternally:
-      case GVA_StrongExternal:
-      case GVA_StrongODR:
-      case GVA_DiscardableODR:
-        if (!FD->isDependentContext(/*IgnorePackageness*/true))
-          return true;
-        break;
-      default:
-        // do nothing
-        break;
-    }
-  }
-  return false;
 }
 
 void ASTReader::finishPendingActions() {

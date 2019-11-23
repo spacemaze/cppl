@@ -263,7 +263,7 @@ namespace levitation {
                 Strings,
                 Declaration.second.getPath(),
                 Declaration.second.getComponents(),
-                Declaration.second.getFirstUse().Location
+                Declaration.second.getImportLoc()
             )
         );
       }
@@ -273,14 +273,14 @@ namespace levitation {
         DependenciesStringsPool &Strings,
         StringRef FilePath,
         DependencyComponentsArrRef Components,
-        SourceRange FirstUse
+        SourceRange ImportLocation
     ) {
       auto FilePathID = Strings.addItem(FilePath);
 
       return {
           FilePathID,
-          FirstUse.getBegin().getRawEncoding(),
-          FirstUse.getEnd().getRawEncoding()
+          ImportLocation.getBegin().getRawEncoding(),
+          ImportLocation.getEnd().getRawEncoding()
       };
     }
 

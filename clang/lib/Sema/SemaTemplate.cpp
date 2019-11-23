@@ -713,9 +713,6 @@ Sema::ActOnDependentIdExpression(const CXXScopeSpec &SS,
   if (NestedNameSpecifier *NNS = SS.getScopeRep())
     IsEnum = dyn_cast_or_null<EnumType>(NNS->getAsType());
 
-  if (getLangOpts().LevitationMode)
-    HandleLevitationPackageDependency(SS.getWithLocInContext(Context), NameInfo);
-
   if (!MightBeCxx11UnevalField && !isAddressOfOperand && !IsEnum &&
       isa<CXXMethodDecl>(DC) && cast<CXXMethodDecl>(DC)->isInstance()) {
     QualType ThisType = cast<CXXMethodDecl>(DC)->getThisType();
@@ -3620,13 +3617,6 @@ TypeResult Sema::ActOnTagTemplateIdType(TagUseKind TUK,
                                                           DTN->getQualifier(),
                                                           DTN->getIdentifier(),
                                                                 TemplateArgs);
-
-    if (getLangOpts().LevitationMode) {
-      HandleLevitationPackageDependency(
-          SS.getWithLocInContext(Context),
-          DTN->getIdentifier()
-      );
-    }
 
     // Build type-source information.
     TypeLocBuilder TLB;
@@ -9786,9 +9776,6 @@ Sema::ActOnDependentTag(Scope *S, unsigned TagSpec, TagUseKind TUK,
   ElaboratedTypeKeyword Kwd = TypeWithKeyword::getKeywordForTagTypeKind(Kind);
   QualType Result = Context.getDependentNameType(Kwd, NNS, Name);
 
-  if (getLangOpts().LevitationMode)
-    HandleLevitationPackageDependency(SS.getWithLocInContext(Context), Name);
-
   // Create type-source location information for this type.
   TypeLocBuilder TLB;
   DependentNameTypeLoc TL = TLB.push<DependentNameTypeLoc>(Result);
@@ -9830,9 +9817,6 @@ Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
     TL.setQualifierLoc(QualifierLoc);
     TL.getNamedTypeLoc().castAs<TypeSpecTypeLoc>().setNameLoc(IdLoc);
   }
-
-  if (getLangOpts().LevitationMode)
-    HandleLevitationPackageDependency(SS.getWithLocInContext(Context), &II);
 
   return CreateParsedType(T, TSI);
 }
@@ -9877,10 +9861,6 @@ Sema::ActOnTypenameType(Scope *S,
     // Construct a dependent template specialization type.
     assert(DTN && "dependent template has non-dependent name?");
     assert(DTN->getQualifier() == SS.getScopeRep());
-
-    if (getLangOpts().LevitationMode)
-      HandleLevitationPackageDependency(SS.getWithLocInContext(Context), DTN->getIdentifier());
-
     QualType T = Context.getDependentTemplateSpecializationType(ETK_Typename,
                                                           DTN->getQualifier(),
                                                           DTN->getIdentifier(),

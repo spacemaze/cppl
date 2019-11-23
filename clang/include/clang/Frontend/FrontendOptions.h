@@ -95,11 +95,6 @@ enum ActionKind {
   /// Only execute frontend initialization.
   InitOnly,
 
-  /// Levitation mode: Build AST action.
-  /// * Parses source code
-  /// * creates package dependent declaration and definition AST files.
-  LevitationBuildAST,
-
   /// Levitation mode: Parse #import directives
   /// It is almost preprocessor only action, except that
   /// it still have to initialize Sema and fullfill it with

@@ -1757,15 +1757,6 @@ Parser::ParseDeclaration(DeclaratorContext Context, SourceLocation &DeclEnd,
     ProhibitAttributes(attrs);
     SingleDecl = ParseDeclarationStartingWithTemplate(Context, DeclEnd, attrs);
     break;
-  case tok::kw_package:
-    // TODO Levitation: replace kw_package with kw_levitation_package
-    if (getLangOpts().LevitationMode) {
-      ProhibitAttributes(attrs);
-      return ParseLevitationPackageNamespace(Context, DeclEnd);
-    } else {
-      // Process default case (make sure it is same)
-      return ParseSimpleDeclaration(Context, DeclEnd, attrs, true);
-    }
   case tok::kw_inline:
     // Could be the start of an inline namespace. Allowed as an ext in C++03.
     if (getLangOpts().CPlusPlus && NextToken().is(tok::kw_namespace)) {

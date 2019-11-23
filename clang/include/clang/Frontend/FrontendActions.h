@@ -223,7 +223,6 @@ class ASTMergeAction : public FrontendAction {
   /// The set of AST files to merge.
   std::vector<std::string> ASTFiles;
 
-
 protected:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
                                                  StringRef InFile) override;

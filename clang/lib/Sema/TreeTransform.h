@@ -1043,9 +1043,6 @@ public:
     CXXScopeSpec SS;
     SS.Adopt(QualifierLoc);
 
-    if (SemaRef.getLangOpts().LevitationMode)
-      SemaRef.HandleLevitationPackageDependency(QualifierLoc, Id);
-
     if (QualifierLoc.getNestedNameSpecifier()->isDependent()) {
       // If the name is still dependent, just build a new dependent name type.
       if (!SemaRef.computeDeclContext(SS))
@@ -3655,20 +3652,6 @@ TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
 
     switch (QNNS->getKind()) {
     case NestedNameSpecifier::Identifier: {
-
-      // FIXME levitation: add "global" keyword.
-      if (SemaRef.getLangOpts().LevitationMode &&
-          SemaRef.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
-          QNNS->getAsIdentifier()->getName() == "global") {
-        // If we are in package class instantiation mode,
-        // and if're looking at "global" keyword, then
-        // treat it as attempt to refer to a global namespace.
-        // Assuming we loaded requried dependency, it should
-        // lead us into the proper resolution.
-        SS.MakeGlobal(SemaRef.Context, Q.getBeginLoc());
-        break;
-      }
-
       Sema::NestedNameSpecInfo IdInfo(QNNS->getAsIdentifier(),
                           Q.getLocalBeginLoc(), Q.getLocalEndLoc(), ObjectType);
       if (SemaRef.BuildCXXNestedNameSpecifier(/*Scope=*/nullptr, IdInfo, false,

@@ -2720,9 +2720,6 @@ private:
                                 SourceLocation &DeclEnd,
                                 SourceLocation InlineLoc = SourceLocation());
 
-  DeclGroupPtrTy ParseLevitationPackageNamespace(DeclaratorContext Context,
-                                SourceLocation &DeclEnd);
-
   struct InnerNamespaceInfo {
     SourceLocation NamespaceLoc;
     SourceLocation InlineLoc;
@@ -2735,12 +2732,6 @@ private:
                            unsigned int index, SourceLocation &InlineLoc,
                            ParsedAttributes &attrs,
                            BalancedDelimiterTracker &Tracker);
-
-  void ParseInnerPackageNamespace(const InnerNamespaceInfoList &InnerNSs,
-                                  unsigned int index,
-                                  ParsedAttributes &attrs,
-                                  BalancedDelimiterTracker &Tracker);
-
   Decl *ParseLinkage(ParsingDeclSpec &DS, DeclaratorContext Context);
   Decl *ParseExportDeclaration();
   DeclGroupPtrTy ParseUsingDirectiveOrDeclaration(

@@ -87,7 +87,6 @@ public:
   enum LevitationBuildStageKind {
       LBSK_None,
       LBSK_BuildPreamble,
-      LBSK_BuildAST,
       LBSK_BuildObjectFile,
       LBSK_ParseManualDeps
   };

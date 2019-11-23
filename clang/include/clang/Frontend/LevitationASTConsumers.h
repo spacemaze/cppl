@@ -17,14 +17,10 @@ namespace clang {
 class ASTConsumer;
 class CompilerInstance;
 
-std::unique_ptr<ASTConsumer> CreateParserPostProcessor();
-
 std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
     CompilerInstance &CI,
     StringRef InFile
 );
-
-std::unique_ptr<ASTConsumer> CreatePackageInstantiator();
 
 }
 

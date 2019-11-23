@@ -381,10 +381,6 @@ ASTMutationListener *Decl::getASTMutationListener() const {
   return getASTContext().getASTMutationListener();
 }
 
-bool Decl::isLevitationPackageDependent() const {
-  return getDeclContext()->isPackageDependentContext();
-}
-
 unsigned Decl::getMaxAlignment() const {
   if (!hasAttrs())
     return 0;
@@ -1083,18 +1079,9 @@ bool DeclContext::isStdNamespace() const {
   return II && II->isStr("std");
 }
 
-bool DeclContext::isDependentContext(bool IgnorePackageness) const {
-
-  if (!IgnorePackageness && isFileContext()) {
-
-    // Levitation: on Build AST stage, we recognize
-    // dependent packages by its "belongness" to package namespace.
-    if (const auto *NS = dyn_cast<NamespaceDecl>(this))
-      if (NS->isLevitationPackage())
-        return true;
-
+bool DeclContext::isDependentContext() const {
+  if (isFileContext())
     return false;
-  }
 
   if (isa<ClassTemplatePartialSpecializationDecl>(this))
     return true;
@@ -1121,20 +1108,7 @@ bool DeclContext::isDependentContext(bool IgnorePackageness) const {
   // DeclContext. A context within it (such as a lambda-expression)
   // should be considered dependent.
 
-  return getParent() && getParent()->isDependentContext(IgnorePackageness);
-}
-
-// C++ Levitation extension:
-bool DeclContext::isPackageDependentContext() const {
-  if (isFileContext()) {
-    if (const auto *NS = dyn_cast<NamespaceDecl>(this))
-      if (NS->isLevitationPackage())
-        return true;
-
-    return false;
-  }
-
-  return getParent() && getParent()->isPackageDependentContext();
+  return getParent() && getParent()->isDependentContext();
 }
 
 bool DeclContext::isTransparentContext() const {
@@ -1507,15 +1481,8 @@ void DeclContext::removeDecl(Decl *D) {
         // So I have replaced this:
         // assert(Pos != Map->end() && "no lookup entry for decl");
         // with "if(<no entry>) continue;"
-
-        // Remove the decl only if it is contained.
-
-        if (getParentASTContext().getLangOpts().LevitationMode) {
-          if (Pos == Map->end())
+        if (Pos == Map->end())
             continue;
-        } else {
-          assert(Pos != Map->end() && "no lookup entry for decl");
-        }
 
         StoredDeclsList::DeclsTy *Vec = Pos->second.getAsVector();
         if ((Vec && is_contained(*Vec, ND)) || Pos->second.getAsDecl() == ND)

@@ -905,31 +905,6 @@ private:
   /// Enables C++ Levitation mode
   bool LevitationMode = false;
 
-  using LevitationDeclIDsVector = SmallVector<serialization::DeclID, 1>;
-  std::map<NamedDecl *, LevitationDeclIDsVector>
-
-  /// Instantiations of package dependent declarations
-  PendingLevitationPackageInstantiations;
-
-  /// Force to read declarations only. Skip reading function bodies.
-  bool ForceReadDeclarationsOnly = false;
-
-  /// Determines whether we should read only declarations from AST file.
-  /// ASTReader's user can force such mode, or it activated automatically
-  /// when we're reading levitation dependency or preamble.
-  /// \param CurDecl declaration we're currently working with. Is used
-  /// to determine current module file.
-  /// \return true of only declarations should be read.
-  bool levitationReadDeclarationsOnly(const Decl *CurDecl) const;
-
-  /// Determines whether we skip reading function body. It is based
-  /// on results of levitationReadDeclarationsOnly and function linkage.
-  /// If in addition to above, function body is something we can link
-  /// externally, then it is skipped.
-  /// \param FD function declaration
-  /// \return true if we should skip body.
-  bool levitationShouldSkipBody(const FunctionDecl *FD) const;
-
   //
   // end of C++ Levitation Mode
   //===--------------------------------------------------------------------===//
@@ -2109,13 +2084,6 @@ public:
   void ReadLateParsedTemplates(
       llvm::MapVector<const FunctionDecl *, std::unique_ptr<LateParsedTemplate>>
           &LPTMap) override;
-
-  // C++ Levitation extension:
-  /// Reads levitation package dependent declarations instantiations
-  void ReadLevitationPackageInstantiations(
-      NamedDecl *PackageDependent,
-      SmallVectorImpl<NamedDecl *> &Instantiations
-  ) override;
 
   /// Load a selector from disk, registering its ID if it exists.
   void LoadSelector(Selector Sel);

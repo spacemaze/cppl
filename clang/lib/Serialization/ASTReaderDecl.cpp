@@ -513,7 +513,6 @@ void ASTDeclReader::ReadFunctionDefinition(FunctionDecl *FD) {
     if (CD->getNumCtorInitializers())
       CD->CtorInitializers = ReadGlobalOffset();
   }
-
   // Store the offset of the body so we can lazily load it later.
   Reader.PendingBodies[FD] = GetCurrentCursorOffset();
   HasPendingBody = true;
@@ -1408,29 +1407,8 @@ ASTDeclReader::RedeclarableResult ASTDeclReader::VisitVarDeclImpl(VarDecl *VD) {
       Reader.getContext().setBlockVarCopyInit(VD, CopyExpr, Record.readInt());
   }
 
-  // C++ Levitation extension
-  bool LevitationBuildObject = Reader
-          .getContext()
-          .getLangOpts()
-          .isLevitationMode(LangOptions::LBSK_BuildObjectFile);
-
-  bool Static = VD->getStorageDuration() == SD_Static;
-
-  if (!LevitationBuildObject) {
-    // Legacy code
-    if (Static && Record.readInt()) {
-      Reader.DefinitionSource[VD] = Loc.F->Kind == ModuleKind::MK_MainFile;
-    }
-  }
-  else {
-    if (Static) {
-      // ModulesCodegen param is mandatory to be read for static vars.
-      // see ASTWriterDecl, VisitVarDecl
-      Record.readInt();
-
-      Reader.DefinitionSource[VD] = !Reader.levitationReadDeclarationsOnly(VD);
-    }
-  }
+  if (VD->getStorageDuration() == SD_Static && Record.readInt())
+    Reader.DefinitionSource[VD] = Loc.F->Kind == ModuleKind::MK_MainFile;
 
   enum VarKind {
     VarNotTemplate = 0, VarTemplate, StaticDataMemberSpecialization
@@ -1573,7 +1551,6 @@ void ASTDeclReader::VisitNamespaceDecl(NamespaceDecl *D) {
   RedeclarableResult Redecl = VisitRedeclarable(D);
   VisitNamedDecl(D);
   D->setInline(Record.readInt());
-  D->setLevitationPackage(Record.readInt());
   D->LocStart = ReadSourceLocation();
   D->RBraceLoc = ReadSourceLocation();
 
@@ -2602,34 +2579,14 @@ void ASTDeclReader::mergeTemplatePattern(RedeclarableTemplateDecl *D,
   llvm_unreachable("merged an unknown kind of redeclarable template");
 }
 
-template<typename T>
-bool isImplicitTemplateSpecialization(T *Decl) {
-  if (const auto *CTSD = dyn_cast<ClassTemplateSpecializationDecl>(Decl)) {
-    return CTSD->getSpecializationKind() == TSK_ImplicitInstantiation;
-  }
-  return false;
-}
-
 // C++ Levitation extension:
+// Handle cases when we can merge declarations.
 bool levitationCanMerge(
     const NamedDecl *Existing,
     const NamedDecl *New
 ) {
-
-  // Some fast cases first.
-
-  if (isa<NamespaceDecl>(Existing))
-    return true;
-
-  if (isImplicitTemplateSpecialization(Existing))
-    return true;
-
-  // Basically we can't merge package dependent declaration and
-  // it's instantiated analogue.
-  // All other cases are possible to be merged.
-  return Existing->isLevitationPackageDependent() ==
-         New->isLevitationPackageDependent();
-
+  // Nothin special so far.
+  return true;
 }
 
 /// Attempts to merge the given declaration (D) with another declaration
@@ -2641,8 +2598,7 @@ void ASTDeclReader::mergeRedeclarable(Redeclarable<T> *DBase, T *Existing,
   auto *D = static_cast<T *>(DBase);
 
   // C++ Levitation extension:
-  // Per this mode only namespaces and implicit template specializations
-  // are allowed to be merged.
+  // Quit merging if we're not ready to.
   if (Reader.getContext().getLangOpts().LevitationMode) {
     if (const auto *ExistingND = dyn_cast<NamedDecl>(Existing))
       if (const auto *NewND = dyn_cast<NamedDecl>(D)) {
@@ -2650,7 +2606,6 @@ void ASTDeclReader::mergeRedeclarable(Redeclarable<T> *DBase, T *Existing,
           return;
       }
   }
-
 
   T *ExistingCanon = Existing->getCanonicalDecl();
   T *DCanon = D->getCanonicalDecl();
@@ -4383,17 +4338,6 @@ void ASTDeclReader::UpdateDecl(Decl *D,
    llvm::SmallVectorImpl<serialization::DeclID> &PendingLazySpecializationIDs) {
   while (Record.getIdx() < Record.size()) {
     switch ((DeclUpdateKind)Record.readInt()) {
-
-    // C++ Levitation extension:
-    case UPD_CXXL_ADDED_PACKAGE_INSTANTIATION: {
-        // It will be added to the template's lazy specialization set.
-        auto *PackageDependent = cast<NamedDecl>(D);
-        Reader
-            .PendingLevitationPackageInstantiations[PackageDependent]
-            .push_back(ReadDeclID());
-      }
-      break;
-
     case UPD_CXX_ADDED_IMPLICIT_MEMBER: {
       auto *RD = cast<CXXRecordDecl>(D);
       // FIXME: If we also have an update record for instantiating the

@@ -86,13 +86,6 @@ public:
   virtual void ReadMismatchingDeleteExpressions(llvm::MapVector<
       FieldDecl *, llvm::SmallVector<std::pair<SourceLocation, bool>, 4>> &);
 
-  // C++ Levitation extension:
-  /// Reads levitation package dependent declarations instantiations
-  virtual void ReadLevitationPackageInstantiations(
-      NamedDecl *PackageDependent,
-      SmallVectorImpl<NamedDecl *> &Instantiations
-  );
-
   /// Do last resort, unqualified lookup on a LookupResult that
   /// Sema cannot find.
   ///

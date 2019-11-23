@@ -44,8 +44,6 @@ using namespace clang;
 
 namespace {
 
-typedef std::vector<std::unique_ptr<ASTConsumer>> ConsumersVector;
-
 struct OutputFileHandle {
   std::unique_ptr<llvm::raw_pwrite_stream> OutputStream;
   std::string Path;
@@ -56,87 +54,6 @@ struct OutputFileHandle {
 
   bool isInvalid() const { return !(bool)OutputStream; };
 };
-
-// Cloned with some alterations from GeneratePCHAction.
-OutputFileHandle CreateOutputFile(CompilerInstance &CI, StringRef InFile) {
-  // Comment from original method:
-  // We use createOutputFile here because this is exposed via libclang, and we
-  // must disable the RemoveFileOnSignal behavior.
-  // We use a temporary to avoid race conditions.
-
-  StringRef Extension = "";
-  SmallString<256> OutputPath(CI.getFrontendOpts().OutputFile);
-
-  std::string OutputPathName, TempPathName;
-  std::error_code EC;
-
-  std::unique_ptr<raw_pwrite_stream> OS = CI.createOutputFile(
-      OutputPath,
-      EC,
-      true,
-      false,
-      InFile,
-      Extension,
-      true,
-      false,
-      &OutputPathName,
-      &TempPathName
-  );
-
-  if (!OS) {
-    CI.getDiagnostics().Report(diag::err_fe_unable_to_open_output)
-    << OutputPath
-    << EC.message();
-    return OutputFileHandle::makeInvalid();
-  }
-
-  CI.addOutputFile({
-      (OutputPathName != "-") ? OutputPathName : "",
-      TempPathName
-  });
-
-  return { std::move(OS), std::move(OutputPathName) };
-}
-
-
-// Cloned with some alterations from GeneratePCHAction::CreateASTConsumer.
-// We don't consider RelocatablePCH as an option for Build AST stage.
-static std::unique_ptr<ASTConsumer>
-CreateGeneratePCHConsumer(
-    CompilerInstance &CI,
-    StringRef InFile
-) {
-  OutputFileHandle OutputFile = CreateOutputFile(CI, InFile);
-
-  if (OutputFile.isInvalid())
-    return nullptr;
-
-  const auto &FrontendOpts = CI.getFrontendOpts();
-  auto Buffer = std::make_shared<PCHBuffer>();
-  std::vector<std::unique_ptr<ASTConsumer>> Consumers;
-
-  Consumers.push_back(std::make_unique<PCHGenerator>(
-      CI.getPreprocessor(),
-      CI.getModuleCache(),
-      OutputFile.Path,
-      "",
-      Buffer,
-      FrontendOpts.ModuleFileExtensions,
-      CI.getPreprocessorOpts().AllowPCHWithCompilerErrors,
-      FrontendOpts.IncludeTimestamps,
-      +CI.getLangOpts().CacheGeneratedPCH
-  ));
-
-  Consumers.push_back(CI.getPCHContainerWriter().CreatePCHContainerGenerator(
-      CI,
-      InFile,
-      OutputFile.Path,
-      std::move(OutputFile.OutputStream),
-      Buffer
-  ));
-
-  return std::make_unique<MultiplexConsumer>(std::move(Consumers));
-}
 
 class MultiplexConsumerBuilder {
 
@@ -359,26 +276,6 @@ private:
 };
 
 } // end of namespace clang
-
-std::unique_ptr<ASTConsumer> LevitationBuildASTAction::CreateASTConsumer(
-    clang::CompilerInstance &CI,
-    llvm::StringRef InFile
-) {
-
-  return MultiplexConsumerBuilder()
-      .addNotNull(CreateParserPostProcessor())
-      .addOptional(CreateDependenciesASTProcessor(CI, InFile))
-      .addRequired(CreateGeneratePCHConsumer(CI, InFile))
-  .done();
-}
-
-bool LevitationBuildASTAction::BeginInvocation(CompilerInstance &CI) {
-  if (CI.getFrontendOpts().LevitationPreambleFileName.size()) {
-    CI.getPreprocessorOpts().ImplicitPCHInclude =
-        CI.getFrontendOpts().LevitationPreambleFileName;
-  }
-  return FrontendAction::BeginInvocation(CI);
-}
 
 std::unique_ptr<ASTConsumer> LevitationParseImportAction::CreateASTConsumer(
     clang::CompilerInstance &CI,

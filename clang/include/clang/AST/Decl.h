@@ -527,12 +527,9 @@ class NamespaceDecl : public NamedDecl, public DeclContext,
   /// boolean value indicating whether this is an inline namespace.
   llvm::PointerIntPair<NamespaceDecl *, 1, bool> AnonOrFirstNamespaceAndInline;
 
-  bool IsLevitationPackage;
-
   NamespaceDecl(ASTContext &C, DeclContext *DC, bool Inline,
                 SourceLocation StartLoc, SourceLocation IdLoc,
-                IdentifierInfo *Id, NamespaceDecl *PrevDecl,
-                bool LevitationPackage);
+                IdentifierInfo *Id, NamespaceDecl *PrevDecl);
 
   using redeclarable_base = Redeclarable<NamespaceDecl>;
 
@@ -547,8 +544,7 @@ public:
   static NamespaceDecl *Create(ASTContext &C, DeclContext *DC,
                                bool Inline, SourceLocation StartLoc,
                                SourceLocation IdLoc, IdentifierInfo *Id,
-                               NamespaceDecl *PrevDecl,
-                               bool LevitationPackage = false);
+                               NamespaceDecl *PrevDecl);
 
   static NamespaceDecl *CreateDeserialized(ASTContext &C, unsigned ID);
 
@@ -583,14 +579,6 @@ public:
   /// Set whether this is an inline namespace declaration.
   void setInline(bool Inline) {
     AnonOrFirstNamespaceAndInline.setInt(Inline);
-  }
-
-  bool isLevitationPackage() const {
-    return IsLevitationPackage;
-  }
-
-  void setLevitationPackage(bool IsLevitationPackageValue) {
-    IsLevitationPackage = IsLevitationPackageValue;
   }
 
   /// Get the original (first) namespace declaration.

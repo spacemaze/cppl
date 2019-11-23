@@ -4799,14 +4799,6 @@ public:
                                SourceLocation LBrace,
                                const ParsedAttributesView &AttrList,
                                UsingDirectiveDecl *&UsingDecl);
-
-  Decl *ActOnStartPackageNamespaceDef(Scope *S,
-                               SourceLocation NamespaceLoc,
-                               SourceLocation IdentLoc, IdentifierInfo *Ident,
-                               SourceLocation LBrace,
-                               const ParsedAttributesView &AttrList,
-                               UsingDirectiveDecl *&UsingDecl);
-
   void ActOnFinishNamespaceDef(Decl *Dcl, SourceLocation RBrace);
 
   NamespaceDecl *getStdNamespace() const;
@@ -11305,43 +11297,6 @@ public:
   // C++ Levitation Mode
   //
 private:
-  /// Package instantiation mode flag.
-  bool PackageClassInstantiationStage;
-
-  /// List of levitation package dependent declarations
-  llvm::SmallVector<NamedDecl *, 8> LevitationPackageDependentDecls;
-
-  /// Map of instantiations of package dependent declarations.
-  /// Key - is dependent declaration
-  /// Value - is its instantiated version.
-  llvm::DenseMap<const Decl*, Decl*> PackageDependentDeclInstantiations;
-
-  /// Reversed map of instantiations of package dependent declarations.
-  /// Key - is its instantiated version.
-  /// Value - is dependent declaration.
-  llvm::DenseMap<Decl*, const Decl*> PackageDependentDeclInstantiationsRev;
-
-  Decl* findLevitationPackageDependentInstantiationFor(const Decl *D);
-
-  const Decl* findLevitationPackageDependentDecl(const Decl *Instantiation);
-
-  void postFunctionTemplateDefinitionInstantiation(
-      const FunctionTemplateDecl *FTD,
-      SourceLocation PointOfInstantiation
-  );
-
-public:
-
-// Levitation Dependencies
-
-// TODO Levitation:
-//
-//    enum LevitationDependenciesModeEnum {
-//        LevitationDepenciesAuto,
-//        LevitationDepenciesExplicit
-//    };
-
-private:
 
   /// NOTE: We perhaps could put it into TranslactionUnitDecl,
   /// for it is linked 1 to 1 with latter.
@@ -11358,13 +11313,7 @@ private:
   /// Set of dependencies definition depends on.
   levitation::DependenciesMap LevitationDefinitionDependencies;
 
-// TODO Levitation:
-// Don't forget to initialize in constructor.
-//  LevitationDependenciesModeEnum LevitationDependenciesMode;
-
 public:
-
-  void setLevitationPackageDependentDecls(llvm::SmallVectorImpl<NamedDecl*> Decls);
 
   const levitation::DependenciesMap &getLevitationDeclarationDependencies() {
     return LevitationDeclarationDependencies;
@@ -11374,54 +11323,15 @@ public:
     return LevitationDefinitionDependencies;
   }
 
-  bool isLevitationMode(LangOptions::LevitationBuildStageKind Mode) {
-    return getLangOpts().isLevitationMode(Mode);
+  template <typename ...ArgsT>
+  bool isLevitationMode(ArgsT&& ... Args) {
+    return getLangOpts().isLevitationMode(std::forward<ArgsT>(Args)...);
   }
-
-// TODO Levitation:
-//  LevitationDependenciesModeEnum getLevitationDependenciesMode() {
-//    return LevitationDependenciesMode;
-//  }
-//
-//  void setLevitationDependenciesMode(LevitationDependenciesModeEnum Mode) {
-//    LevitationDependenciesMode = Mode;
-//  }
-
-// Levitation Package instantiation
-public:
 
   /// Should be called for parse manual dependencies mode.
   /// reads all #import directives from Preprocessor and puts them
   /// into LevitationDependency form.
   void ActOnLevitationManualDeps();
-
-  /// Registers instantiation of package dependent declaration.
-  /// \param PackageDependent package dependent declaration
-  /// \param Instantiation instantiation
-  void addLevitationPackageDependentInstatiation(
-      const Decl *PackageDependent,
-      Decl* Instantiation
-  );
-
-  /// Scans translation unit and looks for package namespace.
-  /// It checks package namespace decls, and marks them as
-  /// levitation package dependent if necessary.
-  void markLevitationPackageDeclsAsPackageDependent();
-
-  bool isShadowedLevitationDecl(const Decl *D) const;
-
-  /// Called during parsing or template instantiation for new dependent type
-  /// or expression
-  /// Checks whether we can consider it as a reference to another
-  /// levitation class or its member.
-  /// \param Loc nested name specifier of dependent type or expression to be
-  /// checked.
-  /// \param Name identifier of dependent type or expression to be checked.
-  /// \return true if expression handled successfully, and false otherwise.
-  bool HandleLevitationPackageDependency(
-      const NestedNameSpecifierLoc &Loc,
-      const IdentifierInfo *Name
-  );
 
   /// Called during manual dependencies parsing phase.
   /// \param DepIdParts parts of identifier. Each except the last part is
@@ -11433,43 +11343,9 @@ public:
       bool IsBodyDependency,
       const SourceRange &Loc
   );
-
-  /// Called during parsing or template instantiation for new dependent type
-  /// or expression
-  /// Checks whether we can consider it as a reference to another
-  /// levitation class or its member.
-  /// \param Loc nested name specifier of dependent type or expression to be
-  /// checked.
-  /// \param Name DeclarationName of dependent type or expression to be checked
-  /// (expected to be Identitifer).
-  /// \return true if expression handled successfully, and false otherwise.
-  bool HandleLevitationPackageDependency(
-      const NestedNameSpecifierLoc &Loc,
-      const DeclarationNameInfo &Name
-  );
-
-  NamedDecl *substLevitationPackageDependentDecl(const NamedDecl *D);
-
-  /// Entry point for levitation package classes instantiation mode.
-  /// Should be called straight after Sema has been initialized, and in fact
-  /// is part of initialization process.
-  /// It scans for delcs in package namespaces in external sources,
-  /// checks whether those should be instantiated.
-  /// If any it runs levitation classes instantiation on it.
-  ///
-  /// Note: Package classes instantiation is a process very similar to
-  /// template instantiation. It scans for any references to 'global' nested
-  /// name specifiers, and tries to replace them with real symbols.
-  void InstantiatePackageClasses();
-
-  /// Sets package instantiation stage for C++ Levitation
-  /// \param v true to set stage, false to unset.
-  void setPackageClassInstantiationStage(bool v) { PackageClassInstantiationStage = v; }
-
-  /// Check whether Sema is in levitation package class instantiation stage.
-  /// \return true if Sema is in package class instantiation stage.
-  bool IsPackageClassInstantiationStage() const { return PackageClassInstantiationStage; }
-
+  //
+  // end of C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
 };
 
 /// RAII object that enters a new expression evaluation context.

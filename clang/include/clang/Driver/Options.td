@@ -625,9 +625,6 @@ def emit_ast : Flag<["-"], "emit-ast">,
 
 // C++ Levitation mode
 
-def cppl_parse : Flag<["-"], "cppl-parse">,
-  HelpText<"Runs Levitation Parse stage for input file">;
-
 def cppl_import : Flag<["-"], "cppl-import">,
   HelpText<"Runs Levitation #import (dependencies) parsing">;
 
@@ -636,12 +633,6 @@ def cppl_decl : Flag<["-"], "cppl-decl">,
 
 def cppl_obj : Flag<["-"], "cppl-obj">,
   HelpText<"Runs Levitation object file creation stage">;
-
-def cppl_compile : Flag<["-"], "cppl-compile">,
-  HelpText<"Runs Levitation Compilation stage for input file (combines parse, instantiation and codegen stages)">;
-
-def cppl_inst_decl : Flag<["-"], "cppl-inst-decl">,
-  HelpText<"Runs Levitation Instantiation stage for declarations inputs.">;
 
 def cppl_src_root_EQ : Joined<["-"], "cppl-src-root=">, Flags<[DriverOption, HelpHidden]>,
 HelpText<"Sources root directory for C++ Levitation parse stage">;

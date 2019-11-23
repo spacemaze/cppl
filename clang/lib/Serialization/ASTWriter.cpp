@@ -1564,8 +1564,7 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
       // C++ Levitation extension:
       // TODO Levitation: We probably need our own MK_LevitationMainFile
       if (!M.isDirectlyImported() ||
-           M.Kind == MK_LevitationDependency ||
-           M.Kind == MK_MainFile)
+           M.Kind == MK_LevitationDependency)
         continue;
 
       Record.push_back((unsigned)M.Kind); // FIXME: Stable encoding
@@ -5234,8 +5233,6 @@ void ASTWriter::WriteDeclUpdatesBlocks(RecordDataImpl &OffsetsRecord) {
       case UPD_CXX_ADDED_IMPLICIT_MEMBER:
       case UPD_CXX_ADDED_TEMPLATE_SPECIALIZATION:
       case UPD_CXX_ADDED_ANONYMOUS_NAMESPACE:
-      // C++ Levitation extension:
-      case UPD_CXXL_ADDED_PACKAGE_INSTANTIATION:
         assert(Update.getDecl() && "no decl to add?");
         Record.push_back(GetDeclRef(Update.getDecl()));
         break;
@@ -6567,21 +6564,6 @@ void ASTWriter::AddedAttributeToRecord(const Attr *Attr,
   if (!Record->isFromASTFile())
     return;
   DeclUpdates[Record].push_back(DeclUpdate(UPD_ADDED_ATTR_TO_RECORD, Attr));
-}
-
-void ASTWriter::AddedLevitationPackageInstantiation(
-    NamedDecl *PackageDependent,
-    NamedDecl *Instantiated) {
-  if (Chain && Chain->isProcessingUpdateRecords()) return;
-  assert(!WritingAST && "Already writing the AST!");
-  assert(
-      !Instantiated->isFromASTFile() &&
-      "Instantiated AST shouldn't belong to any file"
-  );
-
-  DeclUpdates[PackageDependent].push_back(
-      DeclUpdate(UPD_CXXL_ADDED_PACKAGE_INSTANTIATION, Instantiated)
-  );
 }
 
 void ASTWriter::AddedCXXTemplateSpecialization(

@@ -387,8 +387,7 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
     // Don't print implicit specializations, as they are printed when visiting
     // corresponding templates.
     if (auto FD = dyn_cast<FunctionDecl>(*D))
-      if (!Context.getLangOpts().LevitationMode &&
-          FD->getTemplateSpecializationKind() == TSK_ImplicitInstantiation &&
+      if (FD->getTemplateSpecializationKind() == TSK_ImplicitInstantiation &&
           !isa<ClassTemplateSpecializationDecl>(DC))
         continue;
 
@@ -864,7 +863,9 @@ void DeclPrinter::VisitVarDecl(VarDecl *D) {
     }
   }
 
-  // FIXME Levitation:
+  // C++ Levitation fix. Replaced legacy lines:
+  // printDeclType(T, D->getName());
+  // with lines below:
   // Declaration type printing has been fixed.
   if (Context.getLangOpts().LevitationMode) {
     StringRef Name = D->isOutOfLine() ?
@@ -874,6 +875,7 @@ void DeclPrinter::VisitVarDecl(VarDecl *D) {
     // Legacy code
     printDeclType(T, D->getName());
   }
+  // end of C++ Levitation
 
   Expr *Init = D->getInit();
   if (!Policy.SuppressInitializers && Init) {
@@ -934,8 +936,6 @@ void DeclPrinter::VisitStaticAssertDecl(StaticAssertDecl *D) {
 void DeclPrinter::VisitNamespaceDecl(NamespaceDecl *D) {
   if (D->isInline())
     Out << "inline ";
-  if (D->isLevitationPackage())
-    Out << "package ";
   Out << "namespace " << *D << " {\n";
   VisitDeclContext(D);
   Indent() << "}";
@@ -968,12 +968,17 @@ void DeclPrinter::VisitCXXRecordDecl(CXXRecordDecl *D) {
   prettyPrintAttributes(D);
 
   if (D->getIdentifier()) {
+    // C++ Levitation: fixed legacy bug.
+    // replaced this:
+    // Out << ' ' << *D;
+    // with lines below:
     Out << ' ';
 
     if (const NestedNameSpecifier *Q = D->getQualifier())
       Q->print(Out, Policy);
 
     Out << *D;
+    // end of C++ Levitation
 
     if (auto S = dyn_cast<ClassTemplatePartialSpecializationDecl>(D))
       printTemplateArguments(S->getTemplateArgs(), S->getTemplateParameters());

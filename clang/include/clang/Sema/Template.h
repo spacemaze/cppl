@@ -477,16 +477,8 @@ class VarDecl;
                              TemplateParameterList *TemplateParams,
                              Optional<const ASTTemplateArgumentListInfo *>
                                  ClassScopeSpecializationArgs = llvm::None);
-
     Decl *VisitFunctionDecl(FunctionDecl *D,
                             TemplateParameterList *TemplateParams);
-
-    // C++ Levitation extension.
-    CXXMethodDecl *instantiateCXXTemplateMethodSpecialization(
-        FunctionTemplateSpecializationInfo *FTSI,
-        FunctionTemplateDecl *NewFunctionTemplate
-    );
-
     Decl *VisitDecl(Decl *D);
     Decl *VisitVarDecl(VarDecl *D, bool InstantiatingVarTemplate,
                        ArrayRef<BindingDecl *> *Bindings = nullptr);

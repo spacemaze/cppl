@@ -51,19 +51,6 @@ namespace {
     }
   };
 
-  class ParserPostProcessor : public SemaObjHolderConsumer {
-  public:
-    void HandleTranslationUnit(ASTContext &Context) override {
-      assert(SemaObj && "Sema must be initialized");
-      assert(
-        SemaObj->getLangOpts().getLevitationBuildStage() ==
-        LangOptions::LBSK_BuildAST &&
-        "Package dependent marking allowed on AST build stage only."
-      );
-      SemaObj->markLevitationPackageDeclsAsPackageDependent();
-    }
-  };
-
   class DependenciesValidator {
       StringRef SourcesRoot;
       StringRef FileExtension;
@@ -109,7 +96,7 @@ namespace {
       }
 
       PackageDependency Validated(std::move(ValidatedComponents));
-      Validated.addUses(Dep.getUses());
+      Validated.setImportLoc(Dep.getImportLoc());
       Validated.setPath(std::move(Path));
 
       Map.mergeDependency(std::move(Validated));
@@ -164,9 +151,9 @@ namespace {
     void diagMissingDependency(const levitation::PackageDependency &Dep) {
       // FIXME Levitation: SourceRange is not printed correctly.
       Diag.Report(
-          Dep.getFirstUse().Location.getBegin(),
+          Dep.getImportLoc().getBegin(),
           diag::err_levitation_dependency_missed
-      ) << Dep << Dep.getFirstUse().Location;
+      ) << Dep << Dep.getImportLoc();
     }
   };
 
@@ -235,21 +222,9 @@ namespace {
       }
     }
   };
-
-  class PackageInstantiator : public SemaObjHolderConsumer {
-  public:
-      void HandleTranslationUnit(ASTContext &Context) override {
-        SemaObj->InstantiatePackageClasses();
-      }
-  };
-
 } // end anonymous namespace
 
 namespace clang {
-
-std::unique_ptr<ASTConsumer> CreateParserPostProcessor() {
-  return std::make_unique<ParserPostProcessor>();
-}
 
 std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
     CompilerInstance &CI,
@@ -264,12 +239,6 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
   );
 
   return std::make_unique<ASTDependenciesProcessor>(CI, std::move(InFileRel));
-}
-
-/// CreatePackageInstantiator (Deprecated)
-/// \return
-std::unique_ptr<ASTConsumer> CreatePackageInstantiator() {
-  return std::make_unique<PackageInstantiator>();
 }
 
 }
