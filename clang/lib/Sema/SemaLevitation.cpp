@@ -70,3 +70,25 @@ void Sema::ActOnLevitationManualDeps() {
   for (const auto &DepParts : PP.getLevitationBodyDeps())
     HandleLevitationPackageDependency(DepParts.first, true, DepParts.second);
 }
+
+bool Sema::levitationMayBeSkipVarDefinition(
+    const Declarator &D,
+    const DeclContext *DC,
+    bool IsVariableTemplate,
+    clang::StorageClass SC) const {
+
+  if (!CurContext->isFileContext())
+    return false;
+
+  bool IsStaticMember = DC->isRecord();
+  bool IsFileVar = DC->isFileContext();
+
+  // Skip initialization of static non-template data members and global variables
+  // defined without "static" keyword.
+  // But preserve initialization for global vars defined with static.
+  bool SkipInit = IsStaticMember ?
+      !IsVariableTemplate && !DC->isDependentContext() :
+      IsFileVar && !IsVariableTemplate && SC != StorageClass ::SC_Static;
+
+  return SkipInit;
+}

@@ -6624,6 +6624,19 @@ NamedDecl *Sema::ActOnVariableDeclarator(
              "should have a 'template<>' for this decl");
     }
 
+    // C++ Levitation: skip global vars initializer if we parse preamble,
+    // or building a .decl-ast files.
+    if (levitationMayBeSkipVarDefinition(
+      D, DC,
+      //  IsMemberSpecialization,
+      //  IsVariableTemplateSpecialization,
+      //  IsPartialSpecialization,
+      IsVariableTemplate,
+      SC
+    ))
+      return nullptr;
+    // end of C++ Levitation
+
     if (IsVariableTemplateSpecialization) {
       SourceLocation TemplateKWLoc =
           TemplateParamLists.size() > 0

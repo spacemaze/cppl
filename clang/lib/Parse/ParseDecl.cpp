@@ -2272,34 +2272,6 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
     }
   };
 
-  // C++ Levitation: skip global vars initializer if we parse preamble,
-  // or building a .decl-ast files.
-
-  if (Actions.isLevitationMode() && SkipFunctionBodies) {
-
-      // TODO Levitation: top-level logic is good,
-      //   but bool flags evaluation is wrong. At least for IsStaticMember.
-      bool IsTemplate = TemplateInfo.Kind == ParsedTemplateInfo::Template;
-      bool IsFileVarDecl = D.getContext() == DeclaratorContext::FileContext;
-      bool IsStaticStorageClass = D.getDeclSpec().getStorageClassSpec() == DeclSpec::SCS::SCS_static;
-      bool IsStaticMember = D.getContext() == DeclaratorContext::MemberContext &&
-          D.isStaticMember();
-
-      // Skip initialization of static non-template data members and global variables
-      // defined without "static" keyword.
-      // But preserve initialization for global vars defined with static.
-      bool SkipInit = IsStaticMember ?
-          IsTemplate :
-          IsFileVarDecl && !IsTemplate && IsStaticStorageClass;
-
-      if (SkipInit) {
-        // SkipInit for global vars,
-        // if we parse levitation preamble or .decl-ast
-        SkipUntil(tok::comma, StopAtSemi | StopBeforeMatch);
-        return nullptr;
-      }
-  }
-
   // Inform the current actions module that we just parsed this declarator.
   Decl *ThisDecl = nullptr;
   switch (TemplateInfo.Kind) {
@@ -2358,6 +2330,20 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
     break;
     }
   }
+
+  // C++ Levitation: skip global vars initializer if we parse preamble,
+  // or building a .decl-ast files.
+  // Some above in this method ActOnVariableDeclarator should be called,
+  // which in turn should run levitationMayBeSkipVarDefinition which
+  // do all required checks, and if decl should be skipped it
+  // ActOnVariableDeclarator will return nullptr.
+  if (Actions.isLevitationMode() && SkipFunctionBodies && !ThisDecl) {
+    // SkipInit for global vars,
+    // if we parse levitation preamble or .decl-ast
+    SkipUntil(tok::comma, StopAtSemi | StopBeforeMatch);
+    return nullptr;
+  }
+  // end of C++ Levitation
 
   // Parse declarator '=' initializer.
   // If a '==' or '+=' is found, suggest a fixit to '='.

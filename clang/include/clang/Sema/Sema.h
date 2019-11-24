@@ -11363,6 +11363,14 @@ public:
       bool IsBodyDependency,
       const SourceRange &Loc
   );
+
+  bool levitationMayBeSkipVarDefinition(
+        const Declarator &D,
+        const DeclContext* DC,
+        bool IsVariableTemplate,
+        StorageClass SC
+    ) const;
+
   //
   // end of C++ Levitation Mode
   //===--------------------------------------------------------------------===//
