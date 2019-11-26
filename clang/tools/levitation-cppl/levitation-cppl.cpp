@@ -81,6 +81,11 @@ int levitation_driver_main(int argc, char **argv) {
           "generation stage will be added to the compilation pipeline.",
           [&](StringRef v) { Driver.setOutputHeader(v); }
       )
+      .optional(
+          "-stdlib", "<std lib name>",
+          "Name of standard library, usually 'libc++' or 'stdlibc++'.",
+          [&](StringRef v) { Driver.setStdLib(v); }
+      )
       .optional()
           .name("-j")
           .valueHint("<N>")
