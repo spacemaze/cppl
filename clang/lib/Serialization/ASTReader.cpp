@@ -4162,6 +4162,23 @@ static bool SkipCursorToBlock(BitstreamCursor &Cursor, unsigned BlockID) {
   }
 }
 
+ASTReader::ASTReadResult
+ASTReader::removeModulesAndReturn(
+  ASTReadResult ReadResult, unsigned NumModules
+) {
+  assert(ReadResult && "expected to return error");
+  ModuleMgr.removeModules(ModuleMgr.begin() + NumModules,
+                          PP.getLangOpts().Modules
+                              ? &PP.getHeaderSearchInfo().getModuleMap()
+                              : nullptr);
+
+  // If we find that any modules are unusable, the global index is going
+  // to be out-of-date. Just remove it.
+  GlobalIndex.reset();
+  ModuleMgr.setGlobalIndex(nullptr);
+  return ReadResult;
+}
+
 ASTReader::ASTReadResult ASTReader::ReadAST(StringRef FileName,
                                             ModuleKind Type,
                                             SourceLocation ImportLoc,
@@ -4179,19 +4196,6 @@ ASTReader::ASTReadResult ASTReader::ReadAST(StringRef FileName,
     PreviousGeneration = incrementGeneration(*ContextObj);
 
   unsigned NumModules = ModuleMgr.size();
-  auto removeModulesAndReturn = [&](ASTReadResult ReadResult) {
-    assert(ReadResult && "expected to return error");
-    ModuleMgr.removeModules(ModuleMgr.begin() + NumModules,
-                            PP.getLangOpts().Modules
-                                ? &PP.getHeaderSearchInfo().getModuleMap()
-                                : nullptr);
-
-    // If we find that any modules are unusable, the global index is going
-    // to be out-of-date. Just remove it.
-    GlobalIndex.reset();
-    ModuleMgr.setGlobalIndex(nullptr);
-    return ReadResult;
-  };
 
   SmallVector<ImportedModule, 4> Loaded;
   switch (ASTReadResult ReadResult =
@@ -4204,7 +4208,7 @@ ASTReader::ASTReadResult ASTReader::ReadAST(StringRef FileName,
   case VersionMismatch:
   case ConfigurationMismatch:
   case HadErrors:
-    return removeModulesAndReturn(ReadResult);
+    return removeModulesAndReturn(ReadResult, NumModules);
   case Success:
     break;
   }
@@ -4218,18 +4222,18 @@ ASTReader::ASTReadResult ASTReader::ReadAST(StringRef FileName,
 
     // Read the AST block.
     if (ASTReadResult Result = ReadASTBlock(F, ClientLoadCapabilities))
-      return removeModulesAndReturn(Result);
+      return removeModulesAndReturn(Result, NumModules);
 
     // The AST block should always have a definition for the main module.
     if (F.isModule() && !F.DidReadTopLevelSubmodule) {
       Error(diag::err_module_file_missing_top_level_submodule, F.FileName);
-      return removeModulesAndReturn(Failure);
+      return removeModulesAndReturn(Failure, NumModules);
     }
 
     // Read the extension blocks.
     while (!SkipCursorToBlock(F.Stream, EXTENSION_BLOCK_ID)) {
       if (ASTReadResult Result = ReadExtensionBlock(F))
-        return removeModulesAndReturn(Result);
+        return removeModulesAndReturn(Result, NumModules);
     }
 
     // Once read, set the ModuleFile bit base offset and update the size in
@@ -4452,20 +4456,25 @@ ASTReader::ASTReadResult ASTReader::EndRead(
 
   // Here comes stuff that we only do once the entire chain is loaded.
 
-  // Load the AST blocks of all of the modules that we loaded.
-  for (SmallVectorImpl<ImportedModule>::iterator M = Loaded.begin(),
-                                              MEnd = Loaded.end();
-       M != MEnd; ++M) {
-    ModuleFile &F = *M->Mod;
+  // Load the AST blocks of all of the modules that we loaded.  We can still
+  // hit errors parsing the ASTs at this point.
+  for (ImportedModule &M : Loaded) {
+    ModuleFile &F = *M.Mod;
 
     // Read the AST block.
     if (ASTReadResult Result = ReadASTBlock(F, ClientLoadCapabilities))
-      return Result;
+      return removeModulesAndReturn(Result, NumModules);
+
+    // The AST block should always have a definition for the main module.
+    if (F.isModule() && !F.DidReadTopLevelSubmodule) {
+      Error(diag::err_module_file_missing_top_level_submodule, F.FileName);
+      return removeModulesAndReturn(Failure, NumModules);
+    }
 
     // Read the extension blocks.
     while (!SkipCursorToBlock(F.Stream, EXTENSION_BLOCK_ID)) {
       if (ASTReadResult Result = ReadExtensionBlock(F))
-        return Result;
+        return removeModulesAndReturn(Result, NumModules);
     }
 
     // Once read, set the ModuleFile bit base offset and update the size in
@@ -4473,6 +4482,11 @@ ASTReader::ASTReadResult ASTReader::EndRead(
     F.GlobalBitOffset = TotalModulesSizeInBits;
     TotalModulesSizeInBits += F.SizeInBits;
     GlobalBitOffsetsMap.insert(std::make_pair(F.GlobalBitOffset, &F));
+  }
+
+  // Preload source locations and interesting indentifiers.
+  for (ImportedModule &M : Loaded) {
+    ModuleFile &F = *M.Mod;
 
     // Preload SLocEntries.
     for (unsigned I = 0, N = F.PreloadSLocEntries.size(); I != N; ++I) {
@@ -4515,10 +4529,8 @@ ASTReader::ASTReadResult ASTReader::EndRead(
 
   // Setup the import locations and notify the module manager that we've
   // committed to these module files.
-  for (SmallVectorImpl<ImportedModule>::iterator M = Loaded.begin(),
-                                              MEnd = Loaded.end();
-       M != MEnd; ++M) {
-    ModuleFile &F = *M->Mod;
+  for (ImportedModule &M : Loaded) {
+    ModuleFile &F = *M.Mod;
 
     ModuleMgr.moduleFileAccepted(&F);
 
@@ -4526,10 +4538,10 @@ ASTReader::ASTReadResult ASTReader::EndRead(
     F.DirectImportLoc = ImportLoc;
     // FIXME: We assume that locations from PCH / preamble do not need
     // any translation.
-    if (!M->ImportedBy)
-      F.ImportLoc = M->ImportLoc;
+    if (!M.ImportedBy)
+      F.ImportLoc = M.ImportLoc;
     else
-      F.ImportLoc = TranslateSourceLocation(*M->ImportedBy, M->ImportLoc);
+      F.ImportLoc = TranslateSourceLocation(*M.ImportedBy, M.ImportLoc);
   }
 
   if (!PP.getLangOpts().CPlusPlus ||
@@ -10280,11 +10292,6 @@ void ASTReader::finishPendingActions() {
                                PBEnd = PendingBodies.end();
        PB != PBEnd; ++PB) {
     if (FunctionDecl *FD = dyn_cast<FunctionDecl>(PB->first)) {
-
-      // C++ Levitation extension
-      bool LevitationBuildObject = ContextObj->getLangOpts().isLevitationMode(
-          LangOptions::LBSK_BuildObjectFile
-      );
 
       // For a function defined inline within a class template, force the
       // canonical definition to be the one inside the canonical definition of

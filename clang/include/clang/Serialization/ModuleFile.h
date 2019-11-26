@@ -56,7 +56,10 @@ enum ModuleKind {
   MK_MainFile,
 
   /// File is from a prebuilt module path.
-  MK_PrebuiltModule
+  MK_PrebuiltModule,
+
+  /// File is a prebuilt C++ Levitation dependency
+  MK_LevitationDependency
 };
 
 /// The input file that has been loaded from this AST file, along with
@@ -483,10 +486,29 @@ public:
 
   /// Dump debugging output for this module.
   void dump();
+
+  //===--------------------------------------------------------------------===//
+  // C++ Levitation Mode
+  //
+
+  serialization::LevitationModuleID LevitationModuleID = 0;
+
+  bool isLevitationDependency() const {
+    return Kind == MK_LevitationDependency;
+  }
+
+  bool isLevitationModule() const {
+    // TODO Levitation: consider introducing MK_LevitationMainFile
+    return isLevitationDependency() || Kind == MK_MainFile;
+  }
+
+  //
+  // end of C++ Levitation Mode
+  //===--------------------------------------------------------------------===//
 };
 
 } // namespace serialization
 
 } // namespace clang
 
-#endif // LLVM_CLANG_SERIALIZATION_MODULEFILE_H
+#endif // LLVM_CLANG_SERIALIZATION_MODULE_H

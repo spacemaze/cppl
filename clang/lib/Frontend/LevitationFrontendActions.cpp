@@ -254,20 +254,7 @@ private:
     case VersionMismatch:
     case ConfigurationMismatch:
     case HadErrors: {
-      llvm::SmallPtrSet<ModuleFile *, 4> LoadedSet;
-      for (const ImportedModule &IM : Loaded)
-        LoadedSet.insert(IM.Mod);
-
-      ModuleMgr.removeModules(ModuleMgr.begin() + NumModules, LoadedSet,
-                              PP.getLangOpts().Modules
-                                  ? &PP.getHeaderSearchInfo().getModuleMap()
-                                  : nullptr);
-
-      // If we find that any modules are unusable, the global index is going
-      // to be out-of-date. Just remove it.
-      GlobalIndex.reset();
-      ModuleMgr.setGlobalIndex(nullptr);
-      return ReadResult;
+      return removeModulesAndReturn(ReadResult, NumModules);
     }
     case Success:
       return Success;

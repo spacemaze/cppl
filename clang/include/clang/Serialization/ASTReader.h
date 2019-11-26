@@ -1586,6 +1586,8 @@ public:
       }
   };
 
+  ASTReadResult removeModulesAndReturn(ASTReadResult ReadResult, unsigned NumModules);
+
   /// Begin load the AST file designated by the given file name.
   /// \return Data associated with started read process, it is required
   ///         to call OnClose
