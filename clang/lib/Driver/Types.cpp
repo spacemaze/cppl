@@ -339,7 +339,6 @@ void types::getCompilationPhases(const clang::driver::Driver &Driver,
            DAL.getLastArg(options::OPT_cppl_preamble) ||
            DAL.getLastArg(options::OPT_cppl_import) ||
            DAL.getLastArg(options::OPT_cppl_decl) ||
-           DAL.getLastArg(options::OPT_cppl_obj) ||
 
            // end of C++ Levitation
 
@@ -352,7 +351,11 @@ void types::getCompilationPhases(const clang::driver::Driver &Driver,
     llvm::copy_if(PhaseList, std::back_inserter(P),
                   [](phases::ID Phase) { return Phase <= phases::Backend; });
 
-  else if (DAL.getLastArg(options::OPT_c))
+  else if (DAL.getLastArg(options::OPT_c) ||
+           // C++ Levitation
+           DAL.getLastArg(options::OPT_cppl_obj)
+           // end of C++ Levitation
+  )
     llvm::copy_if(PhaseList, std::back_inserter(P),
                   [](phases::ID Phase) { return Phase <= phases::Assemble; });
 

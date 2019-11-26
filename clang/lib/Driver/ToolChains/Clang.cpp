@@ -3667,6 +3667,20 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   } else if (isa<AssembleJobAction>(JA)) {
     CmdArgs.push_back("-emit-obj");
 
+    // C++ Levitation
+
+    if (Args.hasArg(options::OPT_cppl_obj)) {
+
+      // assert(JA.getType() == types::TY_Object && "Type must be Object");
+
+      CmdArgs.push_back("-flevitation-build-object");
+
+      levitationParseIncludePreamble(CmdArgs, Args);
+      levitationParseIncludeDeps(CmdArgs, Args);
+    }
+
+    // end of C++ Levitation
+
     CollectArgsForIntegratedAssembler(C, Args, CmdArgs, D);
 
     // Also ignore explicit -force_cpusubtype_ALL option.
@@ -3787,15 +3801,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       levitationParseIncludePreamble(CmdArgs, Args);
       levitationParseIncludeDeps(CmdArgs, Args);
 
-    } else if (Args.hasArg(options::OPT_cppl_obj)) {
-
-      // assert(JA.getType() == types::TY_Object && "Type must be Object");
-
-      CmdArgs.push_back("-flevitation-build-object");
-      CmdArgs.push_back("-emit-obj");
-
-      levitationParseIncludePreamble(CmdArgs, Args);
-      levitationParseIncludeDeps(CmdArgs, Args);
     }
 
     // end of C++ Levitation
