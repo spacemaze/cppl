@@ -354,11 +354,12 @@ public:
 
     static CommandInfo getBuildPreamble(
         StringRef BinDir,
+        StringRef StdLib,
         bool verbose,
         bool dryRun
     ) {
       auto Cmd = getClangXXCommand(
-          BinDir, verbose, dryRun
+          BinDir, StdLib, verbose, dryRun
       );
 
       Cmd
@@ -367,6 +368,7 @@ public:
       return Cmd;
     }
 
+    // TODO Levitation: Deprecated
     static CommandInfo getParse(
         StringRef BinDir,
         StringRef PrecompiledPreamble,
@@ -374,7 +376,7 @@ public:
         bool dryRun
     ) {
       auto Cmd = getClangXXCommand(
-          BinDir, verbose, dryRun
+          BinDir, "-libstdc++", verbose, dryRun
       );
 
       Cmd.addArg("-cppl-parse");
@@ -390,8 +392,9 @@ public:
         bool verbose,
         bool dryRun
     ) {
+
       auto Cmd = getClangXXCommand(
-          BinDir, verbose, dryRun
+          BinDir, "", verbose, dryRun
       );
 
       Cmd.addArg("-cppl-import");
@@ -407,7 +410,7 @@ public:
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getClangXXCommand(BinDir, verbose, dryRun);
+      auto Cmd = getClangXXCommand(BinDir, "", verbose, dryRun);
       Cmd
       .addArg("-cppl-inst-decl");
       return Cmd;
@@ -419,7 +422,7 @@ public:
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getClangXXCommand(BinDir, verbose, dryRun);
+      auto Cmd = getClangXXCommand(BinDir, "", verbose, dryRun);
       Cmd
       .addArg("-cppl-compile");
       return Cmd;
@@ -428,10 +431,11 @@ public:
     static CommandInfo getBuildDecl(
         StringRef BinDir,
         StringRef PrecompiledPreamble,
+        StringRef StdLib,
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getClangXXCommand(BinDir, verbose, dryRun);
+      auto Cmd = getClangXXCommand(BinDir, StdLib, verbose, dryRun);
       Cmd
       .addArg("-cppl-decl");
       return Cmd;
@@ -440,10 +444,11 @@ public:
     static CommandInfo getBuildObj(
         StringRef BinDir,
         StringRef PrecompiledPreamble,
+        StringRef StdLib,
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getClangXXCommand(BinDir, verbose, dryRun);
+      auto Cmd = getClangXXCommand(BinDir, StdLib, verbose, dryRun);
       Cmd
       .addArg("-cppl-obj");
       return Cmd;
@@ -455,7 +460,7 @@ public:
         bool verbose,
         bool dryRun
     ) {
-      auto Cmd = getClangXXCommand(BinDir, verbose, dryRun);
+      auto Cmd = getClangXXCommand(BinDir, "", verbose, dryRun);
 
       Cmd.addArg("-cppl-compile");
 
@@ -466,14 +471,17 @@ public:
     }
     static CommandInfo getLink(
         StringRef BinDir,
+        StringRef StdLib,
         bool verbose,
         bool dryRun,
-        bool UseLibStdCpp
+        bool CanUseLibStdCpp
     ) {
       CommandInfo Cmd(getClangXXPath(BinDir), verbose, dryRun);
 
-      if (UseLibStdCpp)
-        Cmd.addArg("-stdlib=libstdc++");
+      if (!CanUseLibStdCpp)
+        Cmd.addArg("-stdlib=libc++");
+      else
+        Cmd.addKVArgEqIfNotEmpty("-stdlib", StdLib);
 
       return Cmd;
     }
@@ -591,13 +599,14 @@ public:
 
     static CommandInfo getClangXXCommand(
         llvm::StringRef BinDir,
+        StringRef StdLib,
         bool verbose,
         bool dryRun
     ) {
       CommandInfo Cmd(getClangXXPath(BinDir), verbose, dryRun);
       Cmd
       .addArg("-std=c++17")
-      .addKVArgEq("-stdlib", "libstdc++");
+      .addKVArgEqIfNotEmpty("-stdlib", StdLib);
 
       return Cmd;
     }
@@ -760,6 +769,7 @@ public:
       StringRef OutDeclASTFile,
       StringRef InputFile,
       const Paths &Deps,
+      StringRef StdLib,
       const LevitationDriver::Args &ExtraParserArgs,
       bool Verbose,
       bool DryRun
@@ -772,7 +782,7 @@ public:
     levitation::Path::createDirsForFile(OutDeclASTFile);
 
     auto ExecutionStatus = CommandInfo::getBuildDecl(
-        BinDir, PrecompiledPreamble, Verbose, DryRun
+        BinDir, PrecompiledPreamble, StdLib, Verbose, DryRun
     )
     .addKVArgEqIfNotEmpty("-cppl-include-preamble", PrecompiledPreamble)
     .addKVArgsEq("-cppl-include-dependency", Deps)
@@ -790,6 +800,7 @@ public:
       StringRef OutObjFile,
       StringRef InputObject,
       const Paths &Deps,
+      StringRef StdLib,
       const LevitationDriver::Args &ExtraParserArgs,
       const LevitationDriver::Args &ExtraCodeGenArgs,
       bool Verbose,
@@ -803,7 +814,7 @@ public:
     levitation::Path::createDirsForFile(OutObjFile);
 
     auto ExecutionStatus = CommandInfo::getBuildObj(
-        BinDir, PrecompiledPreamble, Verbose, DryRun
+        BinDir, PrecompiledPreamble, StdLib, Verbose, DryRun
     )
     .addKVArgEqIfNotEmpty("-cppl-include-preamble", PrecompiledPreamble)
     .addKVArgsEq("-cppl-include-dependency", Deps)
@@ -820,6 +831,7 @@ public:
       StringRef BinDir,
       StringRef PreambleSource,
       StringRef PCHOutput,
+      StringRef StdLib,
       const LevitationDriver::Args &ExtraPreambleArgs,
       bool Verbose,
       bool DryRun
@@ -832,7 +844,7 @@ public:
     levitation::Path::createDirsForFile(PCHOutput);
 
     auto ExecutionStatus = CommandInfo::getBuildPreamble(
-        BinDir, Verbose, DryRun
+        BinDir, StdLib, Verbose, DryRun
     )
     .addArg(PreambleSource)
     .addKVArgSpace("-o", PCHOutput)
@@ -846,10 +858,11 @@ public:
       StringRef BinDir,
       StringRef OutputFile,
       const Paths &ObjectFiles,
+      StringRef StdLib,
       const LevitationDriver::Args &ExtraArgs,
       bool Verbose,
       bool DryRun,
-      bool UseLibStdCpp
+      bool CanUseLibStdCpp
   ) {
     assert(OutputFile.size() && ObjectFiles.size());
 
@@ -859,7 +872,7 @@ public:
     levitation::Path::createDirsForFile(OutputFile);
 
     auto ExecutionStatus = CommandInfo::getLink(
-        BinDir, Verbose, DryRun, UseLibStdCpp
+        BinDir, StdLib, Verbose, DryRun, CanUseLibStdCpp
     )
     .addArgs(ExtraArgs)
     .addArgs(ObjectFiles)
@@ -1051,6 +1064,7 @@ void LevitationDriverImpl::buildPreamble() {
     Context.Driver.BinDir,
     Context.Driver.PreambleSource,
     Context.Driver.PreambleOutput,
+    Context.Driver.StdLib,
     Context.Driver.ExtraPreambleArgs,
     Context.Driver.Verbose,
     Context.Driver.DryRun
@@ -1061,6 +1075,7 @@ void LevitationDriverImpl::buildPreamble() {
     << "Preamble: phase failed";
 }
 
+// TODO Levitation: deprecated
 void LevitationDriverImpl::runParse() {
   auto &TM = TasksManager::get();
 
@@ -1138,6 +1153,7 @@ void LevitationDriverImpl::solveDependencies() {
   Status.inheritResult(Solver, "Dependencies solver: ");
 }
 
+// TODO Levitation: deprecated
 void LevitationDriverImpl::instantiateAndCodeGen() {
   if (!Status.isValid())
     return;
@@ -1186,10 +1202,11 @@ void LevitationDriverImpl::runLinker() {
       Context.Driver.BinDir,
       Context.Driver.Output,
       ObjectFiles,
+      Context.Driver.StdLib,
       Context.Driver.ExtraLinkerArgs,
       Context.Driver.Verbose,
       Context.Driver.DryRun,
-      Context.Driver.UseLibStdCppForLinker
+      Context.Driver.CanUseLibStdCppForLinker
   );
 
   if (!Res)
@@ -1231,11 +1248,6 @@ void LevitationDriverImpl::collectSources() {
         Context.Driver.BuildRoot,
         PackagePath,
         FileExtensions::ParsedDependencies
-    );
-    Files.AST = Path::getPath<SinglePath>(
-        Context.Driver.BuildRoot,
-        PackagePath,
-        FileExtensions::ParsedAST
     );
     Files.DeclAST = Path::getPath<SinglePath>(
         Context.Driver.BuildRoot,
@@ -1305,6 +1317,7 @@ bool LevitationDriverImpl::processDependencyNode(
           Files.DeclAST,
           Files.Source,
           fullDependencies,
+          Context.Driver.StdLib,
           Context.Driver.ExtraParseArgs,
           Context.Driver.Verbose,
           Context.Driver.DryRun
@@ -1317,6 +1330,7 @@ bool LevitationDriverImpl::processDependencyNode(
         Files.Object,
         Files.Source,
         fullDependencies,
+        Context.Driver.StdLib,
         Context.Driver.ExtraParseArgs,
         Context.Driver.ExtraCodeGenArgs,
         Context.Driver.Verbose,
@@ -1329,6 +1343,7 @@ bool LevitationDriverImpl::processDependencyNode(
   }
 }
 
+// TODO Levitation: Deprecated
 bool LevitationDriverImpl::processDependencyNodeDeprecated(
     const DependenciesGraph::Node &N
 ) {
