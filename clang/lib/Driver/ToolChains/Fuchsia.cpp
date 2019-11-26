@@ -52,7 +52,7 @@ void fuchsia::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-z");
     CmdArgs.push_back("rodynamic");
     CmdArgs.push_back("-z");
-    CmdArgs.push_back("separate-code");
+    CmdArgs.push_back("separate-loadable-segments");
   }
 
   if (!D.SysRoot.empty())
@@ -224,7 +224,7 @@ Fuchsia::Fuchsia(const Driver &D, const llvm::Triple &Triple,
 std::string Fuchsia::ComputeEffectiveClangTriple(const ArgList &Args,
                                                  types::ID InputType) const {
   llvm::Triple Triple(ComputeLLVMTriple(Args, InputType));
-  return (Triple.getArchName() + "-" + Triple.getOSName()).str();
+  return Triple.str();
 }
 
 Tool *Fuchsia::buildLinker() const {
@@ -343,5 +343,18 @@ SanitizerMask Fuchsia::getSupportedSanitizers() const {
 }
 
 SanitizerMask Fuchsia::getDefaultSanitizers() const {
-  return SanitizerKind::SafeStack;
+  SanitizerMask Res;
+  switch (getTriple().getArch()) {
+  case llvm::Triple::aarch64:
+    Res |= SanitizerKind::ShadowCallStack;
+    break;
+  case llvm::Triple::x86_64:
+    Res |= SanitizerKind::SafeStack;
+    break;
+  case llvm::Triple::riscv64:
+    break;
+  default:
+    llvm_unreachable("invalid architecture");
+  }
+  return Res;
 }
