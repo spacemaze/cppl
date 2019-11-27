@@ -8904,7 +8904,8 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
             LangOptions::LBSK_BuildDeclAST
         ) &&
         !NewFD->isInlineSpecified() &&
-        !NewFD->isTemplated();
+        !NewFD->isTemplated() &&
+        getSourceManager().isInMainFile(NewFD->getLocation());
 
     if (isa<CXXMethodDecl>(NewFD) && DC == CurContext &&
         D.isFunctionDefinition() &&
