@@ -1,0 +1,7 @@
+#import Inputs::A
+
+#include "Inputs/Header.h"
+
+int main() {
+  return 0;
+}
