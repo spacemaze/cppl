@@ -972,8 +972,11 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
         const auto &LangOpts = Reader.getContext().getLangOpts();
 
         bool MergingEnabled =
-                LangOpts.Modules ||
-                LangOpts.isLevitationMode(LangOptions::LBSK_BuildObjectFile);
+            LangOpts.Modules ||
+            LangOpts.isLevitationMode(
+                LangOptions::LBSK_BuildObjectFile,
+                LangOptions::LBSK_BuildDeclAST
+            );
 
         assert(MergingEnabled &&
                "already deserialized this template specialization");

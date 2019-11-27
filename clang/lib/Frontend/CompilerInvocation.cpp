@@ -3593,14 +3593,12 @@ static void parseLevitationBuildObjectArgs(
             << "-flevitation-build-decl" << Stage;
   }
 
-  if (FrontendOpts.LevitationBuildDeclaration)
-    // Note there was some mess with inline functions not being emitted
-    // by codegen (even prototypes) when this thing is enabled.
-    // Ensure you have a proper unit-test.
-    FrontendOpts.SkipFunctionBodies = 1;
-
   LangOpts.LevitationMode = 1;
-  LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildObjectFile);
+  if (FrontendOpts.LevitationBuildDeclaration) {
+    FrontendOpts.SkipFunctionBodies = 1;
+    LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildDeclAST);
+  } else
+    LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildObjectFile);
 }
 
 bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,

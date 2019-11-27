@@ -8899,7 +8899,10 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     bool LevitationCancelInline =
         // Deprecated: auto dep resolution feature is no longer supported
         // getLangOpts().isLevitationMode(LangOptions::LBSK_BuildAST)
-        getLangOpts().isLevitationMode(LangOptions::LBSK_BuildObjectFile) &&
+        getLangOpts().isLevitationMode(
+            LangOptions::LBSK_BuildObjectFile,
+            LangOptions::LBSK_BuildDeclAST
+        ) &&
         !NewFD->isInlineSpecified() &&
         !NewFD->isTemplated();
 

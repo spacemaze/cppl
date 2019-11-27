@@ -77,6 +77,8 @@ bool Sema::levitationMayBeSkipVarDefinition(
     bool IsVariableTemplate,
     clang::StorageClass SC) const {
 
+  // FIXME Levitation: check for SkipFunctionBodies flag.
+
   if (!CurContext->isFileContext())
     return false;
 

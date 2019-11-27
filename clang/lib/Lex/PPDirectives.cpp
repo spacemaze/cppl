@@ -2275,7 +2275,7 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
   //  on later stages start parsing straight from that offset.
   //
   // Ignore #import directive if we are at later stages.
-  if (LangOpts.isLevitationMode(LangOptions::LBSK_BuildObjectFile)) {
+  if (!LangOpts.isLevitationMode(LangOptions::LBSK_ParseManualDeps)) {
     DiscardUntilEndOfDirective();
     return;
   }
@@ -2448,10 +2448,7 @@ void Preprocessor::HandleImportDirective(SourceLocation HashLoc,
   if (!LangOpts.ObjC) {  // #import is standard for ObjC.
     if (LangOpts.MSVCCompat)
       return HandleMicrosoftImportDirective(ImportTok);
-    if (LangOpts.isLevitationMode(
-          LangOptions::LBSK_ParseManualDeps,
-          LangOptions::LBSK_BuildObjectFile
-    ))
+    if (LangOpts.LevitationMode)
       return HandleLevitationImportDirective(HashLoc, ImportTok);
     Diag(ImportTok, diag::ext_pp_import_directive);
   }

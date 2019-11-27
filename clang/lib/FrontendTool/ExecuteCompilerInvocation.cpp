@@ -181,7 +181,10 @@ CreateFrontendAction(CompilerInstance &CI) {
     Act = std::make_unique<ASTMergeAction>(std::move(Act),
                                             FEOpts.ASTMergeFiles);
 
-  if (CI.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile) {
+  if (CI.getLangOpts().isLevitationMode(
+        LangOptions::LBSK_BuildObjectFile,
+        LangOptions::LBSK_BuildDeclAST
+  )) {
     Act = std::make_unique<LevitationBuildObjectAction>(
         std::move(Act),
         FEOpts.LevitationPreambleFileName,

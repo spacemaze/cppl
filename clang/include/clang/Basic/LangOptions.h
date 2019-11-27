@@ -92,6 +92,7 @@ public:
       LBSK_None,
       LBSK_BuildPreamble,
       LBSK_BuildObjectFile,
+      LBSK_BuildDeclAST,
       LBSK_ParseManualDeps
   };
 
