@@ -130,7 +130,8 @@ int levitation_driver_main(int argc, char **argv) {
           .description(
               "Currently we hardcoded use of libstdc++. "
               "llvm-lit though conflicts with this lib under darwin "
-              "when calling linker. This option indicates that we "
+              "when calling linker, for llvm-lit exports SDKROOT variable. "
+              "This option indicates that we "
               "run driver from lit, and thus shouldn't pass -stdlib=libstdc++ "
               "during linker stage."
           )
