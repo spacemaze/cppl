@@ -47,8 +47,13 @@ class SolvedDependenciesInfo : public Failable {
 
 public:
   using RangedDependenciesMap = std::map<size_t, NodeID::Type>;
+  struct NodeStackInfo {
+    size_t StackSize;
+    RangedDependenciesMap FullDependencies;
+  };
+
   using FullDepsMapTy =
-      llvm::DenseMap<NodeID::Type, RangedDependenciesMap>;
+      llvm::DenseMap<NodeID::Type, NodeStackInfo>;
 
   using OnDiagCyclesFoundFn = std::function<void(
       const RangedDependenciesMap &, NodeID::Type
@@ -93,7 +98,7 @@ private:
       PathTy& CycleCandidate
   ) {
 
-#if 0
+#if 1
     static auto &Strings = CreatableSingleton<DependenciesStringsPool>::get();
     static auto &Trace = log::Logger::get().verbose();
 
@@ -114,13 +119,12 @@ private:
     with (auto _ = on_exit([&] { CycleCandidate.erase(N.ID); }))
     {
       // Don't go through already visited nodes.
-      auto InsRes = FullDepsMap.insert({N.ID, RangedDependenciesMap()});
+      auto InsRes = FullDepsMap.insert({N.ID, NodeStackInfo()});
       if (!InsRes.second)
         return;
 
       // Go over all dependency nodes and do DFS.
 
-      auto &FullDeps = InsRes.first->second;
       size_t NextDistFromTerm = DistFromTerm + 1;
 
       for (auto InNID : N.Dependencies) {
@@ -128,23 +132,36 @@ private:
 
         dfsSolve(G, InN, NextDistFromTerm, StackSize, CycleCandidate);
 
-        auto InNFullDepsIt = FullDepsMap.find(InNID);
-        if (InNFullDepsIt != FullDepsMap.end()) {
-          const auto &InNFullDeps = InNFullDepsIt->second;
-          for (auto InDepkv : InNFullDeps)
-            FullDeps.insert(InDepkv);
+        assert(
+          FullDepsMap.count(InNID) &&
+          "Info for all in Nodes should be added it deeper recursive calls"
+        );
+
+        // As long as we're working with DenseMap, its contents invalidated
+        // after each insertion, and thus if we would obtain NodeInfo->FullDeps before loop
+        // with dfs calls we couldn't rely on its contents all the way.
+        auto &FullDeps = FullDepsMap[N.ID].FullDependencies;
+
+        const auto &InNodeInfo = FullDepsMap[InNID];
+        const auto &InNodeFullDeps = InNodeInfo.FullDependencies;
+        for (const auto &InDepkv : InNodeFullDeps) {
+          FullDeps.insert(InDepkv);
+#if 1
+          Trace.indent(DistFromTerm) << " copy chain item { " << InDepkv.first << " : ";
+          G.dumpNodeShort(Trace, InDepkv.second, Strings);
+          Trace.indent(DistFromTerm) << " }\n";
+#endif
         }
-        FullDeps.insert({StackSize, InNID});
+#if 1
+        Trace.indent(DistFromTerm) << " insert { " << InNodeInfo.StackSize << " : ";
+        G.dumpNodeShort(Trace, InNID, Strings);
+        Trace.indent(DistFromTerm) << " }\n";
+#endif
+        FullDeps.insert({InNodeInfo.StackSize, InNID});
       }
 
-      // At this point we supposed to put current node into stack.
-      // But we don't need stack itself, we just need current stack size.
-      // Note we can't use FullDepsMap.size(), because it is increased before
-      // recursive call. For example for sequence A->B->C, we start calls from C:
-      // when we go down to A, StackSize will remain 0, whilst
-      // FullDepsMap.size() will be 3.
-      ++StackSize;
-#if 0
+      FullDepsMap[N.ID].StackSize = StackSize++;
+#if 1
       Trace.indent(DistFromTerm) << "Stack size " << StackSize << "\n";
 #endif
     }
@@ -249,7 +266,7 @@ public:
     if (Found == FullDepsMap.end())
       return EmptyMap;
 
-    return Found->second;
+    return Found->second.FullDependencies;
   }
 
   void dump(

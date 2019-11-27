@@ -407,7 +407,7 @@ public:
       );
 
       DependenciesPaths FullDependencies = buildFullDependencies(
-          ParentDir, Strings, DGraph, NodeIt.second
+          ParentDir, Strings, DGraph, NodeIt.second.FullDependencies
       );
 
       auto DependentFilePath = getNodeFilePath(
