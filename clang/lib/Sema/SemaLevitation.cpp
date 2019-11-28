@@ -93,8 +93,13 @@ bool Sema::levitationMayBeSkipVarDefinition(
   // defined without "static" keyword.
   // But preserve initialization for global vars defined with static.
   bool SkipInit = IsStaticMember ?
+
       !IsVariableTemplate && !DC->isDependentContext() :
-      IsFileVar && !IsVariableTemplate && SC != StorageClass ::SC_Static;
+
+      IsFileVar &&
+      !IsVariableTemplate &&
+      SC != StorageClass::SC_Static &&
+      SC != StorageClass::SC_Extern;
 
   return SkipInit;
 }
