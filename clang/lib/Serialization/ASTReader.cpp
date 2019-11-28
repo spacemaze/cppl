@@ -2175,7 +2175,12 @@ void ASTReader::resolvePendingMacro(IdentifierInfo *II,
 
   // Don't read the directive history for a module; we don't have anywhere
   // to put it.
-  if (M.isModule())
+  // FIXME Levitation: remove M.isLevitationModule()
+  //  currently it prevents clang from assertion during
+  //  Preprocessor::setLoadedMacroDirective
+  //  But we need to load defines in general in order to
+  //  support #include in levitation modules.
+  if (M.isModule() || M.isLevitationModule())
     return;
 
   // Deserialize the macro directives history in reverse source-order.
@@ -8644,7 +8649,7 @@ IdentifierInfo *ASTReader::get(StringRef Name) {
     for (auto F : ModuleMgr.pch_modules())
       if (Visitor(*F))
         break;
-
+#if 0
     // C++ Levitation
 
     // In Levitation mode we do load macros from .decl-ast and preamble files.
@@ -8660,6 +8665,7 @@ IdentifierInfo *ASTReader::get(StringRef Name) {
     }
 
     // end of C++ Levitation
+#endif
 
   } else {
     // If there is a global index, look there first to determine which modules
