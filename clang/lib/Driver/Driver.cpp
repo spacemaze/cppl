@@ -3668,7 +3668,7 @@ Action *Driver::ConstructPhaseAction(
     // C++ Levitation
 
     if (Args.hasArg(options::OPT_cppl_preamble))
-      return C.MakeAction<CompileJobAction>(Input, types::TY_PCH);
+      return C.MakeAction<PrecompileJobAction>(Input, types::TY_PCH);
 
     // end of C++ Levitation
 
