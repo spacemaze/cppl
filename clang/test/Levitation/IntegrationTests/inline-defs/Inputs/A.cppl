@@ -6,6 +6,7 @@
 // CHECK: static int andThisInitKeepToo = 777777;
 // CHECK-NOT: staticField = 123;
 // CHECK: staticField = 234;
+// CHECK: keepExtern
 
 // Some notes here, why we keep init parts?
 // Because it can't go to definition part, and mergable just fine. So keep it.
@@ -33,4 +34,5 @@ namespace Inputs {
 
   template<typename T>
   int AA<T>::staticField = 234;
+  extern int keepExtern;
 }
