@@ -2175,10 +2175,7 @@ void ASTReader::resolvePendingMacro(IdentifierInfo *II,
 
   // Don't read the directive history for a module; we don't have anywhere
   // to put it.
-  // C++ Levitation extension:
-  // also skip it if we're reading C++ Levitation Dependency.
-  bool SkipDirectiveHistory = M.isModule() || M.isLevitationDependency();
-  if (SkipDirectiveHistory)
+  if (M.isModule())
     return;
 
   // Deserialize the macro directives history in reverse source-order.
@@ -8647,6 +8644,23 @@ IdentifierInfo *ASTReader::get(StringRef Name) {
     for (auto F : ModuleMgr.pch_modules())
       if (Visitor(*F))
         break;
+
+    // C++ Levitation
+
+    // In Levitation mode we do load macros from .decl-ast and preamble files.
+    // We especially need this in order to read header guards for proper #include
+    // behaviour.
+    if (PP.getLangOpts().isLevitationMode(
+      LangOptions::LBSK_BuildDeclAST,
+      LangOptions::LBSK_BuildObjectFile
+    )) {
+      for (auto F : ModuleMgr.LevitationModules)
+        if (Visitor(*F))
+          break;
+    }
+
+    // end of C++ Levitation
+
   } else {
     // If there is a global index, look there first to determine which modules
     // provably do not have any results for this identifier.
