@@ -2478,7 +2478,14 @@ static bool shouldIgnoreMacro(MacroDirective *MD, bool IsModule,
     if (MI->isBuiltinMacro())
       return true;
 
-  if (IsModule) {
+  // C++ Levitation
+  // Legacy check:
+  // - if (IsModule) {
+  // + if (IsModule || PP.getLangOpts().LevitationMode) {
+  // In levitation mode we never write predefined directives into precompiled
+  // files.
+  //
+  if (IsModule || PP.getLangOpts().LevitationMode) {
     SourceLocation Loc = MD->getLocation();
     if (Loc.isInvalid())
       return true;
