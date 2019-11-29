@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file defines C++ Levitation DependenciesSolver tool main file.
+//  This file defines C++ Levitation Driver tool main file.
 //
 //===----------------------------------------------------------------------===//
 
