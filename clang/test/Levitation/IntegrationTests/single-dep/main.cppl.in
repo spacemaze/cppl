@@ -1,0 +1,13 @@
+#import Inputs::A
+
+int main() {
+  with (
+    auto TestScope = levitation::Test::context()
+        .expect(787)
+    .open()
+  ) {
+    levitation::Test::context()
+        << Inputs::A::foo();
+  }
+  return levitation::Test::result();
+}

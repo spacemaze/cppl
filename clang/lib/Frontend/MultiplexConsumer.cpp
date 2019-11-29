@@ -109,10 +109,6 @@ public:
   void RedefinedHiddenDefinition(const NamedDecl *D, Module *M) override;
   void AddedAttributeToRecord(const Attr *Attr,
                               const RecordDecl *Record) override;
-  void AddedLevitationPackageInstantiation(
-      NamedDecl *PackageDependent,
-      NamedDecl *Instantiated
-  ) override;
 
 private:
   std::vector<ASTMutationListener*> Listeners;
@@ -234,13 +230,6 @@ void MultiplexASTMutationListener::AddedAttributeToRecord(
                                                     const RecordDecl *Record) {
   for (auto *L : Listeners)
     L->AddedAttributeToRecord(Attr, Record);
-}
-
-void MultiplexASTMutationListener::AddedLevitationPackageInstantiation(
-    NamedDecl *PackageDependent,
-    NamedDecl *Instantiated) {
-  for (auto *L : Listeners)
-    L->AddedLevitationPackageInstantiation(PackageDependent, Instantiated);
 }
 
 }  // end namespace clang

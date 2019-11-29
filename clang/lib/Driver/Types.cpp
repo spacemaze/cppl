@@ -212,6 +212,16 @@ bool types::isHIP(ID Id) {
   }
 }
 
+bool types::isFortran(ID Id) {
+  switch (Id) {
+  default:
+    return false;
+
+  case TY_Fortran: case TY_PP_Fortran:
+    return true;
+  }
+}
+
 bool types::isSrcFile(ID Id) {
   return Id != TY_Object && getPreprocessedType(Id) != TY_INVALID;
 }
@@ -273,6 +283,7 @@ types::ID types::lookupTypeForExtension(llvm::StringRef Ext) {
            .Case("lib", TY_Object)
            .Case("mii", TY_PP_ObjCXX)
            .Case("obj", TY_Object)
+           .Case("ifs", TY_IFS)
            .Case("pch", TY_PCH)
            .Case("pcm", TY_ModuleFile)
            .Case("c++m", TY_CXXModule)
@@ -331,15 +342,13 @@ void types::getCompilationPhases(const clang::driver::Driver &Driver,
            DAL.getLastArg(options::OPT_rewrite_objc) ||
            DAL.getLastArg(options::OPT_rewrite_legacy_objc) ||
            DAL.getLastArg(options::OPT__migrate) ||
-           DAL.getLastArg(options::OPT_emit_iterface_stubs) ||
-           DAL.getLastArg(options::OPT__analyze, options::OPT__analyze_auto) ||
+           DAL.getLastArg(options::OPT__analyze) ||
 
            // C++ Levitation
 
-           DAL.getLastArg(options::OPT_cppl_parse) ||
            DAL.getLastArg(options::OPT_cppl_preamble) ||
-           DAL.getLastArg(options::OPT_cppl_inst_decl) ||
-           DAL.getLastArg(options::OPT_cppl_compile) ||
+           DAL.getLastArg(options::OPT_cppl_import) ||
+           DAL.getLastArg(options::OPT_cppl_decl) ||
 
            // end of C++ Levitation
 
@@ -352,7 +361,11 @@ void types::getCompilationPhases(const clang::driver::Driver &Driver,
     llvm::copy_if(PhaseList, std::back_inserter(P),
                   [](phases::ID Phase) { return Phase <= phases::Backend; });
 
-  else if (DAL.getLastArg(options::OPT_c))
+  else if (DAL.getLastArg(options::OPT_c) ||
+           // C++ Levitation
+           DAL.getLastArg(options::OPT_cppl_obj)
+           // end of C++ Levitation
+  )
     llvm::copy_if(PhaseList, std::back_inserter(P),
                   [](phases::ID Phase) { return Phase <= phases::Assemble; });
 

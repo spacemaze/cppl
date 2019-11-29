@@ -22,14 +22,12 @@ class TranslationUnitDecl;
 
 // FIXME Levitation: move into levitation namespace
 // FIXME Levitation: move into Levitation directory
-class LevitationBuildASTAction : public GeneratePCHAction {
+class LevitationParseImportAction : public GeneratePCHAction {
 public:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(
       CompilerInstance &CI,
       StringRef InFile
   ) override;
-
-    bool BeginInvocation(CompilerInstance &CI) override;
 };
 
 class LevitationBuildPreambleAction : public GeneratePCHAction {

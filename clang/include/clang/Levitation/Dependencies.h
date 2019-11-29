@@ -38,13 +38,6 @@ namespace levitation {
   typedef SmallVector<StringRef, 16> DependencyComponentsVector;
   typedef SmallString<256> DependencyPath;
 
-  /// Stores information about dependency user
-  struct PackageDependencyUse {
-      const NamedDecl *DependentNamedDecl;
-      SourceRange Location;
-  };
-  typedef SmallVector<PackageDependencyUse, 8> DependencyUsesVector;
-
   class PackageDependencyBuilder;
 
   /// Describes particular dependency used
@@ -52,8 +45,8 @@ namespace levitation {
   class PackageDependency {
   protected:
 
-    /// Describes places where this dependency is used.
-    DependencyUsesVector Uses;
+    /// Location of #import directive
+    SourceRange ImportLocation;
 
     /// Dependency components. E.g. for global::A::B
     /// components vector will store {A, B}
@@ -73,36 +66,13 @@ namespace levitation {
     : Components(components) {}
 
     PackageDependency(PackageDependency &&dying)
-    : Uses(std::move(dying.Uses)),
+    : ImportLocation(dying.ImportLocation),
       Components(std::move(dying.Components)),
       Path(std::move(dying.Path)) {}
 
-    void addUse(const NamedDecl *ND, const SourceRange& Loc) {
-      Uses.push_back({ND, Loc});
-    }
+    void setImportLoc(const SourceRange &Loc) { ImportLocation = Loc; }
 
-    void addUse(const PackageDependencyUse &Use) {
-      Uses.push_back(Use);
-    }
-
-    void addUses(const DependencyUsesVector& src) {
-      Uses.append(src.begin(), src.end());
-    }
-
-    const DependencyUsesVector &getUses() const {
-      return Uses;
-    }
-
-    const PackageDependencyUse& getFirstUse() const {
-      assert (Uses.size() && "Uses collection expected to have at least one use");
-      return Uses.front();
-    }
-
-    const PackageDependencyUse& getSingleUse() const {
-      if (Uses.size() == 1)
-        return getFirstUse();
-      llvm_unreachable("Uses contains more that one use.");
-    }
+    const SourceRange &getImportLoc() const { return ImportLocation; }
 
     DependencyComponentsArrRef getComponents() const {
       return Components;
@@ -126,8 +96,8 @@ namespace levitation {
       Dependency.Components.push_back(Component);
     }
 
-    void addUse(const NamedDecl *ND, const SourceRange& Loc) {
-      Dependency.addUse(ND, Loc);
+    void setImportLoc(const SourceRange &Loc) {
+      Dependency.setImportLoc(Loc);
     }
 
     PackageDependency& getDependency() {
@@ -151,6 +121,7 @@ namespace levitation {
           DependencyComponentsArrRef, PackageDependency> {
   public:
       // Note: we rely on implicitly defined move constructor here.
+      // FIXME Levitation: we don't need it for manual import.
       void mergeDependency(PackageDependency &&Dep);
   };
 

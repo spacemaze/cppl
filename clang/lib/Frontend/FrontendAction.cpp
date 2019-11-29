@@ -10,6 +10,7 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclGroup.h"
+#include "clang/Basic/Builtins.h"
 #include "clang/Basic/LangStandard.h"
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -33,7 +34,6 @@
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
 #include <system_error>
-
 using namespace clang;
 
 LLVM_INSTANTIATE_REGISTRY(FrontendPluginRegistry)
@@ -546,14 +546,6 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   bool HasBegunSourceFile = false;
   bool ReplayASTFile = Input.getKind().getFormat() == InputKind::Precompiled &&
                        usesPreprocessorOnly();
-
-  // TODO Levitation: once you get solid with this solution
-  //   move and strip whole BeginSourceFile implementation
-  //   into LevitationBuildObjectAction.
-  bool SkipSourceManagerInitialization =
-      CI.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile &&
-      Input.getKind().getFormat() == InputKind::Precompiled;
-
   if (!BeginInvocation(CI))
     goto failure;
 
@@ -627,12 +619,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
   // AST files follow a very different path, since they share objects via the
   // AST unit.
-  if (Input.getKind().getFormat() == InputKind::Precompiled &&
-  // TODO Levitation: once you get solid with this solution
-  //   move and strip whole BeginSourceFile implementation
-  //   into LevitationBuildObjectAction.
-      CI.getLangOpts().getLevitationBuildStage() != LangOptions::LBSK_BuildObjectFile
-  ) {
+  if (Input.getKind().getFormat() == InputKind::Precompiled) {
     assert(!usesPreprocessorOnly() && "this case was handled above");
     assert(hasASTFileSupport() &&
            "This action does not have AST file support!");
@@ -762,11 +749,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   HasBegunSourceFile = true;
 
   // Initialize the main file entry.
-  if (
-    // FIXME Levitation: git rid of this, by introducing own BeginSourceFile impl.
-    !SkipSourceManagerInitialization &&
-    !CI.InitializeSourceManager(Input)
-  )
+  if (!CI.InitializeSourceManager(Input))
     goto failure;
 
   // For module map files, we first parse the module map and synthesize a
@@ -888,9 +871,9 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
       // extended by an external source.
       if (CI.getLangOpts().Modules || !CI.hasASTContext() ||
           !CI.getASTContext().getExternalSource()) {
-        CI.createModuleManager();
-        CI.getModuleManager()->setDeserializationListener(DeserialListener,
-                                                        DeleteDeserialListener);
+        CI.createASTReader();
+        CI.getASTReader()->setDeserializationListener(DeserialListener,
+                                                      DeleteDeserialListener);
       }
     }
 
@@ -909,7 +892,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   } else {
     // FIXME: If this is a problem, recover from it by creating a multiplex
     // source.
-    assert((!CI.getLangOpts().Modules || CI.getModuleManager()) &&
+    assert((!CI.getLangOpts().Modules || CI.getASTReader()) &&
            "modules enabled but created an external source that "
            "doesn't support modules");
   }

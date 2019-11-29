@@ -54,8 +54,8 @@ int levitation_driver_main(int argc, char **argv) {
       .description(
           "Is a C++ Levitation Compiler. Depending on mode it's "
           "ran in, it can go through preamble compilation, "
-          "initial parsing, dependencies solving, instantiation "
-          "and code generation, and finally linker stages."
+          "initial parsing, dependencies solving, "
+          "code generation, and finally linker stages."
       )
       .registerParser<KeySpaceValueParser>()
       .registerParser<KeyValueInOneWordParser>()
@@ -70,11 +70,6 @@ int levitation_driver_main(int argc, char **argv) {
           [&](StringRef v) { Driver.setBuildRoot(v); }
       )
       .optional(
-          "-main", "<path>",
-          "Main source file.",
-          [&](StringRef v) { Driver.setMainSource(v); }
-      )
-      .optional(
           "-preamble", "<path>",
           "Path to preamble. If specified, then preamble compilation stage "
           "will be enabled.",
@@ -85,6 +80,11 @@ int levitation_driver_main(int argc, char **argv) {
           "Path to header file to be generated. If specified, then header "
           "generation stage will be added to the compilation pipeline.",
           [&](StringRef v) { Driver.setOutputHeader(v); }
+      )
+      .optional(
+          "-stdlib", "<std lib name>",
+          "Name of standard library, usually 'libc++' or 'stdlibc++'.",
+          [&](StringRef v) { Driver.setStdLib(v); }
       )
       .optional()
           .name("-j")
@@ -130,7 +130,8 @@ int levitation_driver_main(int argc, char **argv) {
           .description(
               "Currently we hardcoded use of libstdc++. "
               "llvm-lit though conflicts with this lib under darwin "
-              "when calling linker. This option indicates that we "
+              "when calling linker, for llvm-lit exports SDKROOT variable. "
+              "This option indicates that we "
               "run driver from lit, and thus shouldn't pass -stdlib=libstdc++ "
               "during linker stage."
           )

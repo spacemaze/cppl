@@ -1,0 +1,8 @@
+namespace Inputs {
+  class Root {
+  public:
+    static void f() {
+      levitation::Test::context() << "Inputs::Root::f()";
+    }
+  };
+}

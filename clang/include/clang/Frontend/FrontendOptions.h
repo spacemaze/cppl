@@ -95,10 +95,11 @@ enum ActionKind {
   /// Only execute frontend initialization.
   InitOnly,
 
-  /// Levitation mode: Build AST action.
-  /// * Parses source code
-  /// * creates package dependent declaration and definition AST files.
-  LevitationBuildAST,
+  /// Levitation mode: Parse #import directives
+  /// It is almost preprocessor only action, except that
+  /// it still have to initialize Sema and fullfill it with
+  /// parsed dependencies.
+  LevitationParseImport,
 
   /// Levitation mode: Build Preamble AST action.
   /// * Parses source code
@@ -376,7 +377,7 @@ public:
   std::string ARCMTMigrateReportOut;
 
   /// The input files and their types.
-  std::vector<FrontendInputFile> Inputs;
+  SmallVector<FrontendInputFile, 0> Inputs;
 
   /// When the input is a module map, the original module map file from which
   /// that map was inferred, if any (for umbrella modules).

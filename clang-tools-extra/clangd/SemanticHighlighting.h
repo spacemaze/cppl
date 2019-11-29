@@ -17,11 +17,12 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_SEMANTICHIGHLIGHTING_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_SEMANTICHIGHLIGHTING_H
 
-#include "ClangdUnit.h"
 #include "Protocol.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace clang {
 namespace clangd {
+class ParsedAST;
 
 enum class HighlightingKind {
   Variable = 0,
@@ -29,16 +30,27 @@ enum class HighlightingKind {
   Parameter,
   Function,
   Method,
+  StaticMethod,
   Field,
+  StaticField,
   Class,
   Enum,
   EnumConstant,
+  Typedef,
+  DependentType,
+  DependentName,
   Namespace,
   TemplateParameter,
   Primitive,
+  Macro,
 
-  NumKinds,
+  // This one is different from the other kinds as it's a line style
+  // rather than a token style.
+  InactiveCode,
+
+  LastKind = InactiveCode
 };
+llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, HighlightingKind K);
 
 // Contains all information needed for the highlighting a token.
 struct HighlightingToken {
@@ -53,6 +65,7 @@ bool operator<(const HighlightingToken &L, const HighlightingToken &R);
 struct LineHighlightings {
   int Line;
   std::vector<HighlightingToken> Tokens;
+  bool IsInactive;
 };
 
 bool operator==(const LineHighlightings &L, const LineHighlightings &R);

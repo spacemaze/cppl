@@ -44,7 +44,7 @@ export interface SemanticHighlightingLine {
 
 // Language server push notification providing the semantic highlighting
 // information for a text document.
-export const NotificationType =
+const NotificationType =
     new vscodelc.NotificationType<SemanticHighlightingParams, void>(
         'textDocument/semanticHighlighting');
 
@@ -56,6 +56,21 @@ export class SemanticHighlightingFeature implements vscodelc.StaticFeature {
   scopeLookupTable: string[][];
   // The object that applies the highlightings clangd sends.
   highlighter: Highlighter;
+  // Any disposables that should be cleaned up when clangd crashes.
+  private subscriptions: vscode.Disposable[] = [];
+  constructor(client: vscodelc.BaseLanguageClient,
+              context: vscode.ExtensionContext) {
+    context.subscriptions.push(client.onDidChangeState(({newState}) => {
+      if (newState == vscodelc.State.Running) {
+        // Register handler for semantic highlighting notification.
+        client.onNotification(NotificationType,
+                              this.handleNotification.bind(this));
+      } else if (newState == vscodelc.State.Stopped) {
+        // Dispose resources when clangd crashes.
+        this.dispose();
+      }
+    }));
+  }
   fillClientCapabilities(capabilities: vscodelc.ClientCapabilities) {
     // Extend the ClientCapabilities type and add semantic highlighting
     // capability to the object.
@@ -88,20 +103,33 @@ export class SemanticHighlightingFeature implements vscodelc.StaticFeature {
     // otherwise it could try to update the themeRuleMatcher without the
     // highlighter being created.
     this.highlighter = new Highlighter(this.scopeLookupTable);
+    this.subscriptions.push(vscode.Disposable.from(this.highlighter));
+    // Adds a listener to reload the theme when it changes.
+    this.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration((conf) => {
+          if (!conf.affectsConfiguration('workbench.colorTheme'))
+            return;
+          this.loadCurrentTheme();
+        }));
     this.loadCurrentTheme();
     // Event handling for handling with TextDocuments/Editors lifetimes.
-    vscode.window.onDidChangeVisibleTextEditors(
-        (editors: vscode.TextEditor[]) =>
-            editors.forEach((e) => this.highlighter.applyHighlights(
-                                e.document.uri.toString())));
-    vscode.workspace.onDidCloseTextDocument(
-        (doc) => this.highlighter.removeFileHighlightings(doc.uri.toString()));
+    this.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(
+        (editors: vscode.TextEditor[]) => editors.forEach(
+            (e) => this.highlighter.applyHighlights(e.document.uri))));
+    this.subscriptions.push(vscode.workspace.onDidCloseTextDocument(
+        (doc) => this.highlighter.removeFileHighlightings(doc.uri)));
   }
 
   handleNotification(params: SemanticHighlightingParams) {
     const lines: SemanticHighlightingLine[] = params.lines.map(
         (line) => ({line : line.line, tokens : decodeTokens(line.tokens)}));
-    this.highlighter.highlight(params.textDocument.uri, lines);
+    this.highlighter.highlight(vscode.Uri.parse(params.textDocument.uri),
+                               lines);
+  }
+  // Disposes of all disposable resources used by this object.
+  public dispose() {
+    this.subscriptions.forEach((d) => d.dispose());
+    this.subscriptions = [];
   }
 }
 
@@ -138,6 +166,13 @@ export class Highlighter {
   constructor(scopeLookupTable: string[][]) {
     this.scopeLookupTable = scopeLookupTable;
   }
+  public dispose() {
+    this.files.clear();
+    this.decorationTypes.forEach((t) => t.dispose());
+    // Dispose must not be not called multiple times if initialize is
+    // called again.
+    this.decorationTypes = [];
+  }
   // This function must be called at least once or no highlightings will be
   // done. Sets the theme that is used when highlighting. Also triggers a
   // recolorization for all current highlighters. Should be called whenever the
@@ -164,53 +199,21 @@ export class Highlighter {
   // Adds incremental highlightings to the current highlightings for the file
   // with fileUri. Also applies the highlightings to any associated
   // TextEditor(s).
-  public highlight(fileUri: string,
+  public highlight(fileUri: vscode.Uri,
                    highlightingLines: SemanticHighlightingLine[]) {
-    if (!this.files.has(fileUri)) {
-      this.files.set(fileUri, new Map());
+    const fileUriStr = fileUri.toString();
+    if (!this.files.has(fileUriStr)) {
+      this.files.set(fileUriStr, new Map());
     }
-    const fileHighlightings = this.files.get(fileUri);
+    const fileHighlightings = this.files.get(fileUriStr);
     highlightingLines.forEach((line) => fileHighlightings.set(line.line, line));
     this.applyHighlights(fileUri);
   }
 
-  // Called when a text document is closed. Removes any highlighting entries for
-  // the text document that was closed.
-  public removeFileHighlightings(fileUri: string) {
-    // If there exists no entry the call to delete just returns false.
-    this.files.delete(fileUri);
-  }
-
-  // Gets the uris as strings for the currently visible text editors.
-  protected getVisibleTextEditorUris(): string[] {
-    return vscode.window.visibleTextEditors.map((e) =>
-                                                    e.document.uri.toString());
-  }
-
-  // Returns the ranges that should be used when decorating. Index i in the
-  // range array has the decoration type at index i of this.decorationTypes.
-  protected getDecorationRanges(fileUri: string): vscode.Range[][] {
-    if (!this.files.has(fileUri))
-      // this.files should always have an entry for fileUri if we are here. But
-      // if there isn't one we don't want to crash the extension. This is also
-      // useful for tests.
-      return [];
-    const lines: SemanticHighlightingLine[] =
-        Array.from(this.files.get(fileUri).values());
-    const decorations: vscode.Range[][] = this.decorationTypes.map(() => []);
-    lines.forEach((line) => {
-      line.tokens.forEach((token) => {
-        decorations[token.scopeIndex].push(new vscode.Range(
-            new vscode.Position(line.line, token.character),
-            new vscode.Position(line.line, token.character + token.length)));
-      });
-    });
-    return decorations;
-  }
-
   // Applies all the highlightings currently stored for a file with fileUri.
-  public applyHighlights(fileUri: string) {
-    if (!this.files.has(fileUri))
+  public applyHighlights(fileUri: vscode.Uri) {
+    const fileUriStr = fileUri.toString();
+    if (!this.files.has(fileUriStr))
       // There are no highlightings for this file, must return early or will get
       // out of bounds when applying the decorations below.
       return;
@@ -223,10 +226,44 @@ export class Highlighter {
     // TextEditorDecorationType is used per scope.
     const ranges = this.getDecorationRanges(fileUri);
     vscode.window.visibleTextEditors.forEach((e) => {
-      if (e.document.uri.toString() !== fileUri)
+      if (e.document.uri.toString() !== fileUriStr)
         return;
       this.decorationTypes.forEach((d, i) => e.setDecorations(d, ranges[i]));
     });
+  }
+
+  // Called when a text document is closed. Removes any highlighting entries for
+  // the text document that was closed.
+  public removeFileHighlightings(fileUri: vscode.Uri) {
+    // If there exists no entry the call to delete just returns false.
+    this.files.delete(fileUri.toString());
+  }
+
+  // Gets the uris as strings for the currently visible text editors.
+  protected getVisibleTextEditorUris(): vscode.Uri[] {
+    return vscode.window.visibleTextEditors.map((e) => e.document.uri);
+  }
+
+  // Returns the ranges that should be used when decorating. Index i in the
+  // range array has the decoration type at index i of this.decorationTypes.
+  protected getDecorationRanges(fileUri: vscode.Uri): vscode.Range[][] {
+    const fileUriStr = fileUri.toString();
+    if (!this.files.has(fileUriStr))
+      // this.files should always have an entry for fileUri if we are here. But
+      // if there isn't one we don't want to crash the extension. This is also
+      // useful for tests.
+      return [];
+    const lines: SemanticHighlightingLine[] =
+        Array.from(this.files.get(fileUriStr).values());
+    const decorations: vscode.Range[][] = this.decorationTypes.map(() => []);
+    lines.forEach((line) => {
+      line.tokens.forEach((token) => {
+        decorations[token.scopeIndex].push(new vscode.Range(
+            new vscode.Position(line.line, token.character),
+            new vscode.Position(line.line, token.character + token.length)));
+      });
+    });
+    return decorations;
   }
 }
 

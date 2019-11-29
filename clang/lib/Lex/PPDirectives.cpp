@@ -370,6 +370,37 @@ SourceLocation Preprocessor::CheckEndOfDirective(const char *DirType,
   return DiscardUntilEndOfDirective().getEnd();
 }
 
+Optional<unsigned> Preprocessor::getSkippedRangeForExcludedConditionalBlock(
+    SourceLocation HashLoc) {
+  if (!ExcludedConditionalDirectiveSkipMappings)
+    return None;
+  if (!HashLoc.isFileID())
+    return None;
+
+  std::pair<FileID, unsigned> HashFileOffset =
+      SourceMgr.getDecomposedLoc(HashLoc);
+  const llvm::MemoryBuffer *Buf = SourceMgr.getBuffer(HashFileOffset.first);
+  auto It = ExcludedConditionalDirectiveSkipMappings->find(Buf);
+  if (It == ExcludedConditionalDirectiveSkipMappings->end())
+    return None;
+
+  const PreprocessorSkippedRangeMapping &SkippedRanges = *It->getSecond();
+  // Check if the offset of '#' is mapped in the skipped ranges.
+  auto MappingIt = SkippedRanges.find(HashFileOffset.second);
+  if (MappingIt == SkippedRanges.end())
+    return None;
+
+  unsigned BytesToSkip = MappingIt->getSecond();
+  unsigned CurLexerBufferOffset = CurLexer->getCurrentBufferOffset();
+  assert(CurLexerBufferOffset >= HashFileOffset.second &&
+         "lexer is before the hash?");
+  // Take into account the fact that the lexer has already advanced, so the
+  // number of bytes to skip must be adjusted.
+  unsigned LengthDiff = CurLexerBufferOffset - HashFileOffset.second;
+  assert(BytesToSkip >= LengthDiff && "lexer is after the skipped range?");
+  return BytesToSkip - LengthDiff;
+}
+
 /// SkipExcludedConditionalBlock - We just read a \#if or related directive and
 /// decided that the subsequent tokens are in the \#if'd out portion of the
 /// file.  Lex the rest of the file, until we see an \#endif.  If
@@ -396,6 +427,11 @@ void Preprocessor::SkipExcludedConditionalBlock(SourceLocation HashTokenLoc,
   // disabling warnings, etc.
   CurPPLexer->LexingRawMode = true;
   Token Tok;
+  if (auto SkipLength =
+          getSkippedRangeForExcludedConditionalBlock(HashTokenLoc)) {
+    // Skip to the next '#endif' / '#else' / '#elif'.
+    CurLexer->skipOver(*SkipLength);
+  }
   while (true) {
     CurLexer->Lex(Tok);
 
@@ -1644,6 +1680,11 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   if (LexHeaderName(FilenameTok))
     return;
 
+  if (LangOpts.isLevitationMode(LangOptions::LBSK_ParseManualDeps)) {
+    DiscardUntilEndOfDirective();
+    return;
+  }
+
   if (FilenameTok.isNot(tok::header_name)) {
     Diag(FilenameTok.getLocation(), diag::err_pp_expects_filename);
     if (FilenameTok.isNot(tok::eod))
@@ -1680,11 +1721,11 @@ Optional<FileEntryRef> Preprocessor::LookupHeaderIncludeOrImport(
     SourceLocation FilenameLoc, CharSourceRange FilenameRange,
     const Token &FilenameTok, bool &IsFrameworkFound, bool IsImportDecl,
     bool &IsMapped, const DirectoryLookup *LookupFrom,
-    const FileEntry *LookupFromFile, SmallString<128> &NormalizedPath,
+    const FileEntry *LookupFromFile, StringRef LookupFilename,
     SmallVectorImpl<char> &RelativePath, SmallVectorImpl<char> &SearchPath,
     ModuleMap::KnownHeader &SuggestedModule, bool isAngled) {
   Optional<FileEntryRef> File = LookupFile(
-      FilenameLoc, LangOpts.MSVCCompat ? NormalizedPath.c_str() : Filename,
+      FilenameLoc, LookupFilename,
       isAngled, LookupFrom, LookupFromFile, CurDir,
       Callbacks ? &SearchPath : nullptr, Callbacks ? &RelativePath : nullptr,
       &SuggestedModule, &IsMapped, &IsFrameworkFound);
@@ -1695,7 +1736,7 @@ Optional<FileEntryRef> Preprocessor::LookupHeaderIncludeOrImport(
     // Give the clients a chance to recover.
     SmallString<128> RecoveryPath;
     if (Callbacks->FileNotFound(Filename, RecoveryPath)) {
-      if (auto DE = FileMgr.getDirectory(RecoveryPath)) {
+      if (auto DE = FileMgr.getOptionalDirectoryRef(RecoveryPath)) {
         // Add the recovery path to the list of search paths.
         DirectoryLookup DL(*DE, SrcMgr::C_User, false);
         HeaderInfo.AddSearchPath(DL, isAngled);
@@ -1703,7 +1744,7 @@ Optional<FileEntryRef> Preprocessor::LookupHeaderIncludeOrImport(
         // Try the lookup again, skipping the cache.
         Optional<FileEntryRef> File = LookupFile(
             FilenameLoc,
-            LangOpts.MSVCCompat ? NormalizedPath.c_str() : Filename, isAngled,
+            LookupFilename, isAngled,
             LookupFrom, LookupFromFile, CurDir, nullptr, nullptr,
             &SuggestedModule, &IsMapped, /*IsFrameworkFound=*/nullptr,
             /*SkipCache*/ true);
@@ -1721,7 +1762,7 @@ Optional<FileEntryRef> Preprocessor::LookupHeaderIncludeOrImport(
   // provide the user with a possible fixit.
   if (isAngled) {
     Optional<FileEntryRef> File = LookupFile(
-        FilenameLoc, LangOpts.MSVCCompat ? NormalizedPath.c_str() : Filename,
+        FilenameLoc, LookupFilename,
         false, LookupFrom, LookupFromFile, CurDir,
         Callbacks ? &SearchPath : nullptr, Callbacks ? &RelativePath : nullptr,
         &SuggestedModule, &IsMapped,
@@ -1749,20 +1790,23 @@ Optional<FileEntryRef> Preprocessor::LookupHeaderIncludeOrImport(
       return Filename;
     };
     StringRef TypoCorrectionName = CorrectTypoFilename(Filename);
-    SmallString<128> NormalizedTypoCorrectionPath;
-    if (LangOpts.MSVCCompat) {
-      NormalizedTypoCorrectionPath = TypoCorrectionName.str();
+
 #ifndef _WIN32
+    // Normalize slashes when compiling with -fms-extensions on non-Windows.
+    // This is unnecessary on Windows since the filesystem there handles
+    // backslashes.
+    SmallString<128> NormalizedTypoCorrectionPath;
+    if (LangOpts.MicrosoftExt) {
+      NormalizedTypoCorrectionPath = TypoCorrectionName;
       llvm::sys::path::native(NormalizedTypoCorrectionPath);
-#endif
+      TypoCorrectionName = NormalizedTypoCorrectionPath;
     }
+#endif
+
     Optional<FileEntryRef> File = LookupFile(
-        FilenameLoc,
-        LangOpts.MSVCCompat ? NormalizedTypoCorrectionPath.c_str()
-                            : TypoCorrectionName,
-        isAngled, LookupFrom, LookupFromFile, CurDir,
-        Callbacks ? &SearchPath : nullptr, Callbacks ? &RelativePath : nullptr,
-        &SuggestedModule, &IsMapped,
+        FilenameLoc, TypoCorrectionName, isAngled, LookupFrom, LookupFromFile,
+        CurDir, Callbacks ? &SearchPath : nullptr,
+        Callbacks ? &RelativePath : nullptr, &SuggestedModule, &IsMapped,
         /*IsFrameworkFound=*/nullptr);
     if (File) {
       auto Hint =
@@ -1834,12 +1878,12 @@ Preprocessor::ImportAction Preprocessor::HandleHeaderIncludeOrImport(
   SourceLocation StartLoc = IsImportDecl ? IncludeTok.getLocation() : HashLoc;
 
   // Complain about attempts to #include files in an audit pragma.
-  if (PragmaARCCFCodeAuditedLoc.isValid()) {
+  if (PragmaARCCFCodeAuditedInfo.second.isValid()) {
     Diag(StartLoc, diag::err_pp_include_in_arc_cf_code_audited) << IsImportDecl;
-    Diag(PragmaARCCFCodeAuditedLoc, diag::note_pragma_entered_here);
+    Diag(PragmaARCCFCodeAuditedInfo.second, diag::note_pragma_entered_here);
 
     // Immediately leave the pragma.
-    PragmaARCCFCodeAuditedLoc = SourceLocation();
+    PragmaARCCFCodeAuditedInfo = {nullptr, SourceLocation()};
   }
 
   // Complain about attempts to #include files in an assume-nonnull pragma.
@@ -1870,18 +1914,23 @@ Preprocessor::ImportAction Preprocessor::HandleHeaderIncludeOrImport(
   // the path.
   ModuleMap::KnownHeader SuggestedModule;
   SourceLocation FilenameLoc = FilenameTok.getLocation();
-  SmallString<128> NormalizedPath;
-  if (LangOpts.MSVCCompat) {
-    NormalizedPath = Filename.str();
+  StringRef LookupFilename = Filename;
+
 #ifndef _WIN32
+  // Normalize slashes when compiling with -fms-extensions on non-Windows. This
+  // is unnecessary on Windows since the filesystem there handles backslashes.
+  SmallString<128> NormalizedPath;
+  if (LangOpts.MicrosoftExt) {
+    NormalizedPath = Filename.str();
     llvm::sys::path::native(NormalizedPath);
-#endif
+    LookupFilename = NormalizedPath;
   }
+#endif
 
   Optional<FileEntryRef> File = LookupHeaderIncludeOrImport(
       CurDir, Filename, FilenameLoc, FilenameRange, FilenameTok,
       IsFrameworkFound, IsImportDecl, IsMapped, LookupFrom, LookupFromFile,
-      NormalizedPath, RelativePath, SearchPath, SuggestedModule, isAngled);
+      LookupFilename, RelativePath, SearchPath, SuggestedModule, isAngled);
 
   if (usingPCHWithThroughHeader() && SkippingUntilPCHThroughHeader) {
     if (File && isPCHThroughHeader(&File->getFileEntry()))
@@ -2023,10 +2072,9 @@ Preprocessor::ImportAction Preprocessor::HandleHeaderIncludeOrImport(
     // Notify the callback object that we've seen an inclusion directive.
     // FIXME: Use a different callback for a pp-import?
     Callbacks->InclusionDirective(
-        HashLoc, IncludeTok,
-        LangOpts.MSVCCompat ? NormalizedPath.c_str() : Filename, isAngled,
-        FilenameRange, File ? &File->getFileEntry() : nullptr, SearchPath,
-        RelativePath, Action == Import ? SuggestedModule.getModule() : nullptr,
+        HashLoc, IncludeTok, LookupFilename, isAngled, FilenameRange,
+        File ? &File->getFileEntry() : nullptr, SearchPath, RelativePath,
+        Action == Import ? SuggestedModule.getModule() : nullptr,
         FileCharacter);
     if (Action == Skip && File)
       Callbacks->FileSkipped(*File, FilenameTok, FileCharacter);
@@ -2049,7 +2097,7 @@ Preprocessor::ImportAction Preprocessor::HandleHeaderIncludeOrImport(
       !IsMapped && !File->getFileEntry().tryGetRealPathName().empty();
 
   if (CheckIncludePathPortability) {
-    StringRef Name = LangOpts.MSVCCompat ? NormalizedPath.str() : Filename;
+    StringRef Name = LookupFilename;
     StringRef RealPathName = File->getFileEntry().tryGetRealPathName();
     SmallVector<StringRef, 16> Components(llvm::sys::path::begin(Name),
                                           llvm::sys::path::end(Name));
@@ -2209,6 +2257,176 @@ void Preprocessor::HandleIncludeNextDirective(SourceLocation HashLoc,
                                 LookupFromFile);
 }
 
+/// Handles C++ Levitation #import directive
+///
+/// Syntax is as follows:
+///   import-directive:
+///     '#import' attributes[opt] identifier
+///   attributes:
+///     'bodydep'
+///   identifier:
+///     enclosing-namespace-specifier '::' identifier
+///
+/// \param HashLoc location of '#' symbol
+/// \param Tok reference to 'import' token next to '#' symbol
+void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token &Tok) {
+
+  // FIXME Levitation: On parse-import remember the end of last #import directive
+  //  on later stages start parsing straight from that offset.
+  //
+  // Ignore #import directive if we are at later stages.
+  if (!LangOpts.isLevitationMode(LangOptions::LBSK_ParseManualDeps)) {
+    DiscardUntilEndOfDirective();
+    return;
+  }
+
+  Token NextTok;
+
+  Lex(NextTok);
+
+  bool BodyDep = TryLexLevitationBodyDepAttr(NextTok);
+
+  if (BodyDep) Lex(NextTok);
+
+  auto IdentifierParts = LexLevitationImportIdentifier(NextTok);
+
+  const auto &Loc = IdentifierParts.second;
+  auto &Parts = IdentifierParts.first;
+
+  if (!BodyDep)
+    PPLevitationDeclDeps.emplace_back(std::move(Parts), Loc);
+  else
+    PPLevitationBodyDeps.emplace_back(std::move(Parts), Loc);
+}
+
+bool Preprocessor::TryLexLevitationBodyDepAttr(const Token &FirstToken) {
+  if (FirstToken.getKind() != tok::l_square)
+    return false;
+
+  Token CurTok;
+  Lex(CurTok);
+
+  if (CurTok.getKind() != tok::kw_bodydep) {
+    Diag(CurTok, diag::err_pp_levitation_unknown_import_attribute);
+    if (CurTok.isNot(tok::eod))
+      DiscardUntilEndOfDirective();
+    return false;
+  }
+
+  bool UnexpectedTokens = false;
+  Token FirstUnexpectedToken;
+  do {
+    Lex(CurTok);
+    if (CurTok.getKind() != tok::r_square)
+      if (!UnexpectedTokens) {
+        UnexpectedTokens = true;
+        FirstUnexpectedToken = CurTok;
+      }
+  }
+  while (!CurTok.isOneOf(tok::eof, tok::eod, tok::r_square));
+
+  if (CurTok.getKind() != tok::r_square) {
+    Diag(CurTok.getLocation(), diag::err_expected) << tok::r_square;
+    Diag(FirstToken, diag::note_matching) << tok::l_square;
+    return false;
+  }
+
+  if (UnexpectedTokens) {
+    Diag(FirstUnexpectedToken, diag::err_expected) << tok::r_square;
+    Diag(FirstToken, diag::note_matching) << tok::l_square;
+    return false;
+  }
+
+  return true;
+}
+
+std::pair<SmallVector<StringRef, 16>, SourceRange> Preprocessor::LexLevitationImportIdentifier(
+    const Token &FirstTok
+) {
+  Token FilenameTok = FirstTok;
+
+  bool PrefixedByColonColon = false;
+  std::pair<SmallVector<StringRef, 16>, SourceRange> Res;
+  auto &DepParts = Res.first;
+  Res.second.setBegin(FirstTok.getLocation());
+  Res.second.setEnd(FirstTok.getLocation());
+  PPLevitationPartBuff PartBuffer;
+
+  while (FilenameTok.isNot(tok::eod)) {
+
+    // FIXME Levitation: Allow multiline imports?
+
+    if (FilenameTok.is(tok::coloncolon)) {
+      if (PrefixedByColonColon) {
+        Diag(FilenameTok, diag::err_pp_levitation_import_missed_dep_part);
+        return Res;
+      }
+
+      PrefixedByColonColon = true;
+      if (!PartBuffer.empty()) {
+        PPLevitationDepIdBuffs.emplace_back(std::move(PartBuffer));
+        DepParts.push_back(PPLevitationDepIdBuffs.back());
+      }
+    } else {
+      PrefixedByColonColon = false;
+
+      // FIXME Levitation: Provide code completion for #import.
+      if (FilenameTok.is(tok::code_completion)) {
+        setCodeCompletionReached();
+        Lex(FilenameTok);
+        continue;
+      }
+
+      if (FilenameTok.isNot(tok::identifier)) {
+        Diag(FilenameTok, diag::err_expected) << tok::identifier;
+        return Res;
+      }
+
+      // Get the spelling of the token, directly into FilenameBuffer if
+      // possible.
+      // FIXME Levitation: PartBuffer.size() should be zero.
+      size_t PreAppendSize = PartBuffer.size();
+      PartBuffer.resize(PreAppendSize + FilenameTok.getLength());
+
+      const char *BufPtr = &PartBuffer[PreAppendSize];
+      unsigned ActualLen = getSpelling(FilenameTok, BufPtr);
+
+      // If the token was spelled somewhere else, copy it into FilenameBuffer.
+      if (BufPtr != &PartBuffer[PreAppendSize])
+        memcpy(&PartBuffer[PreAppendSize], BufPtr, ActualLen);
+
+      // Resize FilenameBuffer to the correct size.
+      if (FilenameTok.getLength() != ActualLen)
+        PartBuffer.resize(PreAppendSize + ActualLen);
+    }
+
+    Res.second.setEnd(FirstTok.getLocation());
+    Lex(FilenameTok);
+  }
+
+  if (PartBuffer.empty()) {
+    Diag(FilenameTok, diag::err_pp_levitation_import_missed_dep_part_semi);
+    return Res;
+  }
+
+  PPLevitationDepIdBuffs.emplace_back(std::move(PartBuffer));
+  DepParts.push_back(PPLevitationDepIdBuffs.back());
+
+  return Res;
+}
+
+const Preprocessor::PPLevitationDepsVector&
+    Preprocessor::getLevitationDeclDeps() const
+{
+  return PPLevitationDeclDeps;
+}
+
+const Preprocessor::PPLevitationDepsVector&
+    Preprocessor::getLevitationBodyDeps() const
+{
+  return PPLevitationBodyDeps;
+}
+
 /// HandleMicrosoftImportDirective - Implements \#import for Microsoft Mode
 void Preprocessor::HandleMicrosoftImportDirective(Token &Tok) {
   // The Microsoft #import directive takes a type library and generates header
@@ -2230,6 +2448,8 @@ void Preprocessor::HandleImportDirective(SourceLocation HashLoc,
   if (!LangOpts.ObjC) {  // #import is standard for ObjC.
     if (LangOpts.MSVCCompat)
       return HandleMicrosoftImportDirective(ImportTok);
+    if (LangOpts.LevitationMode)
+      return HandleLevitationImportDirective(HashLoc, ImportTok);
     Diag(ImportTok, diag::ext_pp_import_directive);
   }
   return HandleIncludeDirective(HashLoc, ImportTok);
@@ -2746,7 +2966,8 @@ void Preprocessor::HandleDefineDirective(
   // If we need warning for not using the macro, add its location in the
   // warn-because-unused-macro set. If it gets used it will be removed from set.
   if (getSourceManager().isInMainFile(MI->getDefinitionLoc()) &&
-      !Diags->isIgnored(diag::pp_macro_not_used, MI->getDefinitionLoc())) {
+      !Diags->isIgnored(diag::pp_macro_not_used, MI->getDefinitionLoc()) &&
+      !MacroExpansionInDirectivesOverride) {
     MI->setIsWarnIfUnused(true);
     WarnUnusedMacroLocs.insert(MI->getDefinitionLoc());
   }

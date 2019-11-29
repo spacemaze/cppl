@@ -12,6 +12,7 @@
 
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/ASTLambda.h"
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/AttrIterator.h"
@@ -99,7 +100,7 @@ void *Decl::operator new(std::size_t Size, const ASTContext &Ctx,
     // Ensure required alignment of the resulting object by adding extra
     // padding at the start if required.
     size_t ExtraAlign =
-        llvm::OffsetToAlignment(sizeof(Module *), alignof(Decl));
+        llvm::offsetToAlignment(sizeof(Module *), llvm::Align(alignof(Decl)));
     auto *Buffer = reinterpret_cast<char *>(
         ::operator new(ExtraAlign + sizeof(Module *) + Size + Extra, Ctx));
     Buffer += ExtraAlign;
@@ -379,10 +380,6 @@ ASTContext &Decl::getASTContext() const {
 
 ASTMutationListener *Decl::getASTMutationListener() const {
   return getASTContext().getASTMutationListener();
-}
-
-bool Decl::isLevitationPackageDependent() const {
-  return getDeclContext()->isPackageDependentContext();
 }
 
 unsigned Decl::getMaxAlignment() const {
@@ -806,6 +803,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case OMPRequires:
     case OMPCapturedExpr:
     case Empty:
+    case LifetimeExtendedTemporary:
       // Never looked up by name.
       return 0;
   }
@@ -962,11 +960,11 @@ const FunctionType *Decl::getFunctionType(bool BlocksToo) const {
     return nullptr;
 
   if (Ty->isFunctionPointerType())
-    Ty = Ty->getAs<PointerType>()->getPointeeType();
+    Ty = Ty->castAs<PointerType>()->getPointeeType();
   else if (Ty->isFunctionReferenceType())
-    Ty = Ty->getAs<ReferenceType>()->getPointeeType();
+    Ty = Ty->castAs<ReferenceType>()->getPointeeType();
   else if (BlocksToo && Ty->isBlockPointerType())
-    Ty = Ty->getAs<BlockPointerType>()->getPointeeType();
+    Ty = Ty->castAs<BlockPointerType>()->getPointeeType();
 
   return Ty->getAs<FunctionType>();
 }
@@ -1047,6 +1045,12 @@ DeclContext *DeclContext::getLookupParent() {
         getLexicalParent()->getRedeclContext()->isRecord())
       return getLexicalParent();
 
+  // A lookup within the call operator of a lambda never looks in the lambda
+  // class; instead, skip to the context in which that closure type is
+  // declared.
+  if (isLambdaCallOperator(this))
+    return getParent()->getParent();
+
   return getParent();
 }
 
@@ -1083,18 +1087,9 @@ bool DeclContext::isStdNamespace() const {
   return II && II->isStr("std");
 }
 
-bool DeclContext::isDependentContext(bool IgnorePackageness) const {
-
-  if (!IgnorePackageness && isFileContext()) {
-
-    // Levitation: on Build AST stage, we recognize
-    // dependent packages by its "belongness" to package namespace.
-    if (const auto *NS = dyn_cast<NamespaceDecl>(this))
-      if (NS->isLevitationPackage())
-        return true;
-
+bool DeclContext::isDependentContext() const {
+  if (isFileContext())
     return false;
-  }
 
   if (isa<ClassTemplatePartialSpecializationDecl>(this))
     return true;
@@ -1121,20 +1116,7 @@ bool DeclContext::isDependentContext(bool IgnorePackageness) const {
   // DeclContext. A context within it (such as a lambda-expression)
   // should be considered dependent.
 
-  return getParent() && getParent()->isDependentContext(IgnorePackageness);
-}
-
-// C++ Levitation extension:
-bool DeclContext::isPackageDependentContext() const {
-  if (isFileContext()) {
-    if (const auto *NS = dyn_cast<NamespaceDecl>(this))
-      if (NS->isLevitationPackage())
-        return true;
-
-    return false;
-  }
-
-  return getParent() && getParent()->isPackageDependentContext();
+  return getParent() && getParent()->isDependentContext();
 }
 
 bool DeclContext::isTransparentContext() const {
@@ -1507,15 +1489,8 @@ void DeclContext::removeDecl(Decl *D) {
         // So I have replaced this:
         // assert(Pos != Map->end() && "no lookup entry for decl");
         // with "if(<no entry>) continue;"
-
-        // Remove the decl only if it is contained.
-
-        if (getParentASTContext().getLangOpts().LevitationMode) {
-          if (Pos == Map->end())
+        if (Pos == Map->end())
             continue;
-        } else {
-          assert(Pos != Map->end() && "no lookup entry for decl");
-        }
 
         StoredDeclsList::DeclsTy *Vec = Pos->second.getAsVector();
         if ((Vec && is_contained(*Vec, ND)) || Pos->second.getAsDecl() == ND)

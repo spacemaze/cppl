@@ -210,6 +210,22 @@ TEST(SelectionTest, CommonAncestor) {
           )cpp",
           "FunctionProtoTypeLoc",
       },
+      {
+          R"cpp(
+            struct S {
+              int foo() const;
+              int bar() { return [[f^oo]](); }
+            };
+          )cpp",
+          "MemberExpr", // Not implicit CXXThisExpr, or its implicit cast!
+      },
+      {
+          R"cpp(
+            auto lambda = [](const char*){ return 0; };
+            int x = lambda([["y^"]]);
+          )cpp",
+          "StringLiteral", // Not DeclRefExpr to operator()!
+      },
 
       // Point selections.
       {"void foo() { [[^foo]](); }", "DeclRefExpr"},
@@ -230,6 +246,17 @@ TEST(SelectionTest, CommonAncestor) {
       // Tricky case: two VarDecls share a specifier.
       {"[[int ^a]], b;", "VarDecl"},
       {"[[int a, ^b]];", "VarDecl"},
+      // Tricky case: CXXConstructExpr wants to claim the whole init range.
+      {
+          R"cpp(
+            class X { X(int); };
+            class Y {
+              X x;
+              Y() : [[^x(4)]] {}
+            };
+          )cpp",
+          "CXXCtorInitializer", // Not the CXXConstructExpr!
+      },
       // Tricky case: anonymous struct is a sibling of the VarDecl.
       {"[[st^ruct {int x;}]] y;", "CXXRecordDecl"},
       {"[[struct {int x;} ^y]];", "VarDecl"},
@@ -261,10 +288,44 @@ TEST(SelectionTest, CommonAncestor) {
              struct Foo<U<int>*> {};
           )cpp",
           "TemplateTemplateParmDecl"},
+
+      // Foreach has a weird AST, ensure we can select parts of the range init.
+      // This used to fail, because the DeclStmt for C claimed the whole range.
+      {
+          R"cpp(
+            struct Str {
+              const char *begin();
+              const char *end();
+            };
+            Str makeStr(const char*);
+            void loop() {
+              for (const char* C : [[mak^eStr("foo"^)]])
+                ;
+            }
+          )cpp",
+          "CallExpr"},
+
+      // User-defined literals are tricky: is 12_i one token or two?
+      // For now we treat it as one, and the UserDefinedLiteral as a leaf.
+      {
+          R"cpp(
+            struct Foo{};
+            Foo operator""_ud(unsigned long long);
+            Foo x = [[^12_ud]];
+          )cpp",
+          "UserDefinedLiteral"},
   };
   for (const Case &C : Cases) {
     Annotations Test(C.Code);
-    auto AST = TestTU::withCode(Test.code()).build();
+
+    TestTU TU;
+    TU.Code = Test.code();
+
+    // FIXME: Auto-completion in a template requires disabling delayed template
+    // parsing.
+    TU.ExtraArgs.push_back("-fno-delayed-template-parsing");
+
+    auto AST = TU.build();
     auto T = makeSelectionTree(C.Code, AST);
     EXPECT_EQ("TranslationUnitDecl", nodeKind(&T.root())) << C.Code;
 
@@ -329,6 +390,8 @@ TEST(SelectionTest, Selected) {
         #define ECHO(X) X
         ECHO(EC^HO([[$C[[int]]) EC^HO(a]]));
       ]])cpp",
+      R"cpp( $C[[^$C[[int]] a^]]; )cpp",
+      R"cpp( $C[[^$C[[int]] a = $C[[5]]^]]; )cpp",
   };
   for (const char *C : Cases) {
     Annotations Test(C);

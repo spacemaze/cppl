@@ -34,9 +34,8 @@ InputKind FrontendOptions::getInputKindForExtension(StringRef Extension) {
       .Cases("ll", "bc", Language::LLVM_IR)
 
       // C++ Levitation extension:
-      .Cases(
+      .Case(
           levitation::FileExtensions::DeclarationAST,
-          levitation::FileExtensions::ParsedAST,
           InputKind(Language::Unknown, InputKind::Precompiled)
       )
 

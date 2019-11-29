@@ -380,8 +380,7 @@ protected:
       : NextInContextAndBits(nullptr, getModuleOwnershipKindForChildOf(DC)),
         DeclCtx(DC), Loc(L), DeclKind(DK), InvalidDecl(false), HasAttrs(false),
         Implicit(false), Used(false), Referenced(false),
-        TopLevelDeclInObjCContainer(false),
-        Access(AS_none), FromASTFile(0),
+        TopLevelDeclInObjCContainer(false), Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(0) {
     if (StatisticsEnabled) add(DK);
@@ -960,7 +959,7 @@ public:
   /// as this declaration, or NULL if there is no previous declaration.
   Decl *getPreviousDecl() { return getPreviousDeclImpl(); }
 
-  /// Retrieve the most recent declaration that declares the same entity
+  /// Retrieve the previous declaration that declares the same entity
   /// as this declaration, or NULL if there is no previous declaration.
   const Decl *getPreviousDecl() const {
     return const_cast<Decl *>(this)->getPreviousDeclImpl();
@@ -1161,16 +1160,6 @@ private:
 
 protected:
   ASTMutationListener *getASTMutationListener() const;
-
-
-  //===--------------------------------------------------------------------===//
-  // C++ Levitation Mode
-  //
-public:
-  /// Whether this declaration is levitation package dependent.
-  /// In another words, whether you can define 'global::Some::Ref' somewhere
-  /// in its body.
-  bool isLevitationPackageDependent() const;
 };
 
 /// Determine whether two declarations declare the same entity.
@@ -1451,6 +1440,13 @@ class DeclContext {
     uint64_t NonTrivialToPrimitiveCopy : 1;
     uint64_t NonTrivialToPrimitiveDestroy : 1;
 
+    /// The following bits indicate whether this is or contains a C union that
+    /// is non-trivial to default-initialize, destruct, or copy. These bits
+    /// imply the associated basic non-triviality predicates declared above.
+    uint64_t HasNonTrivialToPrimitiveDefaultInitializeCUnion : 1;
+    uint64_t HasNonTrivialToPrimitiveDestructCUnion : 1;
+    uint64_t HasNonTrivialToPrimitiveCopyCUnion : 1;
+
     /// Indicates whether this struct is destroyed in the callee.
     uint64_t ParamDestroyedInCallee : 1;
 
@@ -1459,7 +1455,7 @@ class DeclContext {
   };
 
   /// Number of non-inherited bits in RecordDeclBitfields.
-  enum { NumRecordDeclBits = 11 };
+  enum { NumRecordDeclBits = 14 };
 
   /// Stores the bits used by OMPDeclareReductionDecl.
   /// If modified NumOMPDeclareReductionDeclBits and the accessor
@@ -1593,6 +1589,9 @@ class DeclContext {
 
     /// True if this method is the getter or setter for an explicit property.
     uint64_t IsPropertyAccessor : 1;
+
+    /// True if this method is a synthesized property accessor stub.
+    uint64_t IsSynthesizedAccessorStub : 1;
 
     /// Method has a definition.
     uint64_t IsDefined : 1;
@@ -1872,20 +1871,7 @@ public:
 
   /// Determines whether this context is dependent on a
   /// template parameter.
-  /// C++ Levitation:
-  ///   If C++ Levitation mode is activated,
-  ///   Altered isDependentContext checks whether decl context belongs
-  ///   to package namespace or is package namespace.
-  ///   Such declaration context are also considered as dependent.
-  ///
-  ///   In order to get old behaviour within active Levitation mode
-  ///   set IgnorePackageness = true.
-  bool isDependentContext(bool IgnorePackageness = false) const;
-
-  /// C++ Levitation extension:
-  /// Determines whether current context is C++ Levitation package
-  /// or belongs to levitation package.
-  bool isPackageDependentContext() const;
+  bool isDependentContext() const;
 
   /// isTransparentContext - Determines whether this context is a
   /// "transparent" context, meaning that the members declared in this

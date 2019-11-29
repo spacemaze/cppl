@@ -56,6 +56,8 @@ extern struct _FILE *stdin;
 extern FILE *stdin;
 #endif
 
+#define bool _Bool
+
 int fscanf(FILE *restrict stream, const char *restrict format, ...);
 int sprintf(char *str, const char *format, ...);
 void setproctitle(const char *fmt, ...);
@@ -337,4 +339,54 @@ void constraintManagerShouldTreatAsOpaque(int rhs) {
     return;
   if (i < rhs)
     *(volatile int *) 0; // no-warning
+}
+
+
+// Test configuration
+int mySource1();
+void mySource2(int*);
+void myScanf(const char*, ...);
+int myPropagator(int, int*);
+int mySnprintf(char*, size_t, const char*, ...);
+bool isOutOfRange(const int*);
+void mySink(int, int, int);
+
+void testConfigurationSources1() {
+  int x = mySource1();
+  Buffer[x] = 1; // expected-warning {{Out of bound memory access }}
+}
+
+void testConfigurationSources2() {
+  int x;
+  mySource2(&x);
+  Buffer[x] = 1; // expected-warning {{Out of bound memory access }}
+}
+
+void testConfigurationSources3() {
+  int x, y;
+  myScanf("%d %d", &x, &y);
+  Buffer[y] = 1; // expected-warning {{Out of bound memory access }}
+}
+
+void testConfigurationPropagation() {
+  int x = mySource1();
+  int y;
+  myPropagator(x, &y);
+  Buffer[y] = 1; // expected-warning {{Out of bound memory access }}
+}
+
+void testConfigurationFilter() {
+  int x = mySource1();
+  if (isOutOfRange(&x)) // the filter function
+    return;
+  Buffer[x] = 1; // no-warning
+}
+
+void testConfigurationSinks() {
+  int x = mySource1();
+  mySink(x, 1, 2);
+  // expected-warning@-1 {{Untrusted data is passed to a user-defined sink}}
+  mySink(1, x, 2); // no-warning
+  mySink(1, 2, x);
+  // expected-warning@-1 {{Untrusted data is passed to a user-defined sink}}
 }

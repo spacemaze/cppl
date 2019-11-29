@@ -1,0 +1,41 @@
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    --verbose | FileCheck %s
+// RUN: %T/a.out
+
+// CHECK: BUILD DECL {{.*}}Root.cppl, deps: <empty> -> decl-ast: {{.*}}Root.decl-ast
+// CHECK: BUILD DECL {{.*}}MyClass.cppl, deps: ({{.*}}Root.decl-ast) -> decl-ast: {{.*}}MyClass.decl-ast
+// CHECK: BUILD DECL {{.*}}BodyDepClass.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast) -> decl-ast: {{.*}}BodyDepClass.decl-ast
+// CHECK: BUILD OBJ {{.*}}test.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast, {{.*}}BodyDepClass.decl-ast) -> object: {{.*}}test.o
+// CHECK: BUILD OBJ {{.*}}BodyDepClass.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast) -> object: {{.*}}BodyDepClass.o
+// CHECK: BUILD OBJ {{.*}}MyClass.cppl, deps: ({{.*}}Root.decl-ast) -> object: {{.*}}MyClass.o
+// CHECK: BUILD OBJ {{.*}}Root.cppl, deps: <empty> -> object: {{.*}}Root.o
+// CHECK: LINK objects: ({{.*}}test.o, {{.*}}Root.o, {{.*}}BodyDepClass.o, {{.*}}MyClass.o) -> {{.*}}
+
+#import Inputs::MyClass
+#import [bodydep] Inputs::BodyDepClass
+#import Inputs::Root
+
+int main() {
+
+  with (
+    auto TestScope = levitation::Test::context()
+        // call Inputs::MyClass::f()
+        .expect("Inputs::Root::f()")
+        .expect("Inputs::MyClass::f()")
+
+        // call Inputs::MyClass::m()
+        .expect("Inputs::Root::f()")
+        .expect("Inputs::MyClass::m()")
+
+        // call Inputs::BodyDepClass::f()
+        .expect("Inputs::Root::f()")
+        .expect("Inputs::MyClass::f()")
+        .expect("Inputs::BodyDepClass::f()")
+    .open()
+  ) {
+    Inputs::MyClass::f();
+    Inputs::MyClass::m();
+    Inputs::BodyDepClass::f();
+  }
+  return levitation::Test::result();
+}

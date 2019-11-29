@@ -26,8 +26,6 @@
 #include "llvm/ADT/ilist.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
-#include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/LegacyDivergenceAnalysis.h"
 #include "llvm/CodeGen/DAGCombine.h"
 #include "llvm/CodeGen/FunctionLoweringInfo.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
@@ -58,7 +56,9 @@
 
 namespace llvm {
 
+class AAResults;
 class BlockAddress;
+class BlockFrequencyInfo;
 class Constant;
 class ConstantFP;
 class ConstantInt;
@@ -66,11 +66,13 @@ class DataLayout;
 struct fltSemantics;
 class GlobalValue;
 struct KnownBits;
+class LegacyDivergenceAnalysis;
 class LLVMContext;
 class MachineBasicBlock;
 class MachineConstantPoolValue;
 class MCSymbol;
 class OptimizationRemarkEmitter;
+class ProfileSummaryInfo;
 class SDDbgValue;
 class SDDbgLabel;
 class SelectionDAG;
@@ -235,6 +237,9 @@ class SelectionDAG {
   /// whenever manipulating the DAG.
   OptimizationRemarkEmitter *ORE;
 
+  ProfileSummaryInfo *PSI = nullptr;
+  BlockFrequencyInfo *BFI = nullptr;
+
   /// The starting token.
   SDNode EntryNode;
 
@@ -388,7 +393,11 @@ private:
     Node->OperandList = nullptr;
   }
   void CreateTopologicalOrder(std::vector<SDNode*>& Order);
+
 public:
+  // Maximum depth for recursive analysis such as computeKnownBits, etc.
+  static constexpr unsigned MaxRecursionDepth = 6;
+
   explicit SelectionDAG(const TargetMachine &TM, CodeGenOpt::Level);
   SelectionDAG(const SelectionDAG &) = delete;
   SelectionDAG &operator=(const SelectionDAG &) = delete;
@@ -397,7 +406,8 @@ public:
   /// Prepare this SelectionDAG to process code in the given MachineFunction.
   void init(MachineFunction &NewMF, OptimizationRemarkEmitter &NewORE,
             Pass *PassPtr, const TargetLibraryInfo *LibraryInfo,
-            LegacyDivergenceAnalysis * Divergence);
+            LegacyDivergenceAnalysis * Divergence,
+            ProfileSummaryInfo *PSIin, BlockFrequencyInfo *BFIin);
 
   void setFunctionLoweringInfo(FunctionLoweringInfo * FuncInfo) {
     FLI = FuncInfo;
@@ -419,6 +429,8 @@ public:
   const LegacyDivergenceAnalysis *getDivergenceAnalysis() const { return DA; }
   LLVMContext *getContext() const {return Context; }
   OptimizationRemarkEmitter &getORE() const { return *ORE; }
+  ProfileSummaryInfo *getPSI() const { return PSI; }
+  BlockFrequencyInfo *getBFI() const { return BFI; }
 
   /// Pop up a GraphViz/gv window with the DAG rendered using 'dot'.
   void viewGraph(const std::string &Title);
@@ -495,7 +507,7 @@ public:
   /// certain types of nodes together, or eliminating superfluous nodes.  The
   /// Level argument controls whether Combine is allowed to produce nodes and
   /// types that are illegal on the target.
-  void Combine(CombineLevel Level, AliasAnalysis *AA,
+  void Combine(CombineLevel Level, AAResults *AA,
                CodeGenOpt::Level OptLevel);
 
   /// This transforms the SelectionDAG into a SelectionDAG that
@@ -775,6 +787,20 @@ public:
     return getNode(ISD::BUILD_VECTOR, DL, VT, Ops);
   }
 
+  // Return a splat ISD::SPLAT_VECTOR node, consisting of Op splatted to all
+  // elements.
+  SDValue getSplatVector(EVT VT, const SDLoc &DL, SDValue Op) {
+    if (Op.getOpcode() == ISD::UNDEF) {
+      assert((VT.getVectorElementType() == Op.getValueType() ||
+              (VT.isInteger() &&
+               VT.getVectorElementType().bitsLE(Op.getValueType()))) &&
+             "A splatted value must have a width equal or (for integers) "
+             "greater than the vector element type!");
+      return getNode(ISD::UNDEF, SDLoc(), VT);
+    }
+    return getNode(ISD::SPLAT_VECTOR, DL, VT, Op);
+  }
+
   /// Returns an ISD::VECTOR_SHUFFLE node semantically equivalent to
   /// the shuffle node in input but with swapped operands.
   ///
@@ -1037,7 +1063,7 @@ public:
     unsigned Align = 0,
     MachineMemOperand::Flags Flags
     = MachineMemOperand::MOLoad | MachineMemOperand::MOStore,
-    unsigned Size = 0,
+    uint64_t Size = 0,
     const AAMDNodes &AAInfo = AAMDNodes());
 
   SDValue getMemIntrinsicNode(unsigned Opcode, const SDLoc &dl, SDVTList VTList,
@@ -1692,6 +1718,14 @@ public:
       return nullptr;
     return It->second.HeapAllocSite;
   }
+
+  /// Return the current function's default denormal handling kind for the given
+  /// floating point type.
+  DenormalMode getDenormalMode(EVT VT) const {
+    return MF->getDenormalMode(EVTToAPFloatSemantics(VT));
+  }
+
+  bool shouldOptForSize() const;
 
 private:
   void InsertNode(SDNode *N);

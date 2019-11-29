@@ -8,6 +8,8 @@ function(llvm_update_compile_flags name)
     set(update_src_props ON)
   endif()
 
+  list(APPEND LLVM_COMPILE_CFLAGS " ${LLVM_COMPILE_FLAGS}")
+
   # LLVM_REQUIRES_EH is an internal flag that individual targets can use to
   # force EH
   if(LLVM_REQUIRES_EH OR LLVM_ENABLE_EH)
@@ -54,6 +56,7 @@ function(llvm_update_compile_flags name)
   #   - LLVM_COMPILE_FLAGS is list.
   #   - PROPERTY COMPILE_FLAGS is string.
   string(REPLACE ";" " " target_compile_flags " ${LLVM_COMPILE_FLAGS}")
+  string(REPLACE ";" " " target_compile_cflags " ${LLVM_COMPILE_CFLAGS}")
 
   if(update_src_props)
     foreach(fn ${sources})
@@ -61,6 +64,10 @@ function(llvm_update_compile_flags name)
       if("${suf}" STREQUAL ".cpp")
         set_property(SOURCE ${fn} APPEND_STRING PROPERTY
           COMPILE_FLAGS "${target_compile_flags}")
+      endif()
+      if("${suf}" STREQUAL ".c")
+        set_property(SOURCE ${fn} APPEND_STRING PROPERTY
+          COMPILE_FLAGS "${target_compile_cflags}")
       endif()
     endforeach()
   else()
@@ -390,10 +397,14 @@ endfunction(set_windows_version_resource_properties)
 #     Suppress default RPATH settings in shared libraries.
 #   PLUGIN_TOOL
 #     The tool (i.e. cmake target) that this plugin will link against
+#   COMPONENT_LIB
+#      This is used to specify that this is a component library of
+#      LLVM which means that the source resides in llvm/lib/ and it is a
+#      candidate for inclusion into libLLVM.so.
 #   )
 function(llvm_add_library name)
   cmake_parse_arguments(ARG
-    "MODULE;SHARED;STATIC;OBJECT;DISABLE_LLVM_LINK_LLVM_DYLIB;SONAME;NO_INSTALL_RPATH"
+    "MODULE;SHARED;STATIC;OBJECT;DISABLE_LLVM_LINK_LLVM_DYLIB;SONAME;NO_INSTALL_RPATH;COMPONENT_LIB"
     "OUTPUT_NAME;PLUGIN_TOOL;ENTITLEMENTS;BUNDLE_PATH"
     "ADDITIONAL_HEADERS;DEPENDS;LINK_COMPONENTS;LINK_LIBS;OBJLIBS"
     ${ARGN})
@@ -477,6 +488,11 @@ function(llvm_add_library name)
     add_library(${name} SHARED ${ALL_FILES})
   else()
     add_library(${name} STATIC ${ALL_FILES})
+  endif()
+
+  if(ARG_COMPONENT_LIB)
+    set_target_properties(${name} PROPERTIES LLVM_COMPONENT TRUE)
+    set_property(GLOBAL APPEND PROPERTY LLVM_COMPONENT_LIBS ${name})
   endif()
 
   if(NOT ARG_NO_INSTALL_RPATH)
@@ -563,7 +579,7 @@ function(llvm_add_library name)
   if(ARG_MODULE AND LLVM_EXPORT_SYMBOLS_FOR_PLUGINS AND ARG_PLUGIN_TOOL AND (WIN32 OR CYGWIN))
     # On DLL platforms symbols are imported from the tool by linking against it.
     set(llvm_libs ${ARG_PLUGIN_TOOL})
-  elseif (DEFINED LLVM_LINK_COMPONENTS OR DEFINED ARG_LINK_COMPONENTS)
+  elseif (NOT ARG_COMPONENT_LIB)
     if (LLVM_LINK_LLVM_DYLIB AND NOT ARG_DISABLE_LLVM_LINK_LLVM_DYLIB)
       set(llvm_libs LLVM)
     else()
@@ -662,6 +678,10 @@ function(add_llvm_install_targets target)
   endif()
 endfunction()
 
+function(add_llvm_component_library name)
+  add_llvm_library(${name} COMPONENT_LIB ${ARGN})
+endfunction()
+
 macro(add_llvm_library name)
   cmake_parse_arguments(ARG
     "SHARED;BUILDTREE_ONLY;MODULE;INSTALL_WITH_TOOLCHAIN"
@@ -725,7 +745,7 @@ endmacro(add_llvm_library name)
 
 macro(add_llvm_executable name)
   cmake_parse_arguments(ARG
-    "DISABLE_LLVM_LINK_LLVM_DYLIB;IGNORE_EXTERNALIZE_DEBUGINFO;NO_INSTALL_RPATH"
+    "DISABLE_LLVM_LINK_LLVM_DYLIB;IGNORE_EXTERNALIZE_DEBUGINFO;NO_INSTALL_RPATH;SUPPORT_PLUGINS"
     "ENTITLEMENTS;BUNDLE_PATH"
     "DEPENDS"
     ${ARGN})
@@ -775,6 +795,11 @@ macro(add_llvm_executable name)
   if(NOT LLVM_ENABLE_OBJLIB)
     llvm_update_compile_flags(${name})
   endif()
+
+  if (ARG_SUPPORT_PLUGINS AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "AIX")
+    set(LLVM_NO_DEAD_STRIP On)
+  endif()
+
   add_link_opts( ${name} )
 
   # Do not add -Dname_EXPORTS to the command-line when building files in this
@@ -886,14 +911,30 @@ endfunction()
 if(NOT LLVM_TOOLCHAIN_TOOLS)
   set (LLVM_TOOLCHAIN_TOOLS
     llvm-ar
+    llvm-cxxfilt
     llvm-ranlib
     llvm-lib
     llvm-nm
     llvm-objcopy
     llvm-objdump
     llvm-rc
+    llvm-size
+    llvm-strings
+    llvm-strip
     llvm-profdata
     llvm-symbolizer
+    # symlink version of some of above tools that are enabled by
+    # LLVM_INSTALL_BINUTILS_SYMLINKS.
+    addr2line
+    ar
+    c++filt
+    ranlib
+    nm
+    objcopy
+    objdump
+    size
+    strings
+    strip
     )
 endif()
 
@@ -999,7 +1040,7 @@ macro(add_llvm_target target_name)
   include_directories(BEFORE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR})
-  add_llvm_library(LLVM${target_name} ${ARGN})
+  add_llvm_component_library(LLVM${target_name} ${ARGN})
   set( CURRENT_LLVM_TARGET LLVM${target_name} )
 endmacro(add_llvm_target)
 

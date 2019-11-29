@@ -48,11 +48,6 @@ int main(int argc, char **argv) {
             "Directories structure should repeat project structure.",
             [&](StringRef v) { Solver.setBuildRoot(v); }
         )
-        .parameter(
-            "-main-file",
-            "Specify main source file, usually 'main.cpp'. ",
-            [&](StringRef v) { Solver.setMainFile(v); }
-        )
         .flag()
             .name("--verbose")
             .description("Enables verbose mode.")

@@ -1,0 +1,22 @@
+// This is a generated file. Don't edit it.
+// Edit main.cppl.in and use bash.sh or test-all.sh
+// to generate it again.
+// ------------------------------------------------
+
+// Parsing #import directives in 'Inputs/A'...
+// RUN:  %clang -cc1 -std=c++17 -xc++ -levitation-parse-import -levitation-sources-root-dir=%S -levitation-deps-output-file=%T/Inputs_A.ldeps %S/Inputs/A.cppl
+// Building declaration 'Inputs/A'...
+// RUN:  %clang -cc1 -std=c++17 -xc++ -flevitation-build-decl -emit-pch %S/Inputs/A.cppl -o %T/Inputs_A.decl-ast
+// Building object 'Inputs/A'...
+// RUN:  %clang -cc1 -std=c++17 -xc++ -flevitation-build-object -emit-obj %S/Inputs/A.cppl -o %T/Inputs_A.o
+// Building object 'main'...
+// RUN:  %clang -cc1 -std=c++17 -xc++ -flevitation-build-object -levitation-dependency=%T/Inputs_A.decl-ast -emit-obj %S/main.cppl -o %T/main.o
+// RUN:  %clangxx %T/main.o %T/Inputs_A.o -o %T/app.out
+// RUN:  %T/app.out
+#import Inputs::A
+
+#include "Inputs/Header.h"
+
+int main() {
+  return 0;
+}

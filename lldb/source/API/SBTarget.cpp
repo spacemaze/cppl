@@ -36,7 +36,6 @@
 #include "lldb/Core/Disassembler.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
-#include "lldb/Core/STLUtils.h"
 #include "lldb/Core/SearchFilter.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Core/StructuredDataImpl.h"
@@ -960,8 +959,8 @@ lldb::SBBreakpoint SBTarget::BreakpointCreateByRegex(
     const LazyBool skip_prologue = eLazyBoolCalculate;
 
     sb_bp = target_sp->CreateFuncRegexBreakpoint(
-        module_list.get(), comp_unit_list.get(), regexp, symbol_language,
-        skip_prologue, internal, hardware);
+        module_list.get(), comp_unit_list.get(), std::move(regexp),
+        symbol_language, skip_prologue, internal, hardware);
   }
 
   return LLDB_RECORD_RESULT(sb_bp);
@@ -1061,8 +1060,8 @@ lldb::SBBreakpoint SBTarget::BreakpointCreateBySourceRegex(
     }
 
     sb_bp = target_sp->CreateSourceRegexBreakpoint(
-        module_list.get(), source_file_list.get(), func_names_set, regexp,
-        false, hardware, move_to_nearest_code);
+        module_list.get(), source_file_list.get(), func_names_set,
+        std::move(regexp), false, hardware, move_to_nearest_code);
   }
 
   return LLDB_RECORD_RESULT(sb_bp);
@@ -1598,7 +1597,7 @@ lldb::SBModule SBTarget::AddModule(const SBModuleSpec &module_spec) {
   lldb::SBModule sb_module;
   TargetSP target_sp(GetSP());
   if (target_sp)
-    sb_module.SetSP(target_sp->GetOrCreateModule(*module_spec.m_opaque_up, 
+    sb_module.SetSP(target_sp->GetOrCreateModule(*module_spec.m_opaque_up,
                                                  true /* notify */));
   return LLDB_RECORD_RESULT(sb_module);
 }
@@ -1653,11 +1652,8 @@ SBSymbolContextList SBTarget::FindCompileUnits(const SBFileSpec &sb_file_spec) {
 
   SBSymbolContextList sb_sc_list;
   const TargetSP target_sp(GetSP());
-  if (target_sp && sb_file_spec.IsValid()) {
-    const bool append = true;
-    target_sp->GetImages().FindCompileUnits(*sb_file_spec,
-                                            append, *sb_sc_list);
-  }
+  if (target_sp && sb_file_spec.IsValid())
+    target_sp->GetImages().FindCompileUnits(*sb_file_spec, *sb_sc_list);
   return LLDB_RECORD_RESULT(sb_sc_list);
 }
 
@@ -1783,10 +1779,9 @@ lldb::SBSymbolContextList SBTarget::FindFunctions(const char *name,
 
   const bool symbols_ok = true;
   const bool inlines_ok = true;
-  const bool append = true;
   FunctionNameType mask = static_cast<FunctionNameType>(name_type_mask);
   target_sp->GetImages().FindFunctions(ConstString(name), mask, symbols_ok,
-                                       inlines_ok, append, *sb_sc_list);
+                                       inlines_ok, *sb_sc_list);
   return LLDB_RECORD_RESULT(sb_sc_list);
 }
 
@@ -1806,17 +1801,16 @@ lldb::SBSymbolContextList SBTarget::FindGlobalFunctions(const char *name,
       switch (matchtype) {
       case eMatchTypeRegex:
         target_sp->GetImages().FindFunctions(RegularExpression(name_ref), true,
-                                             true, true, *sb_sc_list);
+                                             true, *sb_sc_list);
         break;
       case eMatchTypeStartsWith:
         regexstr = llvm::Regex::escape(name) + ".*";
         target_sp->GetImages().FindFunctions(RegularExpression(regexstr), true,
-                                             true, true, *sb_sc_list);
+                                             true, *sb_sc_list);
         break;
       default:
-        target_sp->GetImages().FindFunctions(ConstString(name),
-                                             eFunctionNameTypeAny, true, true,
-                                             true, *sb_sc_list);
+        target_sp->GetImages().FindFunctions(
+            ConstString(name), eFunctionNameTypeAny, true, true, *sb_sc_list);
         break;
       }
     }
@@ -1891,16 +1885,13 @@ lldb::SBTypeList SBTarget::FindTypes(const char *typename_cstr) {
     bool exact_match = false;
     TypeList type_list;
     llvm::DenseSet<SymbolFile *> searched_symbol_files;
-    uint32_t num_matches =
-        images.FindTypes(nullptr, const_typename, exact_match, UINT32_MAX,
-                         searched_symbol_files, type_list);
+    images.FindTypes(nullptr, const_typename, exact_match, UINT32_MAX,
+                     searched_symbol_files, type_list);
 
-    if (num_matches > 0) {
-      for (size_t idx = 0; idx < num_matches; idx++) {
-        TypeSP type_sp(type_list.GetTypeAtIndex(idx));
-        if (type_sp)
-          sb_type_list.Append(SBType(type_sp));
-      }
+    for (size_t idx = 0; idx < type_list.GetSize(); idx++) {
+      TypeSP type_sp(type_list.GetTypeAtIndex(idx));
+      if (type_sp)
+        sb_type_list.Append(SBType(type_sp));
     }
 
     // Try the loaded language runtimes
@@ -1936,16 +1927,15 @@ SBValueList SBTarget::FindGlobalVariables(const char *name,
   TargetSP target_sp(GetSP());
   if (name && target_sp) {
     VariableList variable_list;
-    const uint32_t match_count = target_sp->GetImages().FindGlobalVariables(
-        ConstString(name), max_matches, variable_list);
-
-    if (match_count > 0) {
+    target_sp->GetImages().FindGlobalVariables(ConstString(name), max_matches,
+                                               variable_list);
+    if (!variable_list.Empty()) {
       ExecutionContextScope *exe_scope = target_sp->GetProcessSP().get();
       if (exe_scope == nullptr)
         exe_scope = target_sp.get();
-      for (uint32_t i = 0; i < match_count; ++i) {
-        lldb::ValueObjectSP valobj_sp(ValueObjectVariable::Create(
-            exe_scope, variable_list.GetVariableAtIndex(i)));
+      for (const VariableSP &var_sp : variable_list) {
+        lldb::ValueObjectSP valobj_sp(
+            ValueObjectVariable::Create(exe_scope, var_sp));
         if (valobj_sp)
           sb_value_list.Append(SBValue(valobj_sp));
       }
@@ -1970,30 +1960,28 @@ SBValueList SBTarget::FindGlobalVariables(const char *name,
     VariableList variable_list;
 
     std::string regexstr;
-    uint32_t match_count;
     switch (matchtype) {
     case eMatchTypeNormal:
-      match_count = target_sp->GetImages().FindGlobalVariables(
-          ConstString(name), max_matches, variable_list);
+      target_sp->GetImages().FindGlobalVariables(ConstString(name), max_matches,
+                                                 variable_list);
       break;
     case eMatchTypeRegex:
-      match_count = target_sp->GetImages().FindGlobalVariables(
-          RegularExpression(name_ref), max_matches, variable_list);
+      target_sp->GetImages().FindGlobalVariables(RegularExpression(name_ref),
+                                                 max_matches, variable_list);
       break;
     case eMatchTypeStartsWith:
       regexstr = llvm::Regex::escape(name) + ".*";
-      match_count = target_sp->GetImages().FindGlobalVariables(
-          RegularExpression(regexstr), max_matches, variable_list);
+      target_sp->GetImages().FindGlobalVariables(RegularExpression(regexstr),
+                                                 max_matches, variable_list);
       break;
     }
-
-    if (match_count > 0) {
+    if (!variable_list.Empty()) {
       ExecutionContextScope *exe_scope = target_sp->GetProcessSP().get();
       if (exe_scope == nullptr)
         exe_scope = target_sp.get();
-      for (uint32_t i = 0; i < match_count; ++i) {
-        lldb::ValueObjectSP valobj_sp(ValueObjectVariable::Create(
-            exe_scope, variable_list.GetVariableAtIndex(i)));
+      for (const VariableSP &var_sp : variable_list) {
+        lldb::ValueObjectSP valobj_sp(
+            ValueObjectVariable::Create(exe_scope, var_sp));
         if (valobj_sp)
           sb_value_list.Append(SBValue(valobj_sp));
       }
@@ -2290,11 +2278,9 @@ lldb::SBSymbolContextList SBTarget::FindSymbols(const char *name,
   SBSymbolContextList sb_sc_list;
   if (name && name[0]) {
     TargetSP target_sp(GetSP());
-    if (target_sp) {
-      bool append = true;
+    if (target_sp)
       target_sp->GetImages().FindSymbolsWithNameAndType(
-          ConstString(name), symbol_type, *sb_sc_list, append);
-    }
+          ConstString(name), symbol_type, *sb_sc_list);
   }
   return LLDB_RECORD_RESULT(sb_sc_list);
 }

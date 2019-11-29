@@ -26,7 +26,7 @@ void DependenciesMap::mergeDependency(PackageDependency &&Dep) {
   if (!Res.second)
     // Note: we use Dep after std::move(Dep) only in case it wasn't really moved
     // by try_emplace
-    Res.first->second.addUse(Dep.getSingleUse());
+    Res.first->second.setImportLoc(Dep.getImportLoc());
 }
 
 void PackageDependency::print(llvm::raw_ostream &out) const {

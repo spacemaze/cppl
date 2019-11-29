@@ -98,7 +98,22 @@ NamedDecl *Parser::ParseCXXInlineMethodDef(
     return FnD;
   }
 
-  if (SkipFunctionBodies && (!FnD || Actions.canSkipFunctionBody(FnD)) &&
+  // C++ Levitation: in this mode we don't skip inline function bodies,
+  //  for we consider it as part of pure declaration.
+  bool LevitationInlineFunction = false;
+
+  if (Actions.getLangOpts().LevitationMode) {
+    if (auto F = dyn_cast<FunctionDecl>(FnD))
+      LevitationInlineFunction = F->isInlined();
+    else if (isa<FunctionTemplateDecl>(FnD))
+      LevitationInlineFunction = true;
+    else if (isa<ClassScopeFunctionSpecializationDecl>(FnD))
+      LevitationInlineFunction = true;
+  }
+
+  if (SkipFunctionBodies &&
+      !LevitationInlineFunction &&
+      (!FnD || Actions.canSkipFunctionBody(FnD)) &&
       trySkippingFunctionBody()) {
     Actions.ActOnSkippedFunctionBody(FnD);
     return FnD;

@@ -38,7 +38,6 @@ namespace clang { namespace levitation { namespace tools {
     levitation::SinglePath BinDir;
     llvm::StringRef SourcesRoot = DriverDefaults::SOURCES_ROOT;
     llvm::StringRef BuildRoot = DriverDefaults::BUILD_ROOT;
-    llvm::StringRef MainSource = DriverDefaults::MAIN_SOURCE;
 
     llvm::StringRef PreambleSource;
     levitation::SinglePath PreambleOutput;
@@ -52,10 +51,12 @@ namespace clang { namespace levitation { namespace tools {
 
     bool DryRun;
 
-    bool UseLibStdCppForLinker = true;
+    llvm::StringRef StdLib = DriverDefaults::STDLIB;
+    bool CanUseLibStdCppForLinker = true;
 
     Args ExtraPreambleArgs;
     Args ExtraParseArgs;
+    Args ExtraParseImportArgs;
     Args ExtraCodeGenArgs;
     Args ExtraLinkerArgs;
 
@@ -83,14 +84,6 @@ namespace clang { namespace levitation { namespace tools {
       LevitationDriver::BuildRoot = BuildRoot;
     }
 
-    llvm::StringRef getMainSource() const {
-      return MainSource;
-    }
-
-    void setMainSource(llvm::StringRef MainSource) {
-      LevitationDriver::MainSource = MainSource;
-    }
-
     llvm::StringRef getPreambleSource() const {
       return PreambleSource;
     }
@@ -101,6 +94,10 @@ namespace clang { namespace levitation { namespace tools {
 
     void setPreambleSource(llvm::StringRef PreambleSource) {
       LevitationDriver::PreambleSource = PreambleSource;
+    }
+
+    void setStdLib(llvm::StringRef StdLib) {
+      LevitationDriver::StdLib = StdLib;
     }
 
     int getJobsNumber() const {
@@ -148,7 +145,7 @@ namespace clang { namespace levitation { namespace tools {
     }
 
     void disableUseLibStdCppForLinker() {
-      LevitationDriver::UseLibStdCppForLinker = false;
+      LevitationDriver::CanUseLibStdCppForLinker = false;
     }
 
     void setExtraPreambleArgs(StringRef Args);

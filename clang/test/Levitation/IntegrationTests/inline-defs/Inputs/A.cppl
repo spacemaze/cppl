@@ -1,0 +1,38 @@
+// CHECK-NOT: return 1111;
+// CHECK: int keepThisInit = 77777;
+// CHECK: return 5555;
+// CHECK: int keepThisInit = 88888;
+// CHECK-NOT: return 11111;
+// CHECK: static int andThisInitKeepToo = 777777;
+// CHECK-NOT: staticField = 123;
+// CHECK: staticField = 234;
+// CHECK: keepExtern
+
+// Some notes here, why we keep init parts?
+// Because it can't go to definition part, and mergable just fine. So keep it.
+
+namespace Inputs {
+  class A {
+  public:
+    static int thisSkip() { return 1111; }
+    int keepThisInit = 77777;
+    static int staticField;
+  };
+
+  template <typename T>
+  class AA {
+  public:
+    static int thisLeave() { return 5555; }
+    int keepThisInit = 88888;
+    static int staticField;
+  };
+
+  int thisSkipToo() { return 11111; }
+  static int andThisInitKeepToo = 777777;
+
+  int A::staticField = 123;
+
+  template<typename T>
+  int AA<T>::staticField = 234;
+  extern int keepExtern;
+}

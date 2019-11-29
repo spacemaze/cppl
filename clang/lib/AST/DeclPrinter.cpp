@@ -108,8 +108,8 @@ namespace {
 
     void printTemplateParameters(const TemplateParameterList *Params,
                                  bool OmitTemplateKW = false);
-    void printTemplateArguments(const TemplateArgumentList &Args,
-                                const TemplateParameterList *Params = nullptr);
+    void printTemplateArguments(llvm::ArrayRef<TemplateArgument> Args);
+    void printTemplateArguments(llvm::ArrayRef<TemplateArgumentLoc> Args);
     void prettyPrintAttributes(Decl *D);
     void prettyPrintPragmas(Decl *D);
     void printDeclType(QualType T, StringRef DeclName, bool Pack = false);
@@ -387,8 +387,7 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
     // Don't print implicit specializations, as they are printed when visiting
     // corresponding templates.
     if (auto FD = dyn_cast<FunctionDecl>(*D))
-      if (!Context.getLangOpts().LevitationMode &&
-          FD->getTemplateSpecializationKind() == TSK_ImplicitInstantiation &&
+      if (FD->getTemplateSpecializationKind() == TSK_ImplicitInstantiation &&
           !isa<ClassTemplateSpecializationDecl>(DC))
         continue;
 
@@ -626,21 +625,26 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
   if (Policy.FullyQualifiedName) {
     Proto += D->getQualifiedNameAsString();
   } else {
+    llvm::raw_string_ostream OS(Proto);
     if (!Policy.SuppressScope) {
       if (const NestedNameSpecifier *NS = D->getQualifier()) {
-        llvm::raw_string_ostream OS(Proto);
         NS->print(OS, Policy);
       }
     }
-    Proto += D->getNameInfo().getAsString();
+    D->getNameInfo().printName(OS, Policy);
   }
 
   if (GuideDecl)
     Proto = GuideDecl->getDeducedTemplate()->getDeclName().getAsString();
-  if (const TemplateArgumentList *TArgs = D->getTemplateSpecializationArgs()) {
+  if (D->isFunctionTemplateSpecialization()) {
     llvm::raw_string_ostream POut(Proto);
     DeclPrinter TArgPrinter(POut, SubPolicy, Context, Indentation);
-    TArgPrinter.printTemplateArguments(*TArgs);
+    const auto *TArgAsWritten = D->getTemplateSpecializationArgsAsWritten();
+    if (TArgAsWritten && !Policy.PrintCanonicalTypes)
+      TArgPrinter.printTemplateArguments(TArgAsWritten->arguments());
+    else if (const TemplateArgumentList *TArgs =
+                 D->getTemplateSpecializationArgs())
+      TArgPrinter.printTemplateArguments(TArgs->asArray());
   }
 
   QualType Ty = D->getType();
@@ -864,7 +868,9 @@ void DeclPrinter::VisitVarDecl(VarDecl *D) {
     }
   }
 
-  // FIXME Levitation:
+  // C++ Levitation fix. Replaced legacy lines:
+  // printDeclType(T, D->getName());
+  // with lines below:
   // Declaration type printing has been fixed.
   if (Context.getLangOpts().LevitationMode) {
     StringRef Name = D->isOutOfLine() ?
@@ -874,6 +880,7 @@ void DeclPrinter::VisitVarDecl(VarDecl *D) {
     // Legacy code
     printDeclType(T, D->getName());
   }
+  // end of C++ Levitation
 
   Expr *Init = D->getInit();
   if (!Policy.SuppressInitializers && Init) {
@@ -934,8 +941,6 @@ void DeclPrinter::VisitStaticAssertDecl(StaticAssertDecl *D) {
 void DeclPrinter::VisitNamespaceDecl(NamespaceDecl *D) {
   if (D->isInline())
     Out << "inline ";
-  if (D->isLevitationPackage())
-    Out << "package ";
   Out << "namespace " << *D << " {\n";
   VisitDeclContext(D);
   Indent() << "}";
@@ -968,17 +973,27 @@ void DeclPrinter::VisitCXXRecordDecl(CXXRecordDecl *D) {
   prettyPrintAttributes(D);
 
   if (D->getIdentifier()) {
+    // C++ Levitation: fixed legacy bug.
+    // replaced this:
+    // Out << ' ' << *D;
+    // with lines below:
     Out << ' ';
 
     if (const NestedNameSpecifier *Q = D->getQualifier())
       Q->print(Out, Policy);
 
     Out << *D;
+    // end of C++ Levitation
 
-    if (auto S = dyn_cast<ClassTemplatePartialSpecializationDecl>(D))
-      printTemplateArguments(S->getTemplateArgs(), S->getTemplateParameters());
-    else if (auto S = dyn_cast<ClassTemplateSpecializationDecl>(D))
-      printTemplateArguments(S->getTemplateArgs());
+    if (auto S = dyn_cast<ClassTemplateSpecializationDecl>(D)) {
+      ArrayRef<TemplateArgument> Args = S->getTemplateArgs().asArray();
+      if (!Policy.PrintCanonicalTypes)
+        if (const auto* TSI = S->getTypeAsWritten())
+          if (const auto *TST =
+                  dyn_cast<TemplateSpecializationType>(TSI->getType()))
+            Args = TST->template_arguments();
+      printTemplateArguments(Args);
+    }
   }
 
   if (D->isCompleteDefinition()) {
@@ -1094,40 +1109,22 @@ void DeclPrinter::printTemplateParameters(const TemplateParameterList *Params,
     Out << ' ';
 }
 
-void DeclPrinter::printTemplateArguments(const TemplateArgumentList &Args,
-                                         const TemplateParameterList *Params) {
+void DeclPrinter::printTemplateArguments(ArrayRef<TemplateArgument> Args) {
   Out << "<";
   for (size_t I = 0, E = Args.size(); I < E; ++I) {
-    const TemplateArgument &A = Args[I];
     if (I)
       Out << ", ";
-    if (Params) {
-      if (A.getKind() == TemplateArgument::Type)
-        if (auto T = A.getAsType()->getAs<TemplateTypeParmType>()) {
-          auto P = cast<TemplateTypeParmDecl>(Params->getParam(T->getIndex()));
-          Out << *P;
-          continue;
-        }
-      if (A.getKind() == TemplateArgument::Template) {
-        if (auto T = A.getAsTemplate().getAsTemplateDecl())
-          if (auto TD = dyn_cast<TemplateTemplateParmDecl>(T)) {
-            auto P = cast<TemplateTemplateParmDecl>(
-                                              Params->getParam(TD->getIndex()));
-            Out << *P;
-            continue;
-          }
-      }
-      if (A.getKind() == TemplateArgument::Expression) {
-        if (auto E = dyn_cast<DeclRefExpr>(A.getAsExpr()))
-          if (auto N = dyn_cast<NonTypeTemplateParmDecl>(E->getDecl())) {
-            auto P = cast<NonTypeTemplateParmDecl>(
-                                               Params->getParam(N->getIndex()));
-            Out << *P;
-            continue;
-          }
-      }
-    }
-    A.print(Policy, Out);
+    Args[I].print(Policy, Out);
+  }
+  Out << ">";
+}
+
+void DeclPrinter::printTemplateArguments(ArrayRef<TemplateArgumentLoc> Args) {
+  Out << "<";
+  for (size_t I = 0, E = Args.size(); I < E; ++I) {
+    if (I)
+      Out << ", ";
+    Args[I].getArgument().print(Policy, Out);
   }
   Out << ">";
 }
@@ -1477,6 +1474,11 @@ void DeclPrinter::VisitObjCPropertyDecl(ObjCPropertyDecl *PDecl) {
     Out << "(";
     if (PDecl->getPropertyAttributes() & ObjCPropertyDecl::OBJC_PR_class) {
       Out << (first ? "" : ", ") << "class";
+      first = false;
+    }
+
+    if (PDecl->getPropertyAttributes() & ObjCPropertyDecl::OBJC_PR_direct) {
+      Out << (first ? "" : ", ") << "direct";
       first = false;
     }
 

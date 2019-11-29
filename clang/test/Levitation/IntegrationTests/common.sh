@@ -21,15 +21,15 @@
 #
 # Example of command, used 'enums' test as a source
 #    // RUN:  %clang -cc1 -std=c++17 -xc++ -levitation-build-preamble %S/../preamble.hpp -o %t-preamble.pch
-#    // Parsing 'P1/A'...
-#    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -xc++ -levitation-build-ast -levitation-sources-root-dir=. -levitation-deps-output-file=%t-P1_A.ldeps %S/P1/A.cppl -o %t-P1_A.ast
-#    // Instantiating 'P1/A'...
-#    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -flevitation-build-decl -emit-pch %t-P1_A.ast -o %t-P1_A.decl-ast
-#    // Compiling 'P1/A'...
-#    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -flevitation-build-object -emit-obj %t-P1_A.ast -o %t-P1_A.o
+#    // Parsing 'Inputs/A'...
+#    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -xc++ -levitation-build-ast -levitation-sources-root-dir=. -levitation-deps-output-file=%t-Inputs_A.ldeps %S/Inputs/A.cppl -o %t-Inputs_A.ast
+#    // Instantiating 'Inputs/A'...
+#    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -flevitation-build-decl -emit-pch %t-Inputs_A.ast -o %t-Inputs_A.decl-ast
+#    // Compiling 'Inputs/A'...
+#    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -flevitation-build-object -emit-obj %t-Inputs_A.ast -o %t-Inputs_A.o
 #    // Compiling source 'main.cpp'...
-#    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -xc++ -flevitation-build-object -emit-obj -levitation-dependency=%t-P1_A.ast -levitation-dependency=%t-P1_A.decl-ast %s -Dmain_cpp -o %t-main.o
-#    // RUN:  %clangxx %t-main.o %t-P1_A.o -o %t-enums.out
+#    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -xc++ -flevitation-build-object -emit-obj -levitation-dependency=%t-Inputs_A.ast -levitation-dependency=%t-Inputs_A.decl-ast %s -Dmain_cpp -o %t-main.o
+#    // RUN:  %clangxx %t-main.o %t-Inputs_A.o -o %t-enums.out
 #    // RUN:  %t-enums.out
 
 
@@ -77,7 +77,8 @@ APP_NAME=
 
 TESTS_DIR=$PROJECT_DIR/..
 
-MAIN_SRC=main.cpp
+MAIN_DIR=$PROJECT_DIR
+MAIN_SRC=main.cppl
 MAIN_SRC_IN=$MAIN_SRC.in
 
 # MAIN_SRC_ORIGIN_PATH will be set during setBuildModeXXXX calls
@@ -414,6 +415,20 @@ function setBuildModeExecute {
   PREAMBLE_SRC=$PREAMBLE_FILE
 
   APP_NAME=./$APP_NAME_EXECUTE
+
+
+  GENERATED_OUTPUT=$MAIN_DIR/$MAIN_SRC
+
+  createDirFor $GENERATED_OUTPUT
+
+  if [ -f $MAIN_SRC_IN ]; then
+    MAIN_SRC_ORIGIN_PATH=$PROJECT_DIR/$MAIN_SRC_IN
+#  elif [ -f $MAIN_SRC ]; then
+#    MAIN_SRC_ORIGIN_PATH=$PROJECT_DIR/$MAIN_SRC
+  else
+    echoIfInfo "'$MAIN_SRC_IN' doesn't exist in test '$TEST_NAME'."
+  fi
+
 }
 
 function setBuildModeGenerate {
@@ -582,10 +597,10 @@ function buildPreamble {
     echoIfDebug
 }
 
-function parse {
+function parseImport {
     MODULE=$1
 
-    BUILD_AST_FLAGS="-xc++ -levitation-build-ast"
+    BUILD_AST_FLAGS="-xc++ -levitation-parse-import"
     BUILD_AST_FLAGS="$BUILD_AST_FLAGS -levitation-sources-root-dir=$(getSourceRootCommandLineParam)"
 
     setupFlags "$2" "$BUILD_AST_FLAGS"
@@ -595,150 +610,97 @@ function parse {
     registerModule $MODULE
 
     SRCFILE="$(getSrcFileName $MODULE)"
-    ASTFILE="$(getBuildedFileName $MODULE.ast)"
     DEPSFILE="$(getBuildedFileName $MODULE.ldeps)"
 
     if [ "$BUILD_MODE" == "$BUILD_MODE_EXECUTE" ]; then
-      createDirFor $ASTFILE $DEPSFILE
+      createDirFor $DEPSFILE
     fi
 
-    echoIfDebug "Parsing '$MODULE'..."
+    echoIfDebug "Parsing #import directives in '$MODULE'..."
 
     if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ]; then
-        echo "// Parsing '$MODULE'..." >> $GENERATED_OUTPUT_COMMANDS
+        echo "// Parsing #import directives in '$MODULE'..." >> $GENERATED_OUTPUT_COMMANDS
     fi
 
-    runCommand $CXX $FLAGS "-levitation-deps-output-file=$DEPSFILE" $SRCFILE "-o" $ASTFILE
+    runCommand $CXX $FLAGS "-levitation-deps-output-file=$DEPSFILE" $SRCFILE
     echoIfDebug
 }
 
-function instantiate {
+function buildDecl {
     # Should be in format:
-    # MODULE:DEP1,DEP2,...
+    # MODULE:DEInputs,DEP2,...
     MODULE_WITH_DEPS=$1
     IFS=:;
     read MODULE DEPS <<< "$MODULE_WITH_DEPS"
     IFS=" "
 
-    echoIfDebug "Instantiating '$MODULE'..."
+    echoIfDebug "Building declaration for '$MODULE'..."
     dumpIfNotEmpty "Dependencies:" $DEPS
 
     if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ]; then
-        echo "// Instantiating '$MODULE'..." >> $GENERATED_OUTPUT_COMMANDS
+        echo "// Building declaration '$MODULE'..." >> $GENERATED_OUTPUT_COMMANDS
     fi
 
     DEP_FLAGS=""
     for DEP in $(echo $DEPS | sed "s/,/ /g")
     do
-        DEP_FLAGS="$DEP_FLAGS -levitation-dependency=$(getBuildedFileName $DEP.ast)"
         DEP_FLAGS="$DEP_FLAGS -levitation-dependency=$(getBuildedFileName $DEP.decl-ast)"
     done
 
-    INSTANTIATE_FLAGS="-flevitation-build-decl $DEP_FLAGS -emit-pch"
+    INSTANTIATE_FLAGS="-xc++ -flevitation-build-decl $DEP_FLAGS -emit-pch"
 
     setupFlags "$2" "$INSTANTIATE_FLAGS"
 
-    INITIAL_AST_FILE="$(getBuildedFileName $MODULE.ast)"
+    INPUT_FILE="$(getSrcFileName $MODULE)"
     DECL_AST_FILE="$(getBuildedFileName $MODULE.decl-ast)"
 
     if [ "$BUILD_MODE" == "$BUILD_MODE_EXECUTE" ]; then
       createDirFor $DECL_AST_FILE
     fi
 
-    runCommand $CXX $FLAGS $INITIAL_AST_FILE "-o" $DECL_AST_FILE
+    runCommand $CXX $FLAGS $INPUT_FILE "-o" $DECL_AST_FILE
     echoIfDebug
 }
 
-# CXX -cc1 -std=c++17 -stdlib=libstdc++ -flevitation-build-object \
-# -levitation-preamble=./test-project/preamble.pch ./test-project/P1/A.ast \
-# -emit-obj -o ./test-project/P1/A.o
-function compileAST {
-
-    COMPILE_OBJECT_FLAGS="-flevitation-build-object -emit-obj"
-
-    setupFlags "$2" "$COMPILE_OBJECT_FLAGS"
-
+function buildObject {
     # Should be in format:
-    # MODULE:DEP1,DEP2,...
+    # MODULE:DEInputs,DEP2,...
     MODULE_WITH_DEPS=$1
     IFS=:;
     read MODULE DEPS <<< "$MODULE_WITH_DEPS"
     IFS=" "
 
-    echoIfDebug "Compiling '$MODULE'..."
+    echoIfDebug "Building object for '$MODULE'..."
     dumpIfNotEmpty "Dependencies:" $DEPS
 
     if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ]; then
-        echo "// Compiling '$MODULE'..." >> $GENERATED_OUTPUT_COMMANDS
+        echo "// Building object '$MODULE'..." >> $GENERATED_OUTPUT_COMMANDS
     fi
 
     DEP_FLAGS=""
     for DEP in $(echo $DEPS | sed "s/,/ /g")
     do
-        DEP_FLAGS="$DEP_FLAGS -levitation-dependency=$(getBuildedFileName $DEP.ast)"
         DEP_FLAGS="$DEP_FLAGS -levitation-dependency=$(getBuildedFileName $DEP.decl-ast)"
     done
 
-    INITIAL_AST_FILE="$(getBuildedFileName $MODULE.ast)"
-    OBJECT_FILE="$(getBuildedFileName $MODULE.o)"
+    INSTANTIATE_FLAGS="-xc++ -flevitation-build-object $DEP_FLAGS -emit-obj"
+
+    setupFlags "$2" "$INSTANTIATE_FLAGS"
+
+    INPUT_FILE="$(getSrcFileName $MODULE)"
+    OUTPUT_FILE="$(getBuildedFileName $MODULE.o)"
 
     if [ "$BUILD_MODE" == "$BUILD_MODE_EXECUTE" ]; then
-      createDirFor $OBJECT_FILE
+      createDirFor $OUTPUT_FILE
     fi
 
-    runCommand $CXX $FLAGS $DEP_FLAGS $INITIAL_AST_FILE "-o" $OBJECT_FILE
+    runCommand $CXX $FLAGS $INPUT_FILE "-o" $OUTPUT_FILE
     echoIfDebug
 }
 
-function compileSrc {
-
-    COMPILE_OBJECT_FLAGS="-xc++ -flevitation-build-object -emit-obj"
-
-    setupFlags "$2" "$COMPILE_OBJECT_FLAGS"
-
-    # Should be in format:
-    # MODULE(with extension):DEP1,DEP2,...
-    MODULE_WITH_DEPS=$1
-    IFS=:
-    read MODULE DEPS <<< "$MODULE_WITH_DEPS"
-
-    IFS=.
-    read MODULE_WITHOUT_EXT MODULE_EXT <<< "$MODULE"
-    IFS=" "
-
-    echoIfDebug "Compiling source '$MODULE'..."
-    dumpIfNotEmpty "Dependencies:" $DEPS
-
-    if [ "$BUILD_MODE" == "$BUILD_MODE_GENERATE" ]; then
-      echo "// Compiling source '$MODULE'..." >> $GENERATED_OUTPUT_COMMANDS
-    fi
-
-    DEP_FLAGS=""
-    for DEP in $(echo $DEPS | sed "s/,/ /g")
-    do
-      DEP_FLAGS="$DEP_FLAGS -levitation-dependency=$(getBuildedFileName $DEP.ast)"
-      DEP_FLAGS="$DEP_FLAGS -levitation-dependency=$(getBuildedFileName $DEP.decl-ast)"
-    done
-
-    # Main file will be generated, and shall not be registered
-    # as regular module.
-    if [ "$MODULE" != "$MAIN_SRC" ]; then
-      registerModule $MODULE
-    fi
-
-    SRCFILE="$(getSrcFileName $MODULE)"
-    OBJECT_FILE="$(getBuildedFileName $MODULE_WITHOUT_EXT.o)"
-
-    if [ "$BUILD_MODE" == "$BUILD_MODE_EXECUTE" ]; then
-      createDirFor $OBJECT_FILE
-    fi
-
-    runCommand $CXX $FLAGS $DEP_FLAGS $SRCFILE "-o" $OBJECT_FILE
-    echoIfDebug
-}
-
-function compileMainSrc {
-    compileSrc $MAIN_SRC:$@
+function buildModule {
+  buildDecl $1
+  buildObject $1
 }
 
 function link {
@@ -861,6 +823,8 @@ function initTests {
     echoIfDump "Running tests..."
     setBuildModeExecute
     createBuildDir
+
+    copyFile "$MAIN_SRC_ORIGIN_PATH" "$GENERATED_OUTPUT"
   fi
 
   PREAMBLE_PCH=$(getBuildedFileName preamble.pch)

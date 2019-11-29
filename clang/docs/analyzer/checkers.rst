@@ -319,6 +319,15 @@ Check for values stored to variables that are never read afterwards.
    x = 1; // warn
  }
 
+The ``WarnForDeadNestedAssignments`` option enables the checker to emit
+warnings for nested dead assignments. You can disable with the
+``-analyzer-config deadcode.DeadStores:WarnForDeadNestedAssignments=false``.
+*Defaults to true*.
+
+Would warn for this e.g.:
+if ((y = make_int())) {
+}
+
 .. _nullability-checkers:
 
 nullability
@@ -1963,6 +1972,12 @@ Check for overflows in the arguments to malloc().
 
  void test(int n) {
    void *p = malloc(n * sizeof(int)); // warn
+ }
+
+ void test2(int n) {
+   if (n > 100) // gives an upper-bound
+     return;
+   void *p = malloc(n * sizeof(int)); // no warning
  }
 
 .. _alpha-security-MmapWriteExec:

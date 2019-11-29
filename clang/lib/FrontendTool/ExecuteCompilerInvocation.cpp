@@ -72,7 +72,7 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
   case ModuleFileInfo:         return std::make_unique<DumpModuleInfoAction>();
   case VerifyPCH:              return std::make_unique<VerifyPCHAction>();
   case TemplightDump:          return std::make_unique<TemplightDumpAction>();
-  case LevitationBuildAST:     return std::make_unique<LevitationBuildASTAction>();
+  case LevitationParseImport:  return std::make_unique<LevitationParseImportAction>();
   case LevitationBuildPreamble:  return std::make_unique<LevitationBuildPreambleAction>();
   case PluginAction: {
     for (FrontendPluginRegistry::iterator it =
@@ -181,7 +181,10 @@ CreateFrontendAction(CompilerInstance &CI) {
     Act = std::make_unique<ASTMergeAction>(std::move(Act),
                                             FEOpts.ASTMergeFiles);
 
-  if (CI.getLangOpts().getLevitationBuildStage() == LangOptions::LBSK_BuildObjectFile) {
+  if (CI.getLangOpts().isLevitationMode(
+        LangOptions::LBSK_BuildObjectFile,
+        LangOptions::LBSK_BuildDeclAST
+  )) {
     Act = std::make_unique<LevitationBuildObjectAction>(
         std::move(Act),
         FEOpts.LevitationPreambleFileName,
@@ -195,11 +198,11 @@ CreateFrontendAction(CompilerInstance &CI) {
 bool ExecuteCompilerInvocation(CompilerInstance *Clang) {
   // Honor -help.
   if (Clang->getFrontendOpts().ShowHelp) {
-    std::unique_ptr<OptTable> Opts = driver::createDriverOptTable();
-    Opts->PrintHelp(llvm::outs(), "clang -cc1 [options] file...",
-                    "LLVM 'Clang' Compiler: http://clang.llvm.org",
-                    /*Include=*/driver::options::CC1Option,
-                    /*Exclude=*/0, /*ShowAllAliases=*/false);
+    driver::getDriverOptTable().PrintHelp(
+        llvm::outs(), "clang -cc1 [options] file...",
+        "LLVM 'Clang' Compiler: http://clang.llvm.org",
+        /*Include=*/driver::options::CC1Option,
+        /*Exclude=*/0, /*ShowAllAliases=*/false);
     return true;
   }
 
@@ -280,6 +283,7 @@ bool ExecuteCompilerInvocation(CompilerInstance *Clang) {
                                   AnOpts,
                                   Clang->getDiagnostics(),
                                   Clang->getLangOpts());
+    return true;
   }
 
   // Honor -analyzer-config-help.

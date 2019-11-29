@@ -1,6 +1,0 @@
-package namespace P1 {
-  struct Root {
-    static void f() {
-    }
-  };
-}

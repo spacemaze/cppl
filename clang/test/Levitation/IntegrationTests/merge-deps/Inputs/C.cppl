@@ -1,0 +1,14 @@
+#import Inputs::A
+
+namespace Inputs {
+  class C {
+  public:
+    static int foo() {
+      Inputs::A<int> a;
+      Inputs::AA aa;
+      return Inputs::A<int>::foo(
+        a.someField + aa.someField + A<int>::staticField + AA::staticField
+      );
+    }
+  };
+}

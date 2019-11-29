@@ -61,7 +61,7 @@
 #include "clang/Serialization/ASTWriter.h"
 #include "clang/Serialization/ContinuousRangeMap.h"
 #include "clang/Serialization/InMemoryModuleCache.h"
-#include "clang/Serialization/Module.h"
+#include "clang/Serialization/ModuleFile.h"
 #include "clang/Serialization/PCHContainerOperations.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -84,6 +84,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/VirtualFileSystem.h"
@@ -1459,7 +1460,7 @@ void ASTUnit::transferASTDataFromCompilerInstance(CompilerInstance &CI) {
   CI.setFileManager(nullptr);
   if (CI.hasTarget())
     Target = &CI.getTarget();
-  Reader = CI.getModuleManager();
+  Reader = CI.getASTReader();
   HadModuleLoaderFatalFailure = CI.hadModuleLoaderFatalFailure();
 }
 
@@ -2304,26 +2305,19 @@ bool ASTUnit::Save(StringRef File) {
   SmallString<128> TempPath;
   TempPath = File;
   TempPath += "-%%%%%%%%";
-  int fd;
-  if (llvm::sys::fs::createUniqueFile(TempPath, fd, TempPath))
-    return true;
-
   // FIXME: Can we somehow regenerate the stat cache here, or do we need to
   // unconditionally create a stat cache when we parse the file?
-  llvm::raw_fd_ostream Out(fd, /*shouldClose=*/true);
 
-  serialize(Out);
-  Out.close();
-  if (Out.has_error()) {
-    Out.clear_error();
+  if (llvm::Error Err = llvm::writeFileAtomically(
+          TempPath, File, [this](llvm::raw_ostream &Out) {
+            return serialize(Out) ? llvm::make_error<llvm::StringError>(
+                                        "ASTUnit serialization failed",
+                                        llvm::inconvertibleErrorCode())
+                                  : llvm::Error::success();
+          })) {
+    consumeError(std::move(Err));
     return true;
   }
-
-  if (llvm::sys::fs::rename(TempPath, File)) {
-    llvm::sys::fs::remove(TempPath);
-    return true;
-  }
-
   return false;
 }
 

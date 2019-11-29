@@ -297,14 +297,7 @@ public:
     if (!Solver->isValid())
       return;
 
-    auto MainFileRel = levitation::Path::makeRelative<DependencyPath>(
-        Context.Solver.MainFile,
-        Context.Solver.SourcesRoot
-    );
-
-    auto MainFileID = Context.StringsPool.addItem(std::move(MainFileRel));
-
-    auto DGraph = DependenciesGraph::build(Context.getParsedDependencies(), MainFileID);
+    auto DGraph = DependenciesGraph::build(Context.getParsedDependencies());
 
     Context.DepsGraph = DGraph;
 
@@ -329,46 +322,22 @@ public:
 
     std::shared_ptr<DependenciesGraph> DGraphPtr =
         Context.detachDependenciesGraph();
-    auto &DGraph = *DGraphPtr;
 
-    // TODO Levitation: remove this way.
+    // TODO Levitation: remove this way. Use singleton instead.
     auto &Strings = Context.getStringsPool();
-
-    auto OnCyclesFound = [&] (
-          const SolvedDependenciesInfo::FullDependenciesList &Deps,
-          DependenciesGraph::NodeID::Type NID
-      ) {
-        Log.error()
-        << "Can't solve dependencies. Found cycle.\n"
-        << "Node '";
-        DGraph.dumpNodeShort(Log.error(), NID, Strings);
-        Log.error() << "' is about to be added second time into chain:\n";
-        SolvedDependenciesInfo::dumpDependencies(
-            Log.error(),
-            DGraph,
-            Strings,
-            Deps
-        );
-        Log.error() << "\n";
-        Solver->setFailure("Failed to solve dependencies.");
-      };
 
       Log.verbose() << "Solving dependencies...\n";
 
-      Context.SolvedDepsInfo = SolvedDependenciesInfo::build(
-          DGraphPtr,
-          std::move(OnCyclesFound)
-      );
+      Context.SolvedDepsInfo = SolvedDependenciesInfo::build(DGraphPtr);
 
       const auto &SolvedInfo = *Context.SolvedDepsInfo;
 
       if (!SolvedInfo.isValid()) {
         Log.error() << "Failed to solve: " << SolvedInfo.getErrorMessage() << "\n";
 
-        if (!Solver->Verbose) {
-          Log.error() << "Dependencies:\n";
-          dump(Log.error(), Context.getParsedDependencies());
-        }
+        Log.error() << "Dependencies:\n";
+        dump(Log.error(), Context.getParsedDependencies());
+
         Solver->setFailure("Failed to solve dependencies.");
 
         return;
@@ -438,7 +407,7 @@ public:
       );
 
       DependenciesPaths FullDependencies = buildFullDependencies(
-          ParentDir, Strings, DGraph, *NodeIt.second
+          ParentDir, Strings, DGraph, NodeIt.second.FullDependencies
       );
 
       auto DependentFilePath = getNodeFilePath(
@@ -554,12 +523,12 @@ public:
     StringRef DepsRoot,
     const DependenciesStringsPool &Strings,
     const DependenciesGraph &DGraph,
-    const SolvedDependenciesInfo::FullDependenciesList &Dependencies
+    const SolvedDependenciesInfo::RangedDependenciesMap &Dependencies
   ) {
     DependenciesPaths Paths;
     for (auto Dep : Dependencies) {
 
-      auto &N = DGraph.getNode(Dep.NodeID);
+      auto &N = DGraph.getNode(Dep.second);
 
       PathString Package = *Strings.getItem(N.PackageInfo->PackagePath);
 
@@ -572,9 +541,9 @@ public:
       // and thus latter depends on former.
       // The only exception is main file.
       DependenciesSolverPath::addDepPathsFor(
-        Paths, Context.Solver.BuildRoot,
-        Package,
-        N.PackageInfo->IsMainFile
+          Paths, Context.Solver.BuildRoot,
+          Package,
+          N.PackageInfo->IsMainFile
       );
     }
 
