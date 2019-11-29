@@ -17,6 +17,7 @@
 #define LLVM_CLANG_LEVITATION_FILE_H
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include <memory>
@@ -103,6 +104,54 @@ class File {
     StatusEnum getStatus() const {
       return Status;
     }
+
+    StringRef getPath() const { return TargetFileName; }
+  };
+
+  class InputFile {
+  public:
+    enum StatusEnum {
+      Good,
+      HasStreamErrors
+    };
+  private:
+    StringRef Path;
+    StatusEnum Status = Good;
+  public:
+
+    InputFile(StringRef path) : Path(path) {};
+
+    class FileScope {
+      std::unique_ptr<MemoryBuffer> BuffPtr;
+    public:
+
+      FileScope(std::unique_ptr<MemoryBuffer> &&buffPtr)
+      : BuffPtr(std::move(buffPtr)) {}
+
+      operator bool() {
+        return BuffPtr != nullptr;
+      }
+
+      const MemoryBuffer& getMemoryBuffer() const {
+        return *BuffPtr;
+      }
+    };
+
+    FileScope open() {
+      auto Res = MemoryBuffer::getFileOrSTDIN(Path);
+
+      if (Res)
+        return FileScope(std::move(Res.get()));
+
+      // TODO Levitation: dispatch status
+      Status = HasStreamErrors;
+      return FileScope(nullptr);
+    }
+
+    bool hasErrors() const { return Status != Good; };
+    StatusEnum getStatus() const { return Status; }
+
+    StringRef getPath() const { return Path; }
   };
 }
 }

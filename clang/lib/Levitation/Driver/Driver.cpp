@@ -14,6 +14,7 @@
 #include "clang/Basic/FileManager.h"
 
 #include "clang/Levitation/Common/Failable.h"
+#include "clang/Levitation/Common/File.h"
 #include "clang/Levitation/Common/FileSystem.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/Common/StringBuilder.h"
@@ -50,8 +51,13 @@ namespace {
 
   struct FilesInfo {
     SinglePath Source;
+    SinglePath Header;
     SinglePath LDeps;
+    SinglePath SkippedBytes;
+
+    // FIXME Levitation: deprecated
     SinglePath AST;
+
     SinglePath DeclAST;
     SinglePath Object;
   };
@@ -64,6 +70,8 @@ namespace {
     Failable Status;
 
     Paths Packages;
+
+    // TODO Levitation: key may be an integer (string ID for PackagePath)
     llvm::DenseMap<StringRef, FilesInfo> Files;
 
     std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
@@ -96,6 +104,7 @@ public:
   void solveDependencies();
   void instantiateAndCodeGen();
   void codeGen();
+  void headersGen();
   void runLinker();
 
   void collectSources();
@@ -110,6 +119,10 @@ public:
   /// \param N node to be processed
   /// \return true is successful
   bool processDependencyNode(
+      const DependenciesGraph::Node &N
+  );
+
+  bool generateHeaderFor(
       const DependenciesGraph::Node &N
   );
 };
@@ -1186,6 +1199,27 @@ void LevitationDriverImpl::codeGen() {
     << "Instantiate and codegen: phase failed.";
 }
 
+void LevitationDriverImpl::headersGen() {
+  // We could just go through all .decl-asts we created, and that would work.
+  // But we should take into account that in future
+
+  if (!Status.isValid())
+    return;
+
+  const auto &G = Context.DependenciesInfo->getDependenciesGraph();
+
+  bool Res = G.dsfJobs(
+      G.publicTerminals(),
+      [&] (const DependenciesGraph::Node &N) {
+        return generateHeaderFor(N);
+      }
+  );
+
+  if (!Res)
+    Status.setFailure()
+    << "Instantiate and codegen: phase failed.";
+}
+
 void LevitationDriverImpl::runLinker() {
   if (!Status.isValid())
     return;
@@ -1244,11 +1278,24 @@ void LevitationDriverImpl::collectSources() {
         FileExtensions::SourceCode
     );
 
+    Files.Header = Path::getPath<SinglePath>(
+        Context.Driver.SourcesRoot,
+        PackagePath,
+        FileExtensions::Header
+    );
+
+    Files.SkippedBytes = Path::getPath<SinglePath>(
+        Context.Driver.SourcesRoot,
+        PackagePath,
+        FileExtensions::SkippedBytes
+    );
+
     Files.LDeps = Path::getPath<SinglePath>(
         Context.Driver.BuildRoot,
         PackagePath,
         FileExtensions::ParsedDependencies
     );
+
     Files.DeclAST = Path::getPath<SinglePath>(
         Context.Driver.BuildRoot,
         PackagePath,
@@ -1270,6 +1317,7 @@ void LevitationDriverImpl::collectSources() {
   << " '." << FileExtensions::SourceCode << "' files.\n\n";
 }
 
+// TODO Levitation: try to make this method const.
 bool LevitationDriverImpl::processDependencyNode(
     const DependenciesGraph::Node &N
 ) {
@@ -1340,6 +1388,198 @@ bool LevitationDriverImpl::processDependencyNode(
 
     default:
       llvm_unreachable("Unknown dependency kind");
+  }
+}
+
+typedef SmallVector<std::pair<size_t, size_t>, 64> SkippedBytesT;
+
+// TODO Levitation: may be move to separate file, ah?
+class HeaderGenerator {
+  // TODO Levitation: we perhaps need sources root (if source file is relative)
+  StringRef OutDir;
+  StringRef OutputFile;
+  StringRef SourceFile;
+  const Paths& Includes;
+  const SkippedBytesT& SkippedBytes;
+  log::Logger &Log;
+
+public:
+  HeaderGenerator(
+      StringRef OutDir,
+      StringRef OutputFile,
+      const StringRef &SourceFile,
+      const Paths &Includes,
+      const SkippedBytesT &SkippedBytes
+  )
+  : OutDir(OutDir),
+    OutputFile(OutputFile),
+    SourceFile(SourceFile),
+    Includes(Includes),
+    SkippedBytes(SkippedBytes),
+    Log(log::Logger::get())
+  {}
+
+  InputFile createSourceFile() {
+    // return InputFile("$SourcesRoot/$SourceFile")
+    llvm_unreachable("not implemented");
+  }
+
+  File createOutputFile() {
+    // return File("$OutDir/$OutputFile")
+    llvm_unreachable("not implemented");
+  }
+
+  void diagInFileIOIssues(const StringRef F, InputFile::StatusEnum Status) {
+    auto &err = Log.error() << "Failed to open file '" << F << "': ";
+    switch (Status) {
+      case InputFile::HasStreamErrors:
+        err << "stream error.";
+        break;
+      default:
+        err << "unknown reason.";
+    }
+    err << "\n";
+  }
+
+  void diagOutFileIOIssues(const StringRef F, File::StatusEnum Status) {
+      auto &err = Log.error() << "Failed to open file '" << F << "': ";
+
+      switch (Status) {
+        case File::HasStreamErrors:
+          err << "stream error.";
+          break;
+        case File::FiledToRename:
+          err << "temp file created, but failed to rename.";
+        case File::FailedToCreateTempFile:
+          err << "failed to create temp file.";
+          break;
+        default:
+          err << "unknown reason.";
+          break;
+      }
+      err << "\n";
+  }
+
+  void emitHeadComment(llvm::raw_ostream &out) {
+    out << "// This file is generated by C++ Levitation driver\n\n";
+  }
+
+  void emitAfterIncludesComment(llvm::raw_ostream &out) {
+    out << "\n"
+        << "// Below follows stripped part of source starting\n"
+        << "// from user include directives."
+        << "\n";
+  }
+
+  void emitIncludes(llvm::raw_ostream &out) {
+
+    out << "// Include other generated headers current file depends on";
+
+    for (const auto &inc : Includes) {
+      out << "#include \"" << inc << "\"\n";
+    }
+
+    out << "\n";
+  }
+
+  bool execute() {
+    auto InF = createSourceFile();
+    if (auto OpenedSrc = InF.open()) {
+
+      const auto &In = OpenedSrc.getMemoryBuffer();
+      const char *InStart = In.getBufferStart();
+      size_t InSize = In.getBufferSize();
+
+      auto OutF = createOutputFile();
+      if (auto OpenedFile = OutF.open()) {
+        auto &out = OpenedFile.getOutputStream();
+
+        emitHeadComment(out);
+
+        emitIncludes(out);
+
+        emitAfterIncludesComment(out);
+
+        size_t start = 0;
+        for (const auto &skippedRange : SkippedBytes) {
+
+          size_t writeCount = skippedRange.first - start;
+          assert(start + writeCount <= InSize);
+
+          out.write(InStart + start, writeCount);
+
+          start = skippedRange.second;
+        }
+
+        size_t writeCount = InSize - start;
+        assert(start + writeCount <= In.getBufferSize());
+
+        out.write(InStart + start, writeCount);
+      }
+
+      if (OutF.hasErrors()) {
+        diagOutFileIOIssues(OutF.getPath(), OutF.getStatus());
+      }
+    }
+
+    if (InF.hasErrors()) {
+      diagInFileIOIssues(InF.getPath(), InF.getStatus());
+    }
+  }
+};
+
+SkippedBytesT loadSkippedBytes(const SinglePath &Path) {
+  llvm_unreachable("not implemented");
+}
+
+bool LevitationDriverImpl::generateHeaderFor(
+    const DependenciesGraph::Node &N
+) {
+  const auto &Strings = CreatableSingleton<DependenciesStringsPool>::get();
+  const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
+
+  const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
+
+  auto FoundFiles = Context.Files.find(SrcRel);
+  if(FoundFiles == Context.Files.end()) {
+    Log.error()
+    << "Package '" << SrcRel << "' is present in dependencies, but not found.\n";
+    llvm_unreachable("Package not found");
+  }
+  const auto &Files = FoundFiles->second;
+
+  auto SkippedBytes = loadSkippedBytes(Files.SkippedBytes);
+
+  Paths includes;
+  for (auto DepNID : N.Dependencies) {
+    auto &DNode = Graph.getNode(DepNID);
+    auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
+
+    DependenciesSolverPath::addIncPathsFor(
+        includes,
+        Context.Driver.BuildRoot,
+        DepPath
+    );
+  }
+
+  switch (N.Kind) {
+
+    case DependenciesGraph::NodeKind::Declaration:
+      return HeaderGenerator(
+          Context.Driver.OutputHeadersDir,
+          Files.Header,
+          Files.Source,
+          includes,
+          SkippedBytes
+      )
+      .execute();
+    default:
+      // It is assumed that this method initially called for public terminals.
+      // Public terminals are always declarations.
+      // Declarations can depend only on another declarations.
+      // So this is impossible case if during DFS we go from decl to
+      // non-decl.
+      llvm_unreachable("Only Declaration nodes are supported.");
   }
 }
 
@@ -1460,6 +1700,9 @@ bool LevitationDriver::run() {
   if (LinkPhaseEnabled)
     Impl.runLinker();
 
+  if (isOutputHeadersCreationRequested())
+    Impl.headersGen();
+
   if (Context.Status.hasWarnings()) {
     log::Logger::get().warning()
     << Context.Status.getWarningMessage();
@@ -1499,7 +1742,7 @@ void LevitationDriver::dumpParameters() {
   << "    PreambleSource: " << (PreambleSource.empty() ? "<preamble compilation not requested>" : PreambleSource) << "\n"
   << "    JobsNumber: " << JobsNumber << "\n"
   << "    Output: " << Output << "\n"
-  << "    OutputHeader: " << (OutputHeader.empty() ? "<header creation not requested>" : OutputHeader) << "\n"
+  << "    OutputHeadersDir: " << (OutputHeadersDir.empty() ? "<header creation not requested>" : OutputHeadersDir) << "\n"
   << "    DryRun: " << (DryRun ? "yes" : "no") << "\n"
   << "\n";
 

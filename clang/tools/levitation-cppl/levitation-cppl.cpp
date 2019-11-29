@@ -77,9 +77,9 @@ int levitation_driver_main(int argc, char **argv) {
       )
       .optional(
           "-h", "<path>",
-          "Path to header file to be generated. If specified, then header "
+          "Path to headers root directory. If specified, then headers "
           "generation stage will be added to the compilation pipeline.",
-          [&](StringRef v) { Driver.setOutputHeader(v); }
+          [&](StringRef v) { Driver.setOutputHeadersDir(v); }
       )
       .optional(
           "-stdlib", "<std lib name>",

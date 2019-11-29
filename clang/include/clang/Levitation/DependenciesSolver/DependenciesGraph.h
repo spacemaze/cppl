@@ -109,6 +109,9 @@ private:
   /// Should be used as starting points from build process.
   NodesSet Terminals;
 
+  /// Last nodes in deps chain which are marked as public.
+  NodesSet PublicTerminals;
+
   NodesMap AllNodes;
   PackagesMap PackageInfos;
 
@@ -162,6 +165,9 @@ public:
     // Scan for regular terminal nodes
     DGraphPtr->collectTerminals();
 
+    // Scan for publically available terminal nodes.
+    DGraphPtr->collectPublicTerminals();
+
     return DGraphPtr;
   }
 
@@ -191,10 +197,17 @@ public:
   ///        but not its subnodes.
   /// \return true is walk was successful.
   bool dsfJobs(
+      const NodesSet& StartingPoints,
       std::function<bool(const Node&)> &&OnNode
   ) const {
     JobsContext Jobs(std::move(OnNode));
-    return dsfJobsOnNode(nullptr, Terminals, Jobs);
+    return dsfJobsOnNode(nullptr, StartingPoints, Jobs);
+  }
+
+  bool dsfJobs(
+      std::function<bool(const Node&)> &&OnNode
+  ) const {
+    return dsfJobs(Terminals, std::move(OnNode));
   }
 
   bool isInvalid() const { return Invalid; }
@@ -324,6 +337,7 @@ public:
   const NodesMap &allNodes() const { return AllNodes; }
   const NodesSet &roots() const { return Roots; }
   const NodesSet &terminals() const { return Terminals; }
+  const NodesSet &publicTerminals() const { return PublicTerminals; }
 
 protected:
 
@@ -529,6 +543,19 @@ protected:
         Terminals.insert(N.first);
       }
     }
+  }
+
+  void collectPublicTerminals() {
+    // collectPublicTerminals(Node)
+    //   if Node is public: return {Node}
+    //
+    //   Res = {}
+    //
+    //   for DepN in Node.Dependencies:
+    //     Res.append(collectPublicTerminals(DepN))
+    //
+    //   return Res;
+    llvm_unreachable("not implemented");
   }
 };
 
