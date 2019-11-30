@@ -29,6 +29,8 @@ namespace llvm {
 namespace clang {
 namespace levitation {
 
+// FIXME Levitation: get rid of that using directive.
+//   In .h files it's a bad practice to make namespaces usings.
 using namespace llvm;
 
   // TODO Levitation: rename to Path
