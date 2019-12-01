@@ -11657,6 +11657,8 @@ public:
     return LevitationDefinitionDependencies;
   }
 
+  bool isLevitationFilePublic() const;
+
   /// Check whether levitation mode is on.
   /// \return
   bool isLevitationMode() const {

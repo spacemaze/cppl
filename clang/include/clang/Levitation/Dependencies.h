@@ -140,6 +140,7 @@ namespace levitation {
     ValidatedDependenciesMap DeclarationDependencies;
     ValidatedDependenciesMap DefinitionDependencies;
     StringRef PackageFilePath;
+    bool IsPublic;
     bool hasMissingDependencies() {
       return DeclarationDependencies.hasMissingDependencies() ||
              DefinitionDependencies.hasMissingDependencies();

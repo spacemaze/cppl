@@ -188,7 +188,8 @@ namespace {
       PackageDependencies Dependencies {
         Validator.validate(SemaObj->getLevitationDeclarationDependencies()),
         Validator.validate(SemaObj->getLevitationDefinitionDependencies()),
-        CurrentInputFileRel
+        CurrentInputFileRel,
+        SemaObj->isLevitationFilePublic()
       };
 
       auto F = createFile();

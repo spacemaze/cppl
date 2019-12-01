@@ -53,6 +53,9 @@ namespace levitation {
     DeclarationsBlock DeclarationDependencies;
     DeclarationsBlock DefinitionDependencies;
 
+    /// Whether this file should publish its interface
+    bool IsPublic;
+
     DependenciesData()
     : Strings(new DependenciesStringsPool),
       OwnStringsPool(true)
@@ -93,7 +96,7 @@ namespace levitation {
   enum DependenciesRecordTypes {
       DEPS_INVALID_RECORD_ID = 0,
       DEPS_DECLARATION_RECORD_ID = 1,
-      DEPS_PACKAGE_FILE_PATH_RECORD_ID,
+      DEPS_PACKAGE_TOP_LEVEL_FIELDS_RECORD_ID,
       DEPS_STRING_RECORD_ID,
   };
 

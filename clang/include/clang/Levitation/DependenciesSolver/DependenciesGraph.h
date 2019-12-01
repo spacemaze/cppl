@@ -112,10 +112,18 @@ private:
   /// Last nodes in deps chain which are marked as public.
   NodesSet PublicTerminals;
 
+  /// All nodes in graph which correspond to public ones.
+  /// So far we expect only declaration nodes to be present here.
+  NodesSet PublicNodes;
+
   NodesMap AllNodes;
   PackagesMap PackageInfos;
 
   bool Invalid = false;
+
+  /// Mark node as publicly available (present in library interface)
+  /// \param NID Node ID to be marked.
+  void setPublic(NodeID::Type NID) { PublicNodes.insert(NID); }
 
 public:
 
@@ -156,6 +164,9 @@ public:
           *Package.Definition,
           PackageDependencies.DefinitionDependencies
       );
+
+      if (PackageDependencies.IsPublic)
+        DGraphPtr->setPublic(Package.Declaration->ID);
     }
 
     if (!DGraphPtr->AllNodes.empty() && DGraphPtr->Roots.empty()) {
@@ -170,6 +181,11 @@ public:
 
     return DGraphPtr;
   }
+
+  /// Whether node is public
+  /// \param NID Node ID to be checked
+  /// \return true if node should be present in library public interface
+  bool isPublic(NodeID::Type NID) const { return PublicNodes.count(NID); }
 
   // TODO Levitation: That looks pretty much like A* walk.
   //
@@ -500,6 +516,7 @@ protected:
     return Package;
   }
 
+  // FIXME Levitation: Deprecated
   PackageInfo &createMainFilePackage(StringID MainFileID) {
 
     auto PackageRes = PackageInfos.insert({
@@ -545,17 +562,20 @@ protected:
     }
   }
 
+  void collectPublicTerminals(NodesSet &Res, NodeID::Type ForNode) {
+    if (isPublic(ForNode)) {
+      Res.insert(ForNode);
+      return;
+    }
+
+    const auto &N = getNode(ForNode);
+    for (auto DepN : N.Dependencies)
+      collectPublicTerminals(Res, DepN);
+  }
+
   void collectPublicTerminals() {
-    // collectPublicTerminals(Node)
-    //   if Node is public: return {Node}
-    //
-    //   Res = {}
-    //
-    //   for DepN in Node.Dependencies:
-    //     Res.append(collectPublicTerminals(DepN))
-    //
-    //   return Res;
-    llvm_unreachable("not implemented");
+    for (auto TerminalNID : Terminals)
+      collectPublicTerminals(PublicTerminals, TerminalNID);
   }
 };
 

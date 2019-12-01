@@ -63,6 +63,10 @@ void Sema::HandleLevitationPackageDependency(
     LevitationDeclarationDependencies.mergeDependency(std::move(Dependency));
 }
 
+bool Sema::isLevitationFilePublic() const {
+  llvm_unreachable("not-implemented");
+}
+
 void Sema::ActOnLevitationManualDeps() {
   for (const auto &DepParts : PP.getLevitationDeclDeps())
     HandleLevitationPackageDependency(DepParts.first, false, DepParts.second);

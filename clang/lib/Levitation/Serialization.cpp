@@ -213,7 +213,7 @@ namespace levitation {
 #define RECORD(X) EmitRecordID(X ## _ID, #X, Writer, Record)
 
         BLOCK(DEPS_DEPENDENCIES_MAIN_BLOCK);
-        RECORD(DEPS_PACKAGE_FILE_PATH_RECORD);
+        RECORD(DEPS_PACKAGE_TOP_LEVEL_FIELDS_RECORD);
 
         BLOCK(DEPS_STRINGS_BLOCK);
         RECORD(DEPS_STRING_RECORD);
@@ -249,6 +249,7 @@ namespace levitation {
 
       Data.PackageFilePathID =
           Data.Strings->addItem(Dependencies.PackageFilePath);
+      Data.IsPublic = Dependencies.IsPublic;
       return Data;
     }
 
@@ -290,7 +291,10 @@ namespace levitation {
 
         writeStrings(*Data.Strings);
 
-        writeDependentPackageFilePath(Data.PackageFilePathID);
+        writePackageTopLevelFields(
+            Data.PackageFilePathID,
+            Data.IsPublic
+        );
 
         writeDeclarations(
                 DEPS_DECLARATION_DEPENDENCIES_BLOCK_ID,
@@ -326,9 +330,11 @@ namespace levitation {
       }
     }
 
-    void writeDependentPackageFilePath(StringID PathID) {
-      RecordData::value_type Record[] { PathID };
-      Writer.EmitRecord(DEPS_PACKAGE_FILE_PATH_RECORD_ID, Record);
+    void writePackageTopLevelFields(
+        StringID PathID, bool IsPublic
+    ) {
+      RecordData::value_type Record[] { PathID, (uint64_t)IsPublic };
+      Writer.EmitRecord(DEPS_PACKAGE_TOP_LEVEL_FIELDS_RECORD_ID, Record);
     }
 
     void writeDeclaration(
@@ -465,7 +471,7 @@ namespace levitation {
               }
               break;
             case BitstreamEntry::Record:
-              if (!readPackageFilePath(Entry.ID, Data))
+              if (!readPackageTopLevelFields(Entry.ID, Data))
                 return false;
               break;
           }
@@ -587,7 +593,7 @@ namespace levitation {
       );
     }
 
-    bool readPackageFilePath(unsigned int AbbrevID, DependenciesData &Data) {
+    bool readPackageTopLevelFields(unsigned int AbbrevID, DependenciesData &Data) {
       RecordTy Record;
 
       auto RecordIDRes = Reader.readRecord(AbbrevID, Record, nullptr);
@@ -600,8 +606,9 @@ namespace levitation {
       Data.PackageFilePathID = normalizeIfNeeded(
           *Data.Strings, (StringID)Record[0]
       );
+      Data.IsPublic = (bool)Record[1];
 
-      return checkRecordType(DEPS_PACKAGE_FILE_PATH_RECORD_ID, RecordID);
+      return checkRecordType(DEPS_PACKAGE_TOP_LEVEL_FIELDS_RECORD_ID, RecordID);
     }
 
     using OnReadRecordFn = std::function<void(const RecordTy&, StringRef)>;
