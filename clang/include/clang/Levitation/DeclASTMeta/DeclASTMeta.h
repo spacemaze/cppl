@@ -1,4 +1,4 @@
-//===--- DeclASTMeta.h - C++ DECLASTMETA class ---------------*- C++ -*-===//
+//===--- DeclASTMeta.h - C++ DeclASTMeta class ------------------*- C++ -*-===//
 //
 // Part of the C++ Levitation Project,
 // under the Apache License v2.0 with LLVM Exceptions.
