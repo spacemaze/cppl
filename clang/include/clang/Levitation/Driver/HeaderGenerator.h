@@ -15,66 +15,79 @@
 #define LLVM_LEVITATION_HEADERGENERATOR_H
 
 #include "llvm/ADT/StringRef.h"
+#include "clang/Basic/FileManager.h"
+#include "clang/Levitation/Common/CreatableSingleton.h"
 #include "clang/Levitation/Common/File.h"
 #include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/Common/Utility.h"
-
+#include "clang/Levitation/Driver/Dump.h"
 
 namespace clang { namespace levitation { namespace tools {
 
 class HeaderGenerator {
-  // TODO Levitation: we perhaps need sources root (if source file is relative)
+  llvm::StringRef SourcesRoot;
   llvm::StringRef OutDir;
   llvm::StringRef OutputFile;
   llvm::StringRef SourceFile;
+  Twine SourceFileFullPath;
+  Twine OutputFileFullPath;
   const Paths& Includes;
   const RangesVector& SkippedBytes;
+  bool Verbose;
+  bool DryRun;
   log::Logger &Log;
 
 public:
   HeaderGenerator(
+      llvm::StringRef SourceRoot,
       llvm::StringRef OutDir,
       llvm::StringRef OutputFile,
       const llvm::StringRef &SourceFile,
       const Paths &Includes,
-      const RangesVector &SkippedBytes
+      const RangesVector &SkippedBytes,
+      bool Verbose,
+      bool DryRun
   )
-  : OutDir(OutDir),
+  : SourcesRoot(SourceRoot),
+    OutDir(OutDir),
     OutputFile(OutputFile),
     SourceFile(SourceFile),
     Includes(Includes),
     SkippedBytes(SkippedBytes),
+    Verbose(Verbose),
+    DryRun(DryRun),
     Log(log::Logger::get())
   {}
 
-  InputFile createSourceFile() {
+  std::unique_ptr<MemoryBuffer> getSourceFileBuffer() {
     // return InputFile("$SourcesRoot/$SourceFile")
-    llvm_unreachable("not implemented");
+    auto InFilePath = levitation::Path::getPath<SinglePath>(
+      SourcesRoot, SourceFile
+    );
+    auto &FM = CreatableSingleton<FileManager>::get();
+    auto MemBufOrErr = FM.getBufferForFile(InFilePath);
+
+    if (!MemBufOrErr)
+      return nullptr;
+
+    return std::move(MemBufOrErr.get());
   }
 
   File createOutputFile() {
-    // return File("$OutDir/$OutputFile")
-    llvm_unreachable("not implemented");
+    auto OutFilePath = levitation::Path::getPath<SinglePath>(
+      OutDir, OutputFile
+    );
+    return File(OutFilePath);
   }
 
-  void diagInFileIOIssues(
-      const llvm::StringRef F,
-      InputFile::StatusEnum Status
-  ) {
-    auto &err = Log.error() << "Failed to open file '" << F << "': ";
-    switch (Status) {
-      case InputFile::HasStreamErrors:
-        err << "stream error.";
-        break;
-      default:
-        err << "unknown reason.";
-    }
-    err << "\n";
+  void diagInFileIOIssues() {
+    Log.error() << "Failed to open file '" << SourceFileFullPath << "'\n";
   }
 
-  void diagOutFileIOIssues(const llvm::StringRef F, File::StatusEnum Status) {
-      auto &err = Log.error() << "Failed to open file '" << F << "': ";
+  void diagOutFileIOIssues(File::StatusEnum Status) {
+      auto &err = Log.error()
+      << "Failed to open file '" << OutputFileFullPath << "': ";
 
       switch (Status) {
         case File::HasStreamErrors:
@@ -82,6 +95,7 @@ public:
           break;
         case File::FiledToRename:
           err << "temp file created, but failed to rename.";
+          break;
         case File::FailedToCreateTempFile:
           err << "failed to create temp file.";
           break;
@@ -115,10 +129,16 @@ public:
   }
 
   bool execute() {
-    auto InF = createSourceFile();
-    if (auto OpenedSrc = InF.open()) {
+    if (Verbose)
+      dump(Log.verbose());
+    else if (DryRun)
+      dump(Log.info());
 
-      const auto &In = OpenedSrc.getMemoryBuffer();
+    if (DryRun)
+      return true;
+
+    if (auto InPtr = getSourceFileBuffer()) {
+      const auto &In = *InPtr;
       const char *InStart = In.getBufferStart();
       size_t InSize = In.getBufferSize();
 
@@ -150,13 +170,21 @@ public:
       }
 
       if (OutF.hasErrors()) {
-        diagOutFileIOIssues(OutF.getPath(), OutF.getStatus());
+        diagOutFileIOIssues(OutF.getStatus());
+        return false;
       }
+    } else {
+      diagInFileIOIssues();
+      return false;
     }
 
-    if (InF.hasErrors()) {
-      diagInFileIOIssues(InF.getPath(), InF.getStatus());
-    }
+    return true;
+  }
+
+  void dump(llvm::raw_ostream &out) {
+    DriverPhaseDump::action(
+        out, OutputFile, SourceFile, Includes, "GEN HEADER", ".h"
+    );
   }
 };
 

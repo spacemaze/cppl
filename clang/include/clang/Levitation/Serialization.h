@@ -17,6 +17,7 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Levitation/Common/IndexedSet.h"
 #include "clang/Levitation/Common/StringsPool.h"
+#include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
 #include "llvm/Bitstream/BitCodes.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
@@ -93,6 +94,19 @@ namespace levitation {
     virtual const Failable &getStatus() const = 0;
   };
 
+  class DeclASTMetaWriter {
+  public:
+    virtual ~DeclASTMetaWriter() = default;
+    virtual void writeAndFinalize(const DeclASTMeta &Meta) = 0;
+  };
+
+  class DeclASTMetaReader {
+  public:
+    virtual ~DeclASTMetaReader() = default;
+    virtual bool read(DeclASTMeta &Meta) = 0;
+    virtual const Failable &getStatus() const = 0;
+  };
+
   enum DependenciesRecordTypes {
       DEPS_INVALID_RECORD_ID = 0,
       DEPS_DECLARATION_RECORD_ID = 1,
@@ -111,6 +125,10 @@ namespace levitation {
 
   std::unique_ptr<DependenciesWriter> CreateBitstreamWriter(llvm::raw_ostream &OS);
   std::unique_ptr<DependenciesReader> CreateBitstreamReader(const llvm::MemoryBuffer &MemBuf);
+
+  std::unique_ptr<DeclASTMetaWriter> CreateMetaBitstreamWriter(llvm::raw_ostream &OS);
+  std::unique_ptr<DeclASTMetaReader> CreateMetaBitstreamReader(const llvm::MemoryBuffer &MemBuf);
+
 }
 }
 

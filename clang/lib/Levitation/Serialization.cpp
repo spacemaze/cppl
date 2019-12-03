@@ -740,6 +740,72 @@ namespace levitation {
   ) {
     return std::make_unique<DependenciesBitstreamReader>(MB);
   }
+
+  // ==========================================================================
+  // Meta Dependencies Bitstream Writer
+
+  class DeclASTMetaBitstreamWriter : public DeclASTMetaWriter {
+  private:
+    static const size_t BUFFER_DEFAULT_SIZE = 4096;
+
+    llvm::raw_ostream &OutputStream;
+
+    SmallVector<char, BUFFER_DEFAULT_SIZE> Buffer;
+    BitstreamWriter Writer;
+
+    bool HeaderWritten;
+    bool Finalized;
+
+  public:
+    DeclASTMetaBitstreamWriter(llvm::raw_ostream &OS)
+        : OutputStream(OS),
+          Writer(Buffer),
+          HeaderWritten(false),
+          Finalized(false) {}
+
+    ~DeclASTMetaBitstreamWriter() override = default;
+
+    void writeAndFinalize(const DeclASTMeta &Meta) override {
+      llvm_unreachable("not-implemented");
+    }
+  };
+
+  std::unique_ptr<DeclASTMetaWriter> CreateMetaBitstreamWriter(
+      llvm::raw_ostream &OS
+  ) {
+    return std::make_unique<DeclASTMetaBitstreamWriter>(OS);
+  }
+
+  // ==========================================================================
+  // Meta Dependencies Bitstream Reader
+
+  class DeclASTMetaBitstreamReader
+      : public DeclASTMetaReader,
+        public Failable {
+    BitstreamCursor Reader;
+    StringRef ErrorMessage;
+    Optional<llvm::BitstreamBlockInfo> BlockInfo;
+  public:
+    DeclASTMetaBitstreamReader(const llvm::MemoryBuffer &MemoryBuffer)
+        : Reader(MemoryBuffer) {}
+
+    // TODO Levitation
+    ~DeclASTMetaBitstreamReader() override = default;
+
+    bool read(DeclASTMeta &Meta) override {
+      llvm_unreachable("not implemented");
+    }
+
+    const Failable &getStatus() const override {
+      llvm_unreachable("not implemented");
+    }
+  };
+
+  std::unique_ptr<DeclASTMetaReader> CreateMetaBitstreamReader(
+      const llvm::MemoryBuffer &MB
+  ) {
+    return std::make_unique<DeclASTMetaBitstreamReader>(MB);
+  }
 }
 }
 

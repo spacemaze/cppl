@@ -14,6 +14,7 @@
 #ifndef LLVM_LEVITATION_DECLASTMETA_H
 #define LLVM_LEVITATION_DECLASTMETA_H
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "clang/Levitation/Common/Utility.h"
@@ -21,33 +22,36 @@
 
 #include <utility>
 
-namespace clang { namespace levitation { namespace tools {
- class DeclASTMeta {
-   RangesVector SkippedBytes;
+namespace clang { namespace levitation {
+  class DeclASTMeta {
+    llvm::SmallVector<uint8_t, 16> SourceHash;
+    llvm::SmallVector<uint8_t, 16> DeclASTHash;
+    RangesVector SkippedBytes;
+  public:
 
-   // FIXME Levitation: to be implemented
-   // llvm::SmallVector<uint8_t, 16> SourceHash;
-   // llvm::SmallVector<uint8_t, 16> DeclASTHash;
- public:
-   const RangesVector &getSkippedBytes() const {
-     return SkippedBytes;
-   }
+    DeclASTMeta() = default;
 
-   const llvm::SmallVector<uint8_t, 16> &getSourceHash() const {
-     llvm_unreachable("not impelemented");
-   }
+    DeclASTMeta(
+        llvm::ArrayRef<uint8_t> sourceHash,
+        llvm::ArrayRef<uint8_t> declASTHash,
+        const RangesVector &skippedBytes
+    )
+    : SourceHash(sourceHash.begin(), sourceHash.end()),
+      DeclASTHash(declASTHash.begin(), declASTHash.end()),
+      SkippedBytes(skippedBytes) {}
 
-   const llvm::SmallVector<uint8_t, 16> &getDeclASTHash() const {
-     llvm_unreachable("not impelemented");
-   }
+    const RangesVector &getSkippedBytes() const {
+      return SkippedBytes;
+    }
 
-   static DeclASTMeta loadFromFile(const SinglePath &Path) {
-     DeclASTMeta Res;
+    const llvm::SmallVector<uint8_t, 16> &getSourceHash() const {
+      return SourceHash;
+    }
 
-     llvm_unreachable("not implemented");
-     return Res;
-   }
- };
-}}}
+    const llvm::SmallVector<uint8_t, 16> &getDeclASTHash() const {
+      return DeclASTHash;
+    }
+  };
+}}
 
 #endif //LLVM_LEVITATION_DECLASTMETA_H

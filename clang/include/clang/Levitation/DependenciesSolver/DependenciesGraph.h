@@ -177,7 +177,7 @@ public:
     DGraphPtr->collectTerminals();
 
     // Scan for publically available terminal nodes.
-    DGraphPtr->collectPublicTerminals();
+    DGraphPtr->collectPublicNodes();
 
     return DGraphPtr;
   }
@@ -353,7 +353,6 @@ public:
   const NodesMap &allNodes() const { return AllNodes; }
   const NodesSet &roots() const { return Roots; }
   const NodesSet &terminals() const { return Terminals; }
-  const NodesSet &publicTerminals() const { return PublicTerminals; }
 
 protected:
 
@@ -562,20 +561,20 @@ protected:
     }
   }
 
-  void collectPublicTerminals(NodesSet &Res, NodeID::Type ForNode) {
-    if (isPublic(ForNode)) {
-      Res.insert(ForNode);
-      return;
-    }
+  void collectPublicNodes(NodeID::Type ForNode, bool MarkPublic) {
+    if (isPublic(ForNode))
+      MarkPublic = true;
+    else if (MarkPublic)
+      PublicNodes.insert(ForNode);
 
     const auto &N = getNode(ForNode);
     for (auto DepN : N.Dependencies)
-      collectPublicTerminals(Res, DepN);
+      collectPublicNodes(DepN, MarkPublic);
   }
 
-  void collectPublicTerminals() {
+  void collectPublicNodes() {
     for (auto TerminalNID : Terminals)
-      collectPublicTerminals(PublicTerminals, TerminalNID);
+      collectPublicNodes(TerminalNID, false);
   }
 };
 

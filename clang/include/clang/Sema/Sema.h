@@ -37,6 +37,7 @@
 #include "clang/Basic/Specifiers.h"
 #include "clang/Basic/TemplateKinds.h"
 #include "clang/Basic/TypeTraits.h"
+#include "clang/Levitation/Common/Utility.h"
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Sema/AnalysisBasedWarnings.h"
 #include "clang/Sema/CleanupInfo.h"
@@ -11647,6 +11648,11 @@ private:
   /// Set of dependencies definition depends on.
   levitation::DependenciesMap LevitationDefinitionDependencies;
 
+  /// For decl-ast creation mode,
+  /// holds bytes skipped during parsing (skipped function bodies and
+  /// variable definitions).
+  levitation::RangesVector LevitationSkippedBytes;
+
 public:
 
   const levitation::DependenciesMap &getLevitationDeclarationDependencies() {
@@ -11706,6 +11712,14 @@ public:
         bool IsVariableTemplate,
         StorageClass SC
     ) const;
+
+  void levitationSetBytesSkipped(size_t Start, size_t End) {
+    LevitationSkippedBytes.emplace_back(Start, End);
+  }
+
+  const levitation::RangesVector& levitationGetSkippedBytes() const {
+    return LevitationSkippedBytes;
+  }
 
   //
   // end of C++ Levitation Mode

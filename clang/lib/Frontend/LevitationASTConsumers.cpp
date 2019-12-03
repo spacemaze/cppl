@@ -23,12 +23,14 @@
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/Common/File.h"
-#include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/Common/Path.h"
+#include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
+#include "clang/Levitation/Dependencies.h"
+#include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/Serialization.h"
 #include "llvm/Bitstream/BitstreamWriter.h"
+#include "llvm/Support/MD5.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
@@ -157,11 +159,12 @@ namespace {
     }
   };
 
-  class ASTDependenciesProcessor : public SemaObjHolderConsumer {
+  class LevitationInputFileProcessor : public SemaObjHolderConsumer {
+  protected:
     CompilerInstance &CI;
     DependencyPath CurrentInputFileRel;
-  public:
-    ASTDependenciesProcessor(CompilerInstance &ci, DependencyPath&& currentInputFileRel)
+
+    LevitationInputFileProcessor(CompilerInstance &ci, DependencyPath&& currentInputFileRel)
       : CI(ci),
         CurrentInputFileRel(std::move(currentInputFileRel))
     {
@@ -172,6 +175,76 @@ namespace {
         llvm_unreachable("Input file path should be relative (to source dir parameter)");
       }
     }
+  };
+
+  class DeclASTMetaCreator {
+    const Sema* SemaObj;
+    StringRef DeclASTBuffer;
+  public:
+    DeclASTMetaCreator(
+        const Sema *SemaObj,
+        StringRef DeclASTBuffer
+    )
+    : SemaObj(SemaObj),
+      DeclASTBuffer(DeclASTBuffer) {}
+
+    bool Write(StringRef OutputFile) {
+
+      const auto &SM = SemaObj->getSourceManager();
+
+      auto SourceMD5 = calcMD5(SM.getBufferData(SM.getMainFileID()));
+      auto DeclASTMD5 = calcMD5(DeclASTBuffer);
+
+      levitation::DeclASTMeta Meta(
+        SourceMD5.Bytes,
+        DeclASTMD5.Bytes,
+        SemaObj->levitationGetSkippedBytes()
+      );
+
+      File F(OutputFile);
+
+      if (auto OpenedFile = F.open()) {
+        auto Writer = CreateMetaBitstreamWriter(OpenedFile.getOutputStream());
+        Writer->writeAndFinalize(Meta);
+      }
+
+      if (F.hasErrors()) {
+        diagMetaFileIOIssues(F.getStatus());
+      }
+    }
+  private:
+
+    template<typename BuffT>
+    static MD5::MD5Result calcMD5(BuffT Buff) {
+      MD5 Md5Builder;
+      Md5Builder.update(Buff);
+      MD5::MD5Result Result;
+      Md5Builder.final(Result);
+      return Result;
+    }
+
+    void diagMetaFileIOIssues(File::StatusEnum status) {
+      auto &Diag = SemaObj->getDiagnostics();
+      switch (status) {
+        case File::HasStreamErrors:
+          Diag.Report(diag::err_fe_levitation_decl_ast_meta_file_io_troubles);
+          break;
+        case File::FiledToRename:
+        case File::FailedToCreateTempFile:
+          Diag.Report(diag::err_fe_levitation_decl_ast_meta_file_failed_to_create);
+          break;
+        default:
+          break;
+      }
+    }
+  };
+
+  class ASTDependenciesProcessor : public LevitationInputFileProcessor {
+  public:
+    ASTDependenciesProcessor(
+        CompilerInstance &ci, DependencyPath&& currentInputFileRel
+    )
+    : LevitationInputFileProcessor(ci, std::move(currentInputFileRel)) {}
 
     void HandleTranslationUnit(ASTContext &Context) override {
 
@@ -195,8 +268,12 @@ namespace {
       auto F = createFile();
 
       if (auto OpenedFile = F.open()) {
-        auto Writer = CreateBitstreamWriter(OpenedFile.getOutputStream());
+        buffer_ostream buffer(OpenedFile.getOutputStream());
+        auto Writer = CreateBitstreamWriter(buffer);
         Writer->writeAndFinalize(Dependencies);
+
+        DeclASTMetaCreator MetaWriter(SemaObj, buffer.str());
+        MetaWriter.Write(CI.getFrontendOpts().LevitationDeclASTMeta);
       }
 
       if (F.hasErrors()) {

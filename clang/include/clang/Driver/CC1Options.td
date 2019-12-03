@@ -971,4 +971,8 @@ def levitation_dependency
 : Joined<["-"], "levitation-dependency=">,
 HelpText<"Path to C++ Levitation dependency which should be a Declaration AST file.">;
 
+def levitation_decl_ast_meta
+: Joined<["-"], "levitation-decl-ast-meta=">,
+HelpText<"Levitation Decl AST Meta output file name. Required if 'flevitation-build-decl' is specified.">;
+
 }

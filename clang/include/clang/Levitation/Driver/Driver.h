@@ -124,8 +124,8 @@ namespace clang { namespace levitation { namespace tools {
       return OutputHeadersDir;
     }
 
-    bool isOutputHeadersCreationRequested() const {
-      return OutputHeadersDir.size();
+    bool shouldCreateHeaders() const {
+      return !LinkPhaseEnabled;
     }
 
     bool isLinkPhaseEnabled() const {

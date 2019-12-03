@@ -22,7 +22,7 @@
 
 namespace clang { namespace levitation {
 
-typedef SmallVector<std::pair<size_t, size_t>, 64> RangesVector;
+typedef llvm::SmallVector<std::pair<size_t, size_t>, 64> RangesVector;
 
 }}
 
