@@ -51,6 +51,30 @@ namespace clang { namespace levitation {
     const llvm::SmallVector<uint8_t, 16> &getDeclASTHash() const {
       return DeclASTHash;
     }
+
+    template <typename RecordTy>
+    void setSkippedBytes(const RecordTy &Record) {
+      size_t e = Record.size();
+      assert(!(e % 2) && "Record size must be even");
+      size_t RangesCount = e/2;
+      SkippedBytes.resize(RangesCount);
+
+      for (size_t i = 0; i != RangesCount; ++i) {
+        auto &R = SkippedBytes[i];
+        R.first = Record[i/2];
+        R.second = Record[i/2 + 1];
+      }
+    }
+
+    template <typename RecordTy>
+    void setSourceHash(const RecordTy &Record) {
+      SourceHash.insert(Record.begin(), Record.end());
+    }
+
+    template <typename RecordTy>
+    void setDeclASTHash(const RecordTy &Record) {
+      DeclASTHash.insert(Record.begin(), Record.end());
+    }
   };
 }}
 
