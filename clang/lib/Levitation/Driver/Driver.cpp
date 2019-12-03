@@ -833,11 +833,13 @@ public:
     .addKVArgsEq("-cppl-include-dependency", Deps)
     .addArgs(ExtraParserArgs)
     .addArg(InputFile)
-    .condition(OutDeclASTFile.size())
-        .addKVArgSpace("-o", OutDeclASTFile)
-      .conditionElse()
-        .addArg("-cppl-no-out")
-    .conditionEnd()
+    // TODO Levitation: don't emit .decl-ast files
+    //  in some cases. See task #48
+    //    .condition(OutDeclASTFile.size())
+    //        .addKVArgSpace("-o", OutDeclASTFile)
+    //    .conditionElse()
+    //        .addArg("-cppl-no-out")
+    //    .conditionEnd()
     .addKVArgSpace("-o", OutDeclASTFile)
     .execute();
 
