@@ -1027,6 +1027,7 @@ namespace levitation {
         default:
           llvm_unreachable("Unknown record ID.");
       }
+      return true;
     }
 
     const Failable &getStatus() const override {
