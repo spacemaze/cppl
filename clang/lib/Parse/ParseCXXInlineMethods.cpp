@@ -111,13 +111,39 @@ NamedDecl *Parser::ParseCXXInlineMethodDef(
       LevitationInlineFunction = true;
   }
 
-  if (SkipFunctionBodies &&
-      !LevitationInlineFunction &&
-      (!FnD || Actions.canSkipFunctionBody(FnD)) &&
+
+  // C++ Levitation: customize case when we skip function bodies.
+  // Legacy code:
+#if 0
+  if (SkipFunctionBodies && (!FnD || Actions.canSkipFunctionBody(FnD)) &&
       trySkippingFunctionBody()) {
     Actions.ActOnSkippedFunctionBody(FnD);
     return FnD;
   }
+#else
+
+  if (SkipFunctionBodies &&
+      !LevitationInlineFunction &&
+      (!FnD || Actions.canSkipFunctionBody(FnD))
+  ) {
+    // C++ Levitation: keep track of skipped source fragments, start
+    SourceLocation LevitationStartSkip = Tok.getLocation();
+
+    if (trySkippingFunctionBody()) {
+      Actions.ActOnSkippedFunctionBody(FnD);
+
+      // C++ Levitation: keep track of skipped source fragments, end
+      Actions.levitationAddSkippedSourceFragment(
+          LevitationStartSkip, Tok.getLocation(),
+          // We keep prototype, and thus should burn stripped part with ';'
+          // set replaceWithSemicolon = true
+          true
+      );
+
+      return FnD;
+    }
+  }
+#endif
 
   // In delayed template parsing mode, if we are within a class template
   // or if we are about to parse function member template then consume

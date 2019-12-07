@@ -11713,9 +11713,11 @@ public:
         StorageClass SC
     ) const;
 
-  void levitationSetBytesSkipped(size_t Start, size_t End) {
-    LevitationSkippedBytes.emplace_back(Start, End);
-  }
+  void levitationAddSkippedSourceFragment(
+      const SourceLocation &Start,
+      const SourceLocation &End,
+      bool replaceWithSemicolon = false
+  );
 
   const levitation::RangesVector& levitationGetSkippedBytes() const {
     return LevitationSkippedBytes;

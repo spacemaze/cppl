@@ -107,3 +107,36 @@ bool Sema::levitationMayBeSkipVarDefinition(
 
   return SkipInit;
 }
+
+void Sema::levitationAddSkippedSourceFragment(
+    const clang::SourceLocation &Start,
+    const clang::SourceLocation &End,
+    bool replaceWithSemicolon
+) {
+
+  auto StartSLoc = getSourceManager().getDecomposedLoc(Start);
+  auto EndSLoc = getSourceManager().getDecomposedLoc(End);
+
+  auto MainFileID = getSourceManager().getMainFileID();
+  assert(
+      StartSLoc.first == MainFileID &&
+      EndSLoc.first == MainFileID &&
+      "Skipped fragment can only be a part of main file."
+  );
+
+  LevitationSkippedBytes.emplace_back(StartSLoc.second, EndSLoc.second);
+
+#if 1
+  llvm::errs() << "Added skipped fragment "
+               << (replaceWithSemicolon ? "BURN:\n" : ":\n");
+
+  llvm::errs() << "Bytes: 0x";
+  llvm::errs().write_hex(StartSLoc.second) << " : 0x";
+  llvm::errs().write_hex(EndSLoc.second) << "\n";
+
+  Start.dump(getSourceManager());
+  End.dump(getSourceManager());
+
+  llvm::errs() << "\n";
+#endif
+}

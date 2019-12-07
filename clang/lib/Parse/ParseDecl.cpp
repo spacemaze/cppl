@@ -2335,14 +2335,21 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
 
   // C++ Levitation: skip global vars initializer if we parse preamble,
   // or building a .decl-ast files.
-  // Some above in this method ActOnVariableDeclarator should be called,
+  // One of subcalls of this method is ActOnVariableDeclarator call,
   // which in turn should run levitationMayBeSkipVarDefinition which
-  // do all required checks, and if decl should be skipped it
-  // ActOnVariableDeclarator will return nullptr.
+  // do all required checks, and if decl should be skipped it returns false,
+  // and ActOnVariableDeclarator will return nullptr.
   if (Actions.isLevitationMode() && SkipFunctionBodies && !ThisDecl) {
     // SkipInit for global vars,
     // if we parse levitation preamble or .decl-ast
+
+    // Keep track of source fragments we skip.
+    SourceLocation StartSkip = D.getBeginLoc();
+
     SkipUntil(tok::comma, StopAtSemi | StopBeforeMatch);
+
+    Actions.levitationAddSkippedSourceFragment(StartSkip, Tok.getLocation());
+
     return nullptr;
   }
   // end of C++ Levitation
