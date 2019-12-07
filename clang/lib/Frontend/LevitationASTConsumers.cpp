@@ -210,7 +210,9 @@ namespace {
 
       if (F.hasErrors()) {
         diagMetaFileIOIssues(F.getStatus());
+        return false;
       }
+      return true;
     }
   private:
 
@@ -231,7 +233,7 @@ namespace {
           break;
         case File::FiledToRename:
         case File::FailedToCreateTempFile:
-          Diag.Report(diag::err_fe_levitation_decl_ast_meta_file_failed_to_create);
+          Diag.Report(diag::err_fe_levitation_decl_ast_meta_failed_to_create);
           break;
         default:
           break;
