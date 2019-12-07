@@ -68,12 +68,12 @@ namespace clang { namespace levitation {
 
     template <typename RecordTy>
     void setSourceHash(const RecordTy &Record) {
-      SourceHash.insert(Record.begin(), Record.end());
+      SourceHash.insert(SourceHash.begin(), Record.begin(), Record.end());
     }
 
     template <typename RecordTy>
     void setDeclASTHash(const RecordTy &Record) {
-      DeclASTHash.insert(Record.begin(), Record.end());
+      DeclASTHash.insert(DeclASTHash.begin(), Record.begin(), Record.end());
     }
   };
 }}
