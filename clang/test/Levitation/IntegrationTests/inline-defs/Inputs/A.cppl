@@ -1,7 +1,9 @@
 // CHECK-NOT: return 1111;
+// CHECK: protoKeepDefSkip
 // CHECK: int keepThisInit = 77777;
 // CHECK: return 5555;
 // CHECK: int keepThisInit = 88888;
+// CHECK-NOT: return 11112222
 // CHECK-NOT: return 11111;
 // CHECK: static int andThisInitKeepToo = 777777;
 // CHECK-NOT: staticField = 123;
@@ -15,6 +17,7 @@ namespace Inputs {
   class A {
   public:
     static int thisSkip() { return 1111; }
+    static int protoKeepDefSkip();
     int keepThisInit = 77777;
     static int staticField;
   };
@@ -26,6 +29,10 @@ namespace Inputs {
     int keepThisInit = 88888;
     static int staticField;
   };
+
+  int A::protoKeepDefSkip() {
+    return 11112222;
+  }
 
   int thisSkipToo() { return 11111; }
   static int andThisInitKeepToo = 777777;
