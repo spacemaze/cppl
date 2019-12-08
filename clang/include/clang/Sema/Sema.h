@@ -11651,7 +11651,7 @@ private:
   /// For decl-ast creation mode,
   /// holds bytes skipped during parsing (skipped function bodies and
   /// variable definitions).
-  levitation::DeclASTMeta::RangesVec LevitationSkippedFragments;
+  levitation::DeclASTMeta::FragmentsVectorTy LevitationSkippedFragments;
 
 public:
 
@@ -11719,7 +11719,7 @@ public:
       bool ReplaceWithSemicolon = false
   );
 
-  const levitation::DeclASTMeta::RangesVec& levitationGetSourceFragments() const {
+  const levitation::DeclASTMeta::FragmentsVectorTy& levitationGetSourceFragments() const {
     return LevitationSkippedFragments;
   }
 

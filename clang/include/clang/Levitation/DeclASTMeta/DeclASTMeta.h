@@ -31,13 +31,13 @@ namespace clang { namespace levitation {
       bool ReplaceWithSemicolon;
       bool size() const { return End - Start; }
     };
-    typedef SmallVector<FragmentTy, 64> RangesVec;
+    typedef SmallVector<FragmentTy, 64> FragmentsVectorTy;
 
   private:
 
     llvm::SmallVector<uint8_t, 16> SourceHash;
     llvm::SmallVector<uint8_t, 16> DeclASTHash;
-    RangesVec SkippedBytes;
+    FragmentsVectorTy FragmentsToSkip;
 
   public:
 
@@ -46,14 +46,14 @@ namespace clang { namespace levitation {
     DeclASTMeta(
         llvm::ArrayRef<uint8_t> sourceHash,
         llvm::ArrayRef<uint8_t> declASTHash,
-        const RangesVec &skippedBytes
+        const FragmentsVectorTy &skippedBytes
     )
     : SourceHash(sourceHash.begin(), sourceHash.end()),
       DeclASTHash(declASTHash.begin(), declASTHash.end()),
-      SkippedBytes(skippedBytes) {}
+      FragmentsToSkip(skippedBytes) {}
 
-    const RangesVec &getSkippedBytes() const {
-      return SkippedBytes;
+    const FragmentsVectorTy &getFragmentsToSkip() const {
+      return FragmentsToSkip;
     }
 
     const llvm::SmallVector<uint8_t, 16> &getSourceHash() const {
@@ -65,7 +65,7 @@ namespace clang { namespace levitation {
     }
 
     void addSkippedFragment(size_t Start, size_t End, bool replaceWithSemicolon) {
-      SkippedBytes.push_back({Start, End, replaceWithSemicolon});
+      FragmentsToSkip.push_back({Start, End, replaceWithSemicolon});
     }
 
     template <typename RecordTy>

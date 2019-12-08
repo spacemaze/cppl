@@ -863,7 +863,7 @@ namespace levitation {
         writeArrays(
             Meta.getDeclASTHash(),
             Meta.getSourceHash(),
-            Meta.getSkippedBytes()
+            Meta.getFragmentsToSkip()
         );
       }
     }
@@ -871,7 +871,7 @@ namespace levitation {
     void writeArrays(
         ArrayRef<uint8_t> id0Array,
         ArrayRef<uint8_t> id1Array,
-        const DeclASTMeta::RangesVec& SkippedFragments
+        const DeclASTMeta::FragmentsVectorTy& SkippedFragments
     ) {
 
       with (auto StringBlock = enterBlock(META_ARRAYS_BLOCK_ID)) {
@@ -898,7 +898,7 @@ namespace levitation {
       }
     }
 
-    void writeSkippedFragments(const DeclASTMeta::RangesVec &SkippedFragments) {
+    void writeSkippedFragments(const DeclASTMeta::FragmentsVectorTy &SkippedFragments) {
 
       with (auto FragmentsBlock = enterBlock(META_SKIPPED_FRAGMENT_BLOCK_ID)) {
 

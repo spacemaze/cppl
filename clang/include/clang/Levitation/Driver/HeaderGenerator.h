@@ -34,7 +34,7 @@ class HeaderGenerator {
   Twine SourceFileFullPath;
   Twine OutputFileFullPath;
   const Paths& Includes;
-  const DeclASTMeta::RangesVec& SkippedBytes;
+  const DeclASTMeta::FragmentsVectorTy& SkippedBytes;
   bool Verbose;
   bool DryRun;
   log::Logger &Log;
@@ -46,7 +46,7 @@ public:
       llvm::StringRef OutputFile,
       const llvm::StringRef &SourceFile,
       const Paths &Includes,
-      const DeclASTMeta::RangesVec &SkippedBytes,
+      const DeclASTMeta::FragmentsVectorTy &SkippedBytes,
       bool Verbose,
       bool DryRun
   )

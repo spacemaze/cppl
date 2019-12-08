@@ -1493,7 +1493,7 @@ bool LevitationDriverImpl::processDeclaration(
       Files.Header,
       Files.Source,
       Includes,
-      Meta.getSkippedBytes(),
+      Meta.getFragmentsToSkip(),
       Context.Driver.Verbose,
       Context.Driver.DryRun
   )
