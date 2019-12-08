@@ -274,6 +274,8 @@ namespace {
         auto Writer = CreateBitstreamWriter(buffer);
         Writer->writeAndFinalize(Dependencies);
 
+        // TODO Levitation: move it into GeneratePCHAction, or your own action
+        //   which may be a clone of GeneratePCHAction.
         DeclASTMetaCreator MetaWriter(SemaObj, buffer.str());
         MetaWriter.Write(CI.getFrontendOpts().LevitationDeclASTMeta);
       }

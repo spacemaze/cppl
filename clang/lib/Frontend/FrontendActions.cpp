@@ -117,6 +117,11 @@ GeneratePCHAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   Consumers.push_back(CI.getPCHContainerWriter().CreatePCHContainerGenerator(
       CI, InFile, OutputFile, std::move(OS), Buffer));
 
+  // TODO Levitation: at first just put here .decl-ast-meta writer,
+  //   and pass PCHBuffer data, or just it's signature.
+  // TODO Levitation: after you get stable work, create clone of
+  // GeneratePCHAction, and do whatever you want there.
+
   return std::make_unique<MultiplexConsumer>(std::move(Consumers));
 }
 
