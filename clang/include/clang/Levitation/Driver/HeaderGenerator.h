@@ -21,6 +21,7 @@
 #include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/Common/Utility.h"
+#include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
 #include "clang/Levitation/Driver/Dump.h"
 
 namespace clang { namespace levitation { namespace tools {
@@ -33,7 +34,7 @@ class HeaderGenerator {
   Twine SourceFileFullPath;
   Twine OutputFileFullPath;
   const Paths& Includes;
-  const RangesVector& SkippedBytes;
+  const DeclASTMeta::RangesVec& SkippedBytes;
   bool Verbose;
   bool DryRun;
   log::Logger &Log;
@@ -45,7 +46,7 @@ public:
       llvm::StringRef OutputFile,
       const llvm::StringRef &SourceFile,
       const Paths &Includes,
-      const RangesVector &SkippedBytes,
+      const DeclASTMeta::RangesVec &SkippedBytes,
       bool Verbose,
       bool DryRun
   )
@@ -73,6 +74,94 @@ public:
 
     return std::move(MemBufOrErr.get());
   }
+
+  bool execute() {
+    if (Verbose)
+      dump(Log.verbose());
+    else if (DryRun)
+      dump(Log.info());
+
+    if (DryRun)
+      return true;
+
+    if (auto InPtr = getSourceFileBuffer()) {
+      const auto &In = *InPtr;
+      const char *InStart = In.getBufferStart();
+      size_t InSize = In.getBufferSize();
+
+      auto OutF = createOutputFile();
+      if (auto OpenedFile = OutF.open()) {
+        auto &out = OpenedFile.getOutputStream();
+
+        emitHeadComment(out);
+
+        emitIncludes(out);
+
+        emitAfterIncludesComment(out);
+
+        size_t Start = 0;
+        bool WriteNewLine;
+        for (const auto &skippedRange : SkippedBytes) {
+
+          assert(InSize - Start >= skippedRange.size());
+
+          writeFragment(
+              out,
+              InStart + Start,
+              skippedRange.Start - Start,
+              WriteNewLine
+          );
+
+          // Now write skipped fragment remnants.
+
+          // If it was requested to replace skipped fragment with
+          // ';' do it.
+          if (skippedRange.ReplaceWithSemicolon)
+            out << ";";
+
+          Start = skippedRange.End;
+
+          // If skipped fragment was ended with new line, or \n\s+
+          // preserve new line, but not trailing spaces.
+          auto SkippedFragmentStartPtr = InStart + skippedRange.Start;
+          auto SkippedFragmentSize = skippedRange.End - skippedRange.Start;
+
+          stripTrailingSpaces(SkippedFragmentStartPtr, SkippedFragmentSize);
+
+          StringRef SkippedFragmentStr(
+              SkippedFragmentStartPtr, SkippedFragmentSize
+          );
+
+          // We need to emit '\n' if it was stripped from
+          // fragment-to-write or if it was in skipped fragment's tail
+          if (SkippedFragmentStr.endswith("\n") || WriteNewLine)
+            out << "\n";
+        }
+
+        writeFragment(
+            out,
+            InStart + Start,
+            InSize - Start,
+            WriteNewLine
+        );
+
+        if (WriteNewLine)
+          out << "\n";
+      }
+
+      if (OutF.hasErrors()) {
+        diagOutFileIOIssues(OutF.getStatus());
+        return false;
+      }
+    } else {
+      diagInFileIOIssues();
+      return false;
+    }
+
+    return true;
+  }
+
+protected:
 
   File createOutputFile() {
     auto OutFilePath = levitation::Path::getPath<SinglePath>(
@@ -128,56 +217,45 @@ public:
     out << "\n";
   }
 
-  bool execute() {
-    if (Verbose)
-      dump(Log.verbose());
-    else if (DryRun)
-      dump(Log.info());
+  void writeFragment(
+      llvm::raw_ostream& out,
+      const char *WritePtr,
+      size_t WriteCount,
+      bool &WriteNewLine
+  ) {
 
-    if (DryRun)
-      return true;
+    // Fragment we're about to write, may end with trailing spaces:
+    // like this: \s+\n
+    // In this case, strip that suffix, but remember we stripped new line
+    // as well.
+    WriteNewLine = correctIfTrailingSpaces(WritePtr, WriteCount);
+    out.write(WritePtr, WriteCount);
+  }
 
-    if (auto InPtr = getSourceFileBuffer()) {
-      const auto &In = *InPtr;
-      const char *InStart = In.getBufferStart();
-      size_t InSize = In.getBufferSize();
+  bool stripTrailingSpaces(const char *Str, size_t &Size) {
+    size_t OldSize = Size;
+    while (Size && Str[Size-1] == ' ') --Size;
+    return Size != OldSize;
+  }
 
-      auto OutF = createOutputFile();
-      if (auto OpenedFile = OutF.open()) {
-        auto &out = OpenedFile.getOutputStream();
+  bool correctIfTrailingSpaces(const char *SourceStart, size_t &End) {
+    StringRef NewLineStr = StringRef("\n");
+    size_t NewLineLen = NewLineStr.size();
 
-        emitHeadComment(out);
-
-        emitIncludes(out);
-
-        emitAfterIncludesComment(out);
-
-        size_t start = 0;
-        for (const auto &skippedRange : SkippedBytes) {
-
-          size_t writeCount = skippedRange.first - start;
-          assert(start + writeCount <= InSize);
-
-          out.write(InStart + start, writeCount);
-
-          start = skippedRange.second;
-        }
-
-        size_t writeCount = InSize - start;
-        assert(start + writeCount <= In.getBufferSize());
-
-        out.write(InStart + start, writeCount);
-      }
-
-      if (OutF.hasErrors()) {
-        diagOutFileIOIssues(OutF.getStatus());
-        return false;
-      }
-    } else {
-      diagInFileIOIssues();
+    // If string to short to be ended with " \n", boil out.
+    if (End < NewLineLen)
       return false;
-    }
 
+    // If string is not ended with new line, boil out.
+    if (StringRef(SourceStart + End - NewLineLen, NewLineLen) != NewLineStr)
+      return false;
+
+    size_t NewEnd = End - NewLineLen;
+
+    if (!stripTrailingSpaces(SourceStart, NewEnd))
+      return false;
+
+    End = NewEnd;
     return true;
   }
 

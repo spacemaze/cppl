@@ -846,9 +846,10 @@ namespace levitation {
         //  RECORD(META_TOP_LEVEL_FIELDS_RECORD);
 
         BLOCK(META_ARRAYS_BLOCK);
+        BLOCK(META_SKIPPED_FRAGMENT_BLOCK);
         RECORD(META_SOURCE_HASH_RECORD);
         RECORD(META_DECL_AST_HASH_RECORD);
-        RECORD(META_RANGES_ARRAY_RECORD);
+        RECORD(META_SKIPPED_FRAGMENT_RECORD);
 
 #undef RECORD
 #undef BLOCK
@@ -870,7 +871,7 @@ namespace levitation {
     void writeArrays(
         ArrayRef<uint8_t> id0Array,
         ArrayRef<uint8_t> id1Array,
-        const RangesVector& SkippedBytes
+        const DeclASTMeta::RangesVec& SkippedFragments
     ) {
 
       with (auto StringBlock = enterBlock(META_ARRAYS_BLOCK_ID)) {
@@ -880,9 +881,6 @@ namespace levitation {
         .done();
         unsigned DeclAstRecordAbbrev = AbbrevsBuilder(META_DECL_AST_HASH_RECORD_ID, Writer)
             .addArrayType<uint8_t>()
-        .done();
-        unsigned RangesRecordAbbrev = AbbrevsBuilder(META_RANGES_ARRAY_RECORD_ID, Writer)
-            .addArrayType<size_t>()
         .done();
 
         Writer.EmitRecord(
@@ -896,18 +894,32 @@ namespace levitation {
             DeclAstRecordAbbrev
         );
 
-        SmallVector<size_t, 128> RangesVec;
-        RangesVec.reserve(SkippedBytes.size());
-        for (const auto &R : SkippedBytes) {
-          RangesVec.push_back(R.first);
-          RangesVec.push_back(R.second);
-        }
+        writeSkippedFragments(SkippedFragments);
+      }
+    }
 
-        Writer.EmitRecord(
-          META_RANGES_ARRAY_RECORD_ID,
-          RangesVec,
-          RangesRecordAbbrev
-        );
+    void writeSkippedFragments(const DeclASTMeta::RangesVec &SkippedFragments) {
+
+      with (auto FragmentsBlock = enterBlock(META_SKIPPED_FRAGMENT_BLOCK_ID)) {
+
+        auto FragmentAbb = AbbrevsBuilder(META_SKIPPED_FRAGMENT_RECORD_ID, Writer)
+            .addRecordFieldTypes<DeclASTMeta::FragmentTy>()
+        .done();
+
+        for (const auto &Fragment : SkippedFragments) {
+
+          RecordData Record;
+
+          Record.push_back(Fragment.Start);
+          Record.push_back(Fragment.End);
+          Record.push_back((uint64_t)Fragment.ReplaceWithSemicolon);
+
+          Writer.EmitRecord(
+              META_SKIPPED_FRAGMENT_RECORD_ID,
+              Record,
+              FragmentAbb
+          );
+        }
       }
     }
 
@@ -982,10 +994,12 @@ namespace levitation {
                 auto BlockID = (MetaBlockIDs)Entry.ID;
 
                 switch (BlockID) {
+                  case META_SKIPPED_FRAGMENT_BLOCK_ID:
+                    if (!readSkippedFragments(BlockID, Meta))
+                      return false;
+                    break;
                   case META_ARRAYS_BLOCK_ID:
                     llvm_unreachable("Recursive main block.");
-                  default:
-                    llvm_unreachable("Unknown block.");
                 }
               }
               break;
@@ -1021,13 +1035,26 @@ namespace levitation {
         case META_DECL_AST_HASH_RECORD_ID:
           Meta.setDeclASTHash(Record);
           break;
-        case META_RANGES_ARRAY_RECORD_ID:
-          Meta.setSkippedBytes(Record);
-          break;
         default:
           llvm_unreachable("Unknown record ID.");
       }
       return true;
+    }
+
+    bool readSkippedFragments(unsigned int BlockID, DeclASTMeta &Meta) {
+      return readAllRecords(
+          BlockID,
+          META_SKIPPED_FRAGMENT_RECORD_ID,
+          /*WithBlob*/false,
+
+          [&](const RecordTy &Record, StringRef BlobStr) {
+            Meta.addSkippedFragment(
+                Record[0], /*Start*/
+                Record[1], /*End*/
+                (bool)Record[2] /*ReplaceWithSemicolon*/
+            );
+          }
+      );
     }
 
     const Failable &getStatus() const override {

@@ -128,14 +128,14 @@ namespace levitation {
     META_TOP_LEVEL_FIELDS_RECORD_ID = 1,
     META_SOURCE_HASH_RECORD_ID,
     META_DECL_AST_HASH_RECORD_ID,
-    META_RANGES_ARRAY_RECORD_ID
+    META_SKIPPED_FRAGMENT_RECORD_ID
   };
 
   /// Describes the various kinds of blocks that occur within
   /// an Dependencies file.
   enum MetaBlockIDs {
-    META_MAIN_BLOCK_ID = llvm::bitc::FIRST_APPLICATION_BLOCKID,
-    META_ARRAYS_BLOCK_ID
+    META_ARRAYS_BLOCK_ID = llvm::bitc::FIRST_APPLICATION_BLOCKID,
+    META_SKIPPED_FRAGMENT_BLOCK_ID
   };
 
   std::unique_ptr<DependenciesWriter> CreateBitstreamWriter(llvm::raw_ostream &OS);

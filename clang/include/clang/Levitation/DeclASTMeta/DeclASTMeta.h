@@ -24,9 +24,21 @@
 
 namespace clang { namespace levitation {
   class DeclASTMeta {
+  public:
+
+    struct FragmentTy {
+      size_t Start, End;
+      bool ReplaceWithSemicolon;
+      bool size() const { return End - Start; }
+    };
+    typedef SmallVector<FragmentTy, 64> RangesVec;
+
+  private:
+
     llvm::SmallVector<uint8_t, 16> SourceHash;
     llvm::SmallVector<uint8_t, 16> DeclASTHash;
-    RangesVector SkippedBytes;
+    RangesVec SkippedBytes;
+
   public:
 
     DeclASTMeta() = default;
@@ -34,13 +46,13 @@ namespace clang { namespace levitation {
     DeclASTMeta(
         llvm::ArrayRef<uint8_t> sourceHash,
         llvm::ArrayRef<uint8_t> declASTHash,
-        const RangesVector &skippedBytes
+        const RangesVec &skippedBytes
     )
     : SourceHash(sourceHash.begin(), sourceHash.end()),
       DeclASTHash(declASTHash.begin(), declASTHash.end()),
       SkippedBytes(skippedBytes) {}
 
-    const RangesVector &getSkippedBytes() const {
+    const RangesVec &getSkippedBytes() const {
       return SkippedBytes;
     }
 
@@ -52,18 +64,8 @@ namespace clang { namespace levitation {
       return DeclASTHash;
     }
 
-    template <typename RecordTy>
-    void setSkippedBytes(const RecordTy &Record) {
-      size_t e = Record.size();
-      assert(!(e % 2) && "Record size must be even");
-      size_t RangesCount = e/2;
-      SkippedBytes.resize(RangesCount);
-
-      for (size_t i = 0; i != RangesCount; ++i) {
-        auto &R = SkippedBytes[i];
-        R.first = Record[i/2];
-        R.second = Record[i/2 + 1];
-      }
+    void addSkippedFragment(size_t Start, size_t End, bool replaceWithSemicolon) {
+      SkippedBytes.push_back({Start, End, replaceWithSemicolon});
     }
 
     template <typename RecordTy>

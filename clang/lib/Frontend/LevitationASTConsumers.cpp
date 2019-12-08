@@ -198,7 +198,7 @@ namespace {
       levitation::DeclASTMeta Meta(
         SourceMD5.Bytes,
         DeclASTMD5.Bytes,
-        SemaObj->levitationGetSkippedBytes()
+        SemaObj->levitationGetSourceFragments()
       );
 
       File F(OutputFile);

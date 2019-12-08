@@ -37,7 +37,7 @@
 #include "clang/Basic/Specifiers.h"
 #include "clang/Basic/TemplateKinds.h"
 #include "clang/Basic/TypeTraits.h"
-#include "clang/Levitation/Common/Utility.h"
+#include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Sema/AnalysisBasedWarnings.h"
 #include "clang/Sema/CleanupInfo.h"
@@ -11651,7 +11651,7 @@ private:
   /// For decl-ast creation mode,
   /// holds bytes skipped during parsing (skipped function bodies and
   /// variable definitions).
-  levitation::RangesVector LevitationSkippedBytes;
+  levitation::DeclASTMeta::RangesVec LevitationSkippedFragments;
 
 public:
 
@@ -11716,11 +11716,11 @@ public:
   void levitationAddSkippedSourceFragment(
       const SourceLocation &Start,
       const SourceLocation &End,
-      bool replaceWithSemicolon = false
+      bool ReplaceWithSemicolon = false
   );
 
-  const levitation::RangesVector& levitationGetSkippedBytes() const {
-    return LevitationSkippedBytes;
+  const levitation::DeclASTMeta::RangesVec& levitationGetSourceFragments() const {
+    return LevitationSkippedFragments;
   }
 
   //
