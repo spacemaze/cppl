@@ -12,6 +12,7 @@
 #include "clang/Basic/LangStandard.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/LevitationASTConsumers.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/Utils.h"
@@ -117,10 +118,13 @@ GeneratePCHAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   Consumers.push_back(CI.getPCHContainerWriter().CreatePCHContainerGenerator(
       CI, InFile, OutputFile, std::move(OS), Buffer));
 
-  // TODO Levitation: at first just put here .decl-ast-meta writer,
-  //   and pass PCHBuffer data, or just it's signature.
+  // C++ Levitation:
+
   // TODO Levitation: after you get stable work, create clone of
   // GeneratePCHAction, and do whatever you want there.
+  Consumers.push_back(levitation::CreateDeclASTMetaGenerator(CI, Buffer));
+
+  // end of C++ Levitation
 
   return std::make_unique<MultiplexConsumer>(std::move(Consumers));
 }

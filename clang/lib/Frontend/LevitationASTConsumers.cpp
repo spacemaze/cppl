@@ -161,12 +161,15 @@ namespace {
 
   class LevitationInputFileProcessor : public SemaObjHolderConsumer {
   protected:
-    CompilerInstance &CI;
+    const CompilerInstance &CI;
     SinglePath CurrentInputFileRel;
 
-    LevitationInputFileProcessor(CompilerInstance &ci, SinglePath&& currentInputFileRel)
-      : CI(ci),
-        CurrentInputFileRel(std::move(currentInputFileRel))
+    LevitationInputFileProcessor(
+        const CompilerInstance &ci,
+        SinglePath&& currentInputFileRel
+    )
+    : CI(ci),
+      CurrentInputFileRel(std::move(currentInputFileRel))
     {
       if (llvm::sys::path::is_absolute(CurrentInputFileRel)) {
         llvm::errs()
@@ -178,27 +181,29 @@ namespace {
   };
 
   class DeclASTMetaCreator {
-    const Sema* SemaObj;
-    StringRef DeclASTBuffer;
+    DiagnosticsEngine &Diag;
+    const DeclASTMeta::FragmentsVectorTy& SkippedFragments;
+    ArrayRef<uint32_t> SourceHash;
+    ArrayRef<uint8_t> DeclASTHash;
   public:
     DeclASTMetaCreator(
-        const Sema *SemaObj,
-        StringRef DeclASTBuffer
+        DiagnosticsEngine &diag,
+        const DeclASTMeta::FragmentsVectorTy& skippedFragments,
+        ArrayRef<uint32_t> sourceHash,
+        ArrayRef<uint8_t> declASTHash
     )
-    : SemaObj(SemaObj),
-      DeclASTBuffer(DeclASTBuffer) {}
+    : Diag(diag),
+      SkippedFragments(skippedFragments),
+      SourceHash(sourceHash),
+      DeclASTHash(declASTHash)
+    {}
 
     bool Write(StringRef OutputFile) {
 
-      const auto &SM = SemaObj->getSourceManager();
-
-      auto SourceMD5 = calcMD5(SM.getBufferData(SM.getMainFileID()));
-      auto DeclASTMD5 = calcMD5(DeclASTBuffer);
-
       levitation::DeclASTMeta Meta(
-        SourceMD5.Bytes,
-        DeclASTMD5.Bytes,
-        SemaObj->levitationGetSourceFragments()
+        arr_cast<uint8_t>(SourceHash),
+        DeclASTHash,
+        SkippedFragments
       );
 
       File F(OutputFile);
@@ -216,17 +221,15 @@ namespace {
     }
   private:
 
-    template<typename BuffT>
-    static MD5::MD5Result calcMD5(BuffT Buff) {
-      MD5 Md5Builder;
-      Md5Builder.update(Buff);
-      MD5::MD5Result Result;
-      Md5Builder.final(Result);
-      return Result;
+    template <typename DestT, typename SrcCollectionT>
+    static const ArrayRef<DestT> arr_cast(const SrcCollectionT &arr) {
+      return ArrayRef<DestT>(
+          (DestT*)arr.data(),
+          sizeof(DestT) * arr.size() / sizeof(decltype(arr[0]))
+      );
     }
 
     void diagMetaFileIOIssues(File::StatusEnum status) {
-      auto &Diag = SemaObj->getDiagnostics();
       switch (status) {
         case File::HasStreamErrors:
           Diag.Report(diag::err_fe_levitation_decl_ast_meta_file_io_troubles);
@@ -244,7 +247,7 @@ namespace {
   class ASTDependenciesProcessor : public LevitationInputFileProcessor {
   public:
     ASTDependenciesProcessor(
-        CompilerInstance &ci, SinglePath&& currentInputFileRel
+        const CompilerInstance &ci, SinglePath&& currentInputFileRel
     )
     : LevitationInputFileProcessor(ci, std::move(currentInputFileRel)) {}
 
@@ -273,11 +276,6 @@ namespace {
         buffer_ostream buffer(OpenedFile.getOutputStream());
         auto Writer = CreateBitstreamWriter(buffer);
         Writer->writeAndFinalize(Dependencies);
-
-        // TODO Levitation: move it into GeneratePCHAction, or your own action
-        //   which may be a clone of GeneratePCHAction.
-        DeclASTMetaCreator MetaWriter(SemaObj, buffer.str());
-        MetaWriter.Write(CI.getFrontendOpts().LevitationDeclASTMeta);
       }
 
       if (F.hasErrors()) {
@@ -304,9 +302,87 @@ namespace {
       }
     }
   };
+
+  class DeclASTMetaGenerator : public SemaObjHolderConsumer {
+    const CompilerInstance &CI;
+
+    // Note, even though we can use PCHBuffer::Signature field,
+    // we still ask for whole buffer. Perhaps we would
+    // calc own signature in future.
+    std::shared_ptr<PCHBuffer> Buffer;
+  public:
+    DeclASTMetaGenerator(
+        const CompilerInstance &ci,
+        std::shared_ptr<PCHBuffer> buffer
+    )
+    : CI(ci),
+      Buffer(buffer)
+    {}
+
+    void HandleTranslationUnit(ASTContext &Ctx) override {
+
+      const auto &SM = SemaObj->getSourceManager();
+      auto SourceMD5 = calcMD5(SM.getBufferData(SM.getMainFileID()));
+
+      levitation::DeclASTMeta Meta(
+        SourceMD5.Bytes,
+        arr_cast<uint8_t>(Buffer->Signature),
+        SemaObj->levitationGetSourceFragments()
+      );
+
+      // LevitationDeclASTMeta should not be empty.
+      assert(CI.getFrontendOpts().LevitationDeclASTMeta.size());
+      File F(CI.getFrontendOpts().LevitationDeclASTMeta);
+
+      if (auto OpenedFile = F.open()) {
+        auto Writer = CreateMetaBitstreamWriter(OpenedFile.getOutputStream());
+        Writer->writeAndFinalize(Meta);
+      }
+
+      if (F.hasErrors()) {
+        diagMetaFileIOIssues(F.getStatus());
+        return;
+      }
+    }
+
+  private:
+
+    template <typename DestT, typename SrcCollectionT>
+    static const ArrayRef<DestT> arr_cast(const SrcCollectionT &arr) {
+      return ArrayRef<DestT>(
+          (DestT*)arr.data(),
+          sizeof(DestT) * arr.size() / sizeof(decltype(arr[0]))
+      );
+    }
+
+    template<typename BuffT>
+    static MD5::MD5Result calcMD5(BuffT Buff) {
+      MD5 Md5Builder;
+      Md5Builder.update(Buff);
+      MD5::MD5Result Result;
+      Md5Builder.final(Result);
+      return Result;
+    }
+
+    void diagMetaFileIOIssues(File::StatusEnum status) {
+      auto &Diag = SemaObj->getDiagnostics();
+      switch (status) {
+        case File::HasStreamErrors:
+          Diag.Report(diag::err_fe_levitation_decl_ast_meta_file_io_troubles);
+          break;
+        case File::FiledToRename:
+        case File::FailedToCreateTempFile:
+          Diag.Report(diag::err_fe_levitation_decl_ast_meta_failed_to_create);
+          break;
+        default:
+          break;
+      }
+    }
+  };
+
 } // end anonymous namespace
 
-namespace clang {
+namespace clang { namespace levitation {
 
 std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
     CompilerInstance &CI,
@@ -323,4 +399,14 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
   return std::make_unique<ASTDependenciesProcessor>(CI, std::move(InFileRel));
 }
 
+std::unique_ptr<ASTConsumer> CreateDeclASTMetaGenerator(
+    const CompilerInstance &CI,
+    std::shared_ptr<PCHBuffer> Buffer
+) {
+  if (CI.getFrontendOpts().LevitationDeclASTMeta.empty())
+    return nullptr;
+
+  return std::make_unique<DeclASTMetaGenerator>(CI, Buffer);
 }
+
+}}
