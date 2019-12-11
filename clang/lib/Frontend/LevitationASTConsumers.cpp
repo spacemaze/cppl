@@ -83,7 +83,7 @@ namespace {
             ValidatedDependenciesMap &Map,
             const PackageDependency &Dep
     ) {
-      DependencyPath Path;
+      SinglePath Path;
 
       DependencyComponentsVector ValidatedComponents;
 
@@ -105,7 +105,7 @@ namespace {
     }
 
     bool buildPath(
-        DependencyPath &Path,
+        SinglePath &Path,
         DependencyComponentsVector &ValidatedComponents,
         DependencyComponentsArrRef &UnvalidatedComponents
     ) {
@@ -162,9 +162,9 @@ namespace {
   class LevitationInputFileProcessor : public SemaObjHolderConsumer {
   protected:
     CompilerInstance &CI;
-    DependencyPath CurrentInputFileRel;
+    SinglePath CurrentInputFileRel;
 
-    LevitationInputFileProcessor(CompilerInstance &ci, DependencyPath&& currentInputFileRel)
+    LevitationInputFileProcessor(CompilerInstance &ci, SinglePath&& currentInputFileRel)
       : CI(ci),
         CurrentInputFileRel(std::move(currentInputFileRel))
     {
@@ -244,7 +244,7 @@ namespace {
   class ASTDependenciesProcessor : public LevitationInputFileProcessor {
   public:
     ASTDependenciesProcessor(
-        CompilerInstance &ci, DependencyPath&& currentInputFileRel
+        CompilerInstance &ci, SinglePath&& currentInputFileRel
     )
     : LevitationInputFileProcessor(ci, std::move(currentInputFileRel)) {}
 
@@ -315,7 +315,7 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
   if (CI.getFrontendOpts().LevitationDependenciesOutputFile.empty())
     return nullptr;
 
-  auto InFileRel = levitation::Path::makeRelative<DependencyPath>(
+  auto InFileRel = levitation::Path::makeRelative<SinglePath>(
       InFile,
       CI.getFrontendOpts().LevitationSourcesRootDir
   );
