@@ -122,7 +122,12 @@ GeneratePCHAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 
   // TODO Levitation: after you get stable work, create clone of
   // GeneratePCHAction, and do whatever you want there.
-  Consumers.push_back(levitation::CreateDeclASTMetaGenerator(CI, Buffer));
+  if (CI.getLangOpts().isLevitationMode(LangOptions::LBSK_BuildDeclAST))
+    if (
+      auto MetaGeneratorConsumer = levitation::CreateDeclASTMetaGenerator(CI, Buffer)
+    ) {
+      Consumers.push_back(std::move(MetaGeneratorConsumer));
+    }
 
   // end of C++ Levitation
 
