@@ -16,7 +16,7 @@ namespace clang {
 
 class ASTConsumer;
 class CompilerInstance;
-class PCHBuffer;
+struct PCHBuffer;
 
 namespace levitation {
 
