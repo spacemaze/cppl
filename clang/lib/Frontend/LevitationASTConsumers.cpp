@@ -29,11 +29,15 @@
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/Serialization.h"
+#include "clang/Lex/Preprocessor.h"
+
 #include "llvm/Bitstream/BitstreamWriter.h"
 #include "llvm/Support/MD5.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
+
+#include <utility>
 
 using namespace clang;
 using namespace clang::levitation;
@@ -257,6 +261,9 @@ namespace {
 
     void HandleTranslationUnit(ASTContext &Ctx) override {
 
+      if (hasErrors())
+        return;
+
       const auto &SM = SemaObj->getSourceManager();
       auto SourceMD5 = calcMD5(SM.getBufferData(SM.getMainFileID()));
 
@@ -285,10 +292,20 @@ namespace {
 
     template <typename DestT, typename SrcCollectionT>
     static const ArrayRef<DestT> arr_cast(const SrcCollectionT &arr) {
-      return ArrayRef<DestT>(
-          (DestT*)arr.data(),
-          sizeof(DestT) * arr.size() / sizeof(decltype(arr[0]))
+
+      constexpr auto SrcItemSize = sizeof(decltype(
+          std::declval<SrcCollectionT>()[0]
+      ));
+      constexpr auto DestItemSize = sizeof(DestT);
+      auto SrcBytes = SrcItemSize * arr.size();
+      auto DestArrSize = SrcBytes / DestItemSize;
+
+      assert(
+          DestArrSize && (SrcBytes % DestItemSize == 0) &&
+          "There should be no unused bytes in dest array"
       );
+
+      return ArrayRef<DestT>((const DestT*)arr.data(), DestArrSize);
     }
 
     template<typename BuffT>
@@ -298,6 +315,20 @@ namespace {
       MD5::MD5Result Result;
       Md5Builder.final(Result);
       return Result;
+    }
+
+    bool hasErrors() const {
+
+      const auto &PP = CI.getPreprocessor();
+
+      // Don't create a PCH if there were fatal failures during module loading.
+      if (PP.getModuleLoader().HadFatalFailure)
+        return true;
+
+      if (PP.getDiagnostics().hasErrorOccurred())
+        return true;
+
+      return false;
     }
 
     void diagMetaFileIOIssues(File::StatusEnum status) {
