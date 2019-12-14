@@ -64,8 +64,8 @@ namespace clang { namespace levitation {
       return DeclASTHash;
     }
 
-    void addSkippedFragment(size_t Start, size_t End, bool replaceWithSemicolon) {
-      FragmentsToSkip.push_back({Start, End, replaceWithSemicolon});
+    void addSkippedFragment(const FragmentTy &Fragment) {
+      FragmentsToSkip.push_back(Fragment);
     }
 
     template <typename RecordTy>

@@ -112,6 +112,73 @@ namespace levitation {
     }
   };
 
+  class RecordWriter {
+    BitstreamWriter &Writer;
+    unsigned int RecordID;
+    unsigned int AbbrevID;
+    RecordData Record;
+  public:
+    RecordWriter(
+        BitstreamWriter &writer,
+        unsigned int recordID,
+        unsigned int abbrevID
+    ) : Writer(writer),
+        RecordID(recordID),
+        AbbrevID(abbrevID)
+    {}
+
+    template<typename T>
+    RecordWriter& emitField(T v) {
+      Record.push_back(v);
+      return *this;
+    }
+
+    RecordWriter& emitField(size_t v) {
+      Record.push_back(v & ((1L << 32) - 1L));
+      Record.push_back(v >> 32);
+      return *this;
+    }
+
+    void done() {
+      Writer.EmitRecord(RecordID, Record, AbbrevID);
+    }
+  };
+
+  template <typename RecordTy>
+  class RecordReader {
+    const RecordTy &Record;
+    size_t CurIdx = 0;
+  public:
+    RecordReader(const RecordTy &Record) : Record(Record) {}
+
+    template<typename T>
+    RecordReader &read(T& dest) {
+      dest = Record[CurIdx++];
+      return *this;
+    }
+
+    RecordReader &read(size_t &dest) {
+      uint32_t L = Record[CurIdx++];
+      uint32_t H = Record[CurIdx++];
+      dest = L | ((size_t)H << 32);
+      return *this;
+    }
+
+    void done() const {}
+  };
+
+  template <>
+  AbbrevsBuilder& AbbrevsBuilder::addFieldType<bool>() {
+    Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1));
+    return *this;
+  }
+
+  template <>
+  AbbrevsBuilder& AbbrevsBuilder::addFieldType<uint8_t>() {
+    Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 8));
+    return *this;
+  }
+
   template <>
   AbbrevsBuilder& AbbrevsBuilder::addFieldType<uint32_t>() {
     Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 32));
@@ -120,7 +187,8 @@ namespace levitation {
 
   template <>
   AbbrevsBuilder& AbbrevsBuilder::addFieldType<size_t>() {
-    Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 64));
+    Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 32));
+    Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 32));
     return *this;
   }
 
@@ -136,7 +204,20 @@ namespace levitation {
     return *this;
   }
 
-    class BlockScope : public WithOperand {
+  template<>
+  AbbrevsBuilder &
+  AbbrevsBuilder::addRecordFieldTypes<DeclASTMeta::FragmentTy>() {
+
+    using FragmentTy = DeclASTMeta::FragmentTy;
+
+    addFieldType<decltype(std::declval<FragmentTy>().Start)>();
+    addFieldType<decltype(std::declval<FragmentTy>().End)>();
+    addFieldType<decltype(std::declval<FragmentTy>().ReplaceWithSemicolon)>();
+
+    return *this;
+  }
+
+  class BlockScope : public WithOperand {
     BitstreamWriter &Writer;
     bool Moved;
   public:
@@ -845,10 +926,14 @@ namespace levitation {
         //  BLOCK(META_MAIN_BLOCK);
         //  RECORD(META_TOP_LEVEL_FIELDS_RECORD);
 
+        // Note: order block-record matters.
+        // Put record decls straight beneath the block it
+        // belongs to.
         BLOCK(META_ARRAYS_BLOCK);
-        BLOCK(META_SKIPPED_FRAGMENT_BLOCK);
         RECORD(META_SOURCE_HASH_RECORD);
         RECORD(META_DECL_AST_HASH_RECORD);
+
+        BLOCK(META_SKIPPED_FRAGMENT_BLOCK);
         RECORD(META_SKIPPED_FRAGMENT_RECORD);
 
 #undef RECORD
@@ -858,44 +943,38 @@ namespace levitation {
 
     void write(const DeclASTMeta &Meta) {
 
-      with (auto MainBlockScope = enterBlock(DEPS_DEPENDENCIES_MAIN_BLOCK_ID)) {
-
+      with (auto MainBlockScope = enterBlock(META_ARRAYS_BLOCK_ID)) {
         writeArrays(
-            Meta.getDeclASTHash(),
             Meta.getSourceHash(),
-            Meta.getFragmentsToSkip()
+            Meta.getDeclASTHash()
         );
+
+        writeSkippedFragments(Meta.getFragmentsToSkip());
       }
     }
 
     void writeArrays(
-        ArrayRef<uint8_t> id0Array,
-        ArrayRef<uint8_t> id1Array,
-        const DeclASTMeta::FragmentsVectorTy& SkippedFragments
+        ArrayRef<uint8_t> SourceHash,
+        ArrayRef<uint8_t> DeclASTHash
     ) {
+      unsigned SourceHashRecordAbbrev = AbbrevsBuilder(META_SOURCE_HASH_RECORD_ID, Writer)
+          .addArrayType<uint8_t>()
+      .done();
 
-      with (auto StringBlock = enterBlock(META_ARRAYS_BLOCK_ID)) {
+      unsigned DeclAstRecordAbbrev = AbbrevsBuilder(META_DECL_AST_HASH_RECORD_ID, Writer)
+          .addArrayType<uint8_t>()
+      .done();
 
-        unsigned SourceHashRecordAbbrev = AbbrevsBuilder(META_SOURCE_HASH_RECORD_ID, Writer)
-            .addArrayType<uint8_t>()
-        .done();
-        unsigned DeclAstRecordAbbrev = AbbrevsBuilder(META_DECL_AST_HASH_RECORD_ID, Writer)
-            .addArrayType<uint8_t>()
-        .done();
-
-        Writer.EmitRecord(
-            META_SOURCE_HASH_RECORD_ID,
-            id0Array,
-            SourceHashRecordAbbrev
-        );
-        Writer.EmitRecord(
-            META_DECL_AST_HASH_RECORD_ID,
-            id1Array,
-            DeclAstRecordAbbrev
-        );
-
-        writeSkippedFragments(SkippedFragments);
-      }
+      Writer.EmitRecord(
+          META_SOURCE_HASH_RECORD_ID,
+          SourceHash,
+          SourceHashRecordAbbrev
+      );
+      Writer.EmitRecord(
+          META_DECL_AST_HASH_RECORD_ID,
+          DeclASTHash,
+          DeclAstRecordAbbrev
+      );
     }
 
     void writeSkippedFragments(const DeclASTMeta::FragmentsVectorTy &SkippedFragments) {
@@ -907,18 +986,11 @@ namespace levitation {
         .done();
 
         for (const auto &Fragment : SkippedFragments) {
-
-          RecordData Record;
-
-          Record.push_back(Fragment.Start);
-          Record.push_back(Fragment.End);
-          Record.push_back((uint64_t)Fragment.ReplaceWithSemicolon);
-
-          Writer.EmitRecord(
-              META_SKIPPED_FRAGMENT_RECORD_ID,
-              Record,
-              FragmentAbb
-          );
+          RecordWriter(Writer, META_SKIPPED_FRAGMENT_RECORD_ID, FragmentAbb)
+            .emitField(Fragment.Start)
+            .emitField(Fragment.End)
+            .emitField(Fragment.ReplaceWithSemicolon)
+          .done();
         }
       }
     }
@@ -1048,11 +1120,16 @@ namespace levitation {
           /*WithBlob*/false,
 
           [&](const RecordTy &Record, StringRef BlobStr) {
-            Meta.addSkippedFragment(
-                Record[0], /*Start*/
-                Record[1], /*End*/
-                (bool)Record[2] /*ReplaceWithSemicolon*/
-            );
+
+            DeclASTMeta::FragmentTy Fragment;
+
+            RecordReader<RecordTy>(Record)
+              .read(Fragment.Start)
+              .read(Fragment.End)
+              .read(Fragment.ReplaceWithSemicolon)
+            .done();
+
+            Meta.addSkippedFragment(Fragment);
           }
       );
     }
