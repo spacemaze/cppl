@@ -812,6 +812,7 @@ public:
       StringRef BinDir,
       StringRef PrecompiledPreamble,
       StringRef OutDeclASTFile,
+      StringRef OutDeflASTMetaFile,
       StringRef InputFile,
       const Paths &Deps,
       StringRef StdLib,
@@ -822,7 +823,7 @@ public:
     assert(OutDeclASTFile.size() && InputFile.size());
 
     if (!DryRun || Verbose)
-      dumpBuildDecl(OutDeclASTFile, InputFile, Deps);
+      dumpBuildDecl(OutDeclASTFile, OutDeflASTMetaFile, InputFile, Deps);
 
     levitation::Path::createDirsForFile(OutDeclASTFile);
 
@@ -841,6 +842,7 @@ public:
     //        .addArg("-cppl-no-out")
     //    .conditionEnd()
     .addKVArgSpace("-o", OutDeclASTFile)
+    .addKVArgEq("-cppl-meta", OutDeflASTMetaFile)
     .execute();
 
     return processStatus(ExecutionStatus);
@@ -987,10 +989,13 @@ protected:
 
   static void dumpBuildDecl(
       StringRef OutDeclASTFile,
+      StringRef OutDeclASTMetaFile,
       StringRef InputObject,
       const Paths &Deps
   ) {
     assert(OutDeclASTFile.size() && InputObject.size());
+
+    // TODO Levitation: also dump OutDeclASTMetaFile
 
     dumpInstantiate(OutDeclASTFile, InputObject, Deps, "BUILD DECL", "decl-ast");
   }
@@ -1307,7 +1312,7 @@ void LevitationDriverImpl::collectSources() {
     );
 
     Files.SkippedBytes = Path::getPath<SinglePath>(
-        Context.Driver.SourcesRoot,
+        Context.Driver.BuildRoot,
         PackagePath,
         FileExtensions::SkippedBytes
     );
@@ -1444,6 +1449,8 @@ bool LevitationDriverImpl::processDeclaration(
 
   bool NeedDeclAST = true;
 
+  // TODO Levitation: need #public directive to handle this part
+#if 0
   if (N.DependentNodes.empty()) {
     auto &Verbose = Log.verbose();
     Verbose << "Skip building unused declaration for ";
@@ -1451,6 +1458,7 @@ bool LevitationDriverImpl::processDeclaration(
     Verbose << "\n";
     NeedDeclAST = false;
   }
+#endif
 
   // TODO Levitation: MD5 check
   // 1. DeclASTMeta MetaOld = DeclASTMetaLoader::fromFile(Files.SkippedBytes);
@@ -1461,6 +1469,7 @@ bool LevitationDriverImpl::processDeclaration(
       Context.Driver.BinDir,
       Context.Driver.PreambleOutput,
       (NeedDeclAST ? Files.DeclAST.str() : StringRef()),
+      (NeedDeclAST ? Files.SkippedBytes.str() : StringRef()),
       Files.Source,
       fullDependencies,
       Context.Driver.StdLib,
