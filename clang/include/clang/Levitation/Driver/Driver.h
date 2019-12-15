@@ -44,7 +44,7 @@ namespace clang { namespace levitation { namespace tools {
 
     int JobsNumber = DriverDefaults::JOBS_NUMBER;
 
-    llvm::StringRef OutputHeadersDir;
+    levitation::SinglePath OutputHeadersDir;
     llvm::StringRef Output;
 
     bool LinkPhaseEnabled = true;
