@@ -2188,6 +2188,12 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
     }
   }
 
+  // TODO Levitation: as long as we strip redeclarations with definitions
+  //   we may bump into case, when DeclsInGroup is empty.
+  //   in this case notify Sema, that whole decl group is a single
+  //   fragment to be skipped.
+  //   We should merge this new skipped fragment with existing ones.
+
   return Actions.FinalizeDeclaratorGroup(getCurScope(), DS, DeclsInGroup);
 }
 
@@ -2239,6 +2245,13 @@ Decl *Parser::ParseDeclarationAfterDeclarator(
     return nullptr;
 
   return ParseDeclarationAfterDeclaratorAndAttributes(D, TemplateInfo);
+}
+
+static bool levitationNextIsInitializer(const Token &Tok) {
+  return Tok.is(tok::equal) ||
+         Tok.is(tok::l_paren) ||
+         /*true for levitation getLangOpts().CPlusPlus11 && */
+         Tok.is(tok::l_brace);
 }
 
 Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
@@ -2339,16 +2352,63 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
   // which in turn should run levitationMayBeSkipVarDefinition which
   // do all required checks, and if decl should be skipped it returns false,
   // and ActOnVariableDeclarator will return nullptr.
-  if (Actions.isLevitationMode() && SkipFunctionBodies && !ThisDecl) {
+  if (Actions.isLevitationMode() &&
+      SkipFunctionBodies &&
+      !ThisDecl &&
+      !D.isFunctionDeclarator() &&
+      levitationNextIsInitializer(Tok)) {
     // SkipInit for global vars,
     // if we parse levitation preamble or .decl-ast
 
-    // Keep track of source fragments we skip.
-    SourceLocation StartSkip = D.getBeginLoc();
+    SourceLocation StartSkip;
+
+    bool IsFirstDeclInGroup = D.isFirstDeclarator();
+
+    // TODO Levitation: levitationMayBeSkipVarDefinition
+    //   is called in
+    //   this level -> AcOnDeclarator -> ... ->
+    //   once it returns true, ActOnDeclarator returns nullptr,
+    //   and finally we fall into this branch.
+    //
+    //   There is a dilemma:
+    //     * We need to check whether to skip is Sema, because we
+    //       have all we need there (all sorts of Decl Contexts, redecl info and so on).
+    //     * We need to register fragment to skip in parser, because here we can access
+    //       Lexer.
+    //
+    //     It seems that we should filter all redeclarations on first step.
+    //     Somehow we should skip just init part for decls we see first time.
+    bool IsRedecl = true;
+    if (IsRedecl) {
+      // We're about to parse initialization part,
+      // but we've got to skip it and only it,
+      // so start skipping from current location.
+      StartSkip = Tok.getLocation();
+    } else {
+
+      // Keep track of source fragments we skip.
+      // Two cases possible:
+      // Case #1: int decl = <init part>,
+      //   we should keep "int" and start skipping fragment from decl,
+      //   and include "," at the end.
+      // int keepDecl, decl = <init part>
+      //   we should start skipped fragment from leading "," till next
+      //   top-level "," or till ";".
+
+      if (IsFirstDeclInGroup)
+        StartSkip = D.getCommaLoc();
+      else {
+        auto &NNS = D.getCXXScopeSpec();
+        StartSkip = NNS.isValid() ? NNS.getBeginLoc() : D.getIdentifierLoc();
+      }
+    }
 
     SkipUntil(tok::comma, StopAtSemi | StopBeforeMatch);
 
-    Actions.levitationAddSkippedSourceFragment(StartSkip, Tok.getLocation());
+    SourceLocation EndSkip = IsFirstDeclInGroup ?
+        NextToken().getLocation() : Tok.getLocation();
+
+    Actions.levitationAddSkippedSourceFragment(StartSkip, EndSkip);
 
     return nullptr;
   }
