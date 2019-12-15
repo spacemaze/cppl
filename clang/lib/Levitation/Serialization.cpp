@@ -1135,7 +1135,7 @@ namespace levitation {
     }
 
     const Failable &getStatus() const override {
-      llvm_unreachable("not implemented");
+      return *this;
     }
   };
 
