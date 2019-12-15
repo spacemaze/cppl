@@ -93,22 +93,50 @@ public:
         emitAfterIncludesComment(out);
 
         size_t Start = 0;
-        bool WriteNewLine;
+        StringRef NewLine("\n");
         for (const auto &skippedRange : SkippedBytes) {
+          // possible skip cases:
+          //
+          // Case 1:
+          // [keep part] [skip part] [keep part]
+          //
+          // Case 2:
+          // [keep] [skip]
+          // [keep (new line)]
+          //
+          // Case 3:
+          // [keep]
+          // [skip] [keep]
+          //
+          // Case 4:
+          // [keep]
+          // [skip]
+          // [keep]
+
 
           assert(InSize - Start >= skippedRange.size());
 
-          writeFragment(
-              out,
-              InStart + Start,
-              skippedRange.Start - Start,
-              WriteNewLine
-          );
+          // Detect new line in the end of [keep] fragment.
+          // If present, strip trailing spaces, but remember indentation.
+          auto *KeepPtr = InStart + Start;
+          size_t KeepWriteCount = skippedRange.Start - Start;
+          size_t KeepWriteCountStripped = KeepWriteCount;
 
-          // Now write skipped fragment remnants.
+          bool AfterKeepNewLine = false;
 
-          // If it was requested to replace skipped fragment with
-          // ';' do it.
+          stripTrailingSpaces(KeepPtr, KeepWriteCountStripped);
+
+          size_t AfterKeepSpaces = KeepWriteCount - KeepWriteCountStripped;
+
+          StringRef Keep(KeepPtr, KeepWriteCountStripped);
+
+          if (Keep.endswith(NewLine)) {
+            AfterKeepNewLine = true;
+            KeepWriteCount = KeepWriteCountStripped - NewLine.size();
+          }
+
+          out.write(KeepPtr, KeepWriteCount);
+
           if (skippedRange.ReplaceWithSemicolon)
             out << ";";
 
@@ -118,31 +146,51 @@ public:
           // preserve new line, but not trailing spaces.
           auto SkippedFragmentStartPtr = InStart + skippedRange.Start;
           auto SkippedFragmentSize = skippedRange.End - skippedRange.Start;
+          auto OldSize = SkippedFragmentSize;
+          bool AfterSkipNewLine = false;
 
           stripTrailingSpaces(SkippedFragmentStartPtr, SkippedFragmentSize);
 
-          size_t OldSize = SkippedFragmentSize;
-          StringRef SkippedFragmentStr(
+          StringRef Skip(
               SkippedFragmentStartPtr, SkippedFragmentSize
           );
 
-          // We need to emit '\n' if it was stripped from
-          // fragment-to-write or if it was in skipped fragment's tail
-          if (SkippedFragmentStr.endswith("\n") || WriteNewLine) {
-            out.indent(OldSize - SkippedFragmentSize);
+          auto AfterSkipSpaces = OldSize - SkippedFragmentSize;
+
+          if (Skip.endswith(NewLine))
+            AfterSkipNewLine = true;
+
+          // Case 1: [keep] and [skip] on same line:
+          //   emit spaces we found after [keep]
+          if (!AfterKeepNewLine && !AfterSkipNewLine) {
+            out.indent((unsigned) AfterKeepSpaces);
+          } else
+
+          // Case 2: [keep] [skip] \n [some spaces]
+          // Case 4: [keep]\n  [skip]\n
+          // Do the same for both cases:
+          //   emit new line
+          //   emit spaces after skip
+          if (AfterSkipNewLine) {
             out << "\n";
+            out.indent((unsigned)AfterSkipSpaces);
+          } else
+
+          // Case 3: [keep]\n  [skip (without new line)]
+          //   emit new line
+          //   emit spaces after keep
+          {
+            out << "\n";
+            out.indent((unsigned)AfterKeepSpaces);
           }
         }
 
-        writeFragment(
-            out,
-            InStart + Start,
-            InSize - Start,
-            WriteNewLine
-        );
+        auto KeepPtr = InStart + Start;
+        auto KeepWriteCount = InSize - Start;
 
-        if (WriteNewLine)
-          out << "\n";
+        stripTrailingSpaces(KeepPtr, KeepWriteCount);
+
+        out.write(KeepPtr, KeepWriteCount);
       }
 
       if (OutF.hasErrors()) {
@@ -212,46 +260,10 @@ protected:
     out << "\n";
   }
 
-  void writeFragment(
-      llvm::raw_ostream& out,
-      const char *WritePtr,
-      size_t WriteCount,
-      bool &WriteNewLine
-  ) {
-
-    // Fragment we're about to write, may end with trailing spaces:
-    // like this: \s+\n
-    // In this case, strip that suffix, but remember we stripped new line
-    // as well.
-    WriteNewLine = correctIfTrailingSpaces(WritePtr, WriteCount);
-    out.write(WritePtr, WriteCount);
-  }
-
   bool stripTrailingSpaces(const char *Str, size_t &Size) {
     size_t OldSize = Size;
     while (Size && Str[Size-1] == ' ') --Size;
     return Size != OldSize;
-  }
-
-  bool correctIfTrailingSpaces(const char *SourceStart, size_t &End) {
-    StringRef NewLineStr = StringRef("\n");
-    size_t NewLineLen = NewLineStr.size();
-
-    // If string to short to be ended with " \n", boil out.
-    if (End < NewLineLen)
-      return false;
-
-    // If string is not ended with new line, boil out.
-    if (StringRef(SourceStart + End - NewLineLen, NewLineLen) != NewLineStr)
-      return false;
-
-    size_t NewEnd = End - NewLineLen;
-
-    if (!stripTrailingSpaces(SourceStart, NewEnd))
-      return false;
-
-    End = NewEnd;
-    return true;
   }
 
   void dump(llvm::raw_ostream &out) {
