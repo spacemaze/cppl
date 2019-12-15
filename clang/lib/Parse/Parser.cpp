@@ -1334,7 +1334,11 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
       SkipStart = Tok.getLocation();
     }
     if (trySkippingFunctionBody()) {
-      Actions.levitationAddSkippedSourceFragment(SkipStart, Tok.getLocation());
+      Actions.levitationAddSkippedSourceFragment(
+          SkipStart,
+          Tok.getLocation(),
+          BurnWithSemicolon
+      );
       BodyScope.Exit();
       Actions.ActOnSkippedFunctionBody(Res);
       return Actions.ActOnFinishFunctionBody(Res, nullptr, false);
