@@ -50,8 +50,8 @@ public:
       StringRef Package,
       bool MainFile = false
   ) {
-    Dst.emplace_back(levitation::Path::getPath<SinglePath>(
-        BuildRoot, Package, FileExtensions::Header
+    Dst.emplace_back(levitation::Path::replaceExtension<SinglePath>(
+        Package, FileExtensions::Header
     ));
   }
 
