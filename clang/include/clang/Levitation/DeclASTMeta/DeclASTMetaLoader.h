@@ -34,11 +34,8 @@ namespace clang { namespace levitation {
         DeclASTMeta &Meta, StringRef BuildRoot, StringRef FileName
     ) {
       auto &FM = CreatableSingleton<FileManager>::get();
-      auto InFilePath = levitation::Path::getPath<SinglePath>(
-        BuildRoot, FileName
-      );
 
-      if (auto Buffer = FM.getBufferForFile(InFilePath)) {
+      if (auto Buffer = FM.getBufferForFile(FileName)) {
         llvm::MemoryBuffer &MemBuf = *Buffer.get();
 
         if (!fromBuffer(Meta, MemBuf))

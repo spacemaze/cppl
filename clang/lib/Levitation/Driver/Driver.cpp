@@ -1306,7 +1306,7 @@ void LevitationDriverImpl::collectSources() {
     );
 
     Files.Header = Path::getPath<SinglePath>(
-        Context.Driver.SourcesRoot,
+        Context.Driver.OutputHeadersDir,
         PackagePath,
         FileExtensions::Header
     );
@@ -1497,8 +1497,6 @@ bool LevitationDriverImpl::processDeclaration(
     return false;
 
   return HeaderGenerator(
-      Context.Driver.SourcesRoot,
-      Context.Driver.OutputHeadersDir,
       Files.Header,
       Files.Source,
       Includes,
@@ -1589,7 +1587,7 @@ LevitationDriver::LevitationDriver(StringRef CommandPath)
   BinDir = llvm::sys::path::parent_path(P);
 
   OutputHeadersDir = levitation::Path::getPath<SinglePath>(
-      BinDir, DriverDefaults::HEADER_DIR_SUFFIX
+      BuildRoot, DriverDefaults::HEADER_DIR_SUFFIX
   );
 }
 
@@ -1669,7 +1667,7 @@ void LevitationDriver::dumpParameters() {
   << "    PreambleSource: " << (PreambleSource.empty() ? "<preamble compilation not requested>" : PreambleSource) << "\n"
   << "    JobsNumber: " << JobsNumber << "\n"
   << "    Output: " << Output << "\n"
-  << "    OutputHeadersDir: " << (OutputHeadersDir.empty() ? "<header creation not requested>" : OutputHeadersDir) << "\n"
+  << "    OutputHeadersDir: " << (isLinkPhaseEnabled() ? "<n/a>" : OutputHeadersDir.c_str()) << "\n"
   << "    DryRun: " << (DryRun ? "yes" : "no") << "\n"
   << "\n";
 
