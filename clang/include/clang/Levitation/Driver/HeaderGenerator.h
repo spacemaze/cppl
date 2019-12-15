@@ -131,9 +131,11 @@ public:
           StringRef Keep(KeepPtr, KeepWriteCountStripped);
 
           if (Keep.endswith(NewLine)) {
+            KeepWriteCountStripped -= NewLine.size();
             AfterKeepNewLine = true;
-            KeepWriteCount = KeepWriteCountStripped - NewLine.size();
           }
+
+          KeepWriteCount = KeepWriteCountStripped;
 
           out.write(KeepPtr, KeepWriteCount);
 
