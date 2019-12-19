@@ -11648,6 +11648,28 @@ private:
   /// Set of dependencies definition depends on.
   levitation::DependenciesMap LevitationDefinitionDependencies;
 
+public:
+  enum struct LevitationVarSkipAction {
+    None, Skip, SkipInit
+  };
+
+
+private:
+
+  // Keep track of actions for var declarators.
+  // Note, that we identify Declarator instance by
+  // source range it associated with.
+  // And we identify source range by pair of its
+  // source location IDs.
+  struct DeclaratorID : std::pair<unsigned, unsigned> {
+    DeclaratorID(const Declarator &D) {
+      const auto &SR = D.getSourceRange();
+      first = SR.getBegin().getRawEncoding();
+      second = SR.getEnd().getRawEncoding();
+    }
+  };
+  llvm::DenseMap<DeclaratorID, LevitationVarSkipAction> LevitationVarSkipActions;
+
   /// For decl-ast creation mode,
   /// holds bytes skipped during parsing (skipped function bodies and
   /// variable definitions).
@@ -11710,8 +11732,11 @@ public:
         const Declarator &D,
         const DeclContext* DC,
         bool IsVariableTemplate,
+        bool IsRedeclaration,
         StorageClass SC
-    ) const;
+    );
+
+  LevitationVarSkipAction levitationGetSkipActionFor(const Declarator &D);
 
   void levitationAddSkippedSourceFragment(
       const SourceLocation &Start,

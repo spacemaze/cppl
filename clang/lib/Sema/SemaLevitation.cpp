@@ -20,8 +20,11 @@
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "clang/Lex/Preprocessor.h"
+#include "llvm/ADT/DenseMap.h"
 
 #include <iterator>
+#include <utility>
+
 using namespace clang;
 using namespace sema;
 
@@ -80,7 +83,8 @@ bool Sema::levitationMayBeSkipVarDefinition(
     const Declarator &D,
     const DeclContext *DC,
     bool IsVariableTemplate,
-    clang::StorageClass SC) const {
+    bool IsRedeclaration,
+    clang::StorageClass SC) {
 
   if (!isLevitationMode(
       LangOptions::LBSK_BuildPreamble,
@@ -93,20 +97,45 @@ bool Sema::levitationMayBeSkipVarDefinition(
 
   bool IsStaticMember = DC->isRecord();
   bool IsFileVar = DC->isFileContext();
+  bool IsStatic =
+    SC == SC_Static ||
+    (
+      SC != StorageClass::SC_Extern &&
+      D.getDeclSpec().getConstSpecLoc().isValid()
+    );
 
-  // Skip initialization of static non-template data members and global variables
-  // defined without "static" keyword.
-  // But preserve initialization for global vars defined with static.
-  bool SkipInit = IsStaticMember ?
+  auto SkipAction = LevitationVarSkipAction::None;
 
-      !IsVariableTemplate && !DC->isDependentContext() :
+  if (!IsVariableTemplate) {
+    if (IsStaticMember && !DC->isDependentContext()) {
+      SkipAction = LevitationVarSkipAction::Skip;
+    } else if (IsFileVar) {
+      if (IsRedeclaration) {
+        // For continue parsing for static redeclarations,
+        // that should force diagnostics, for it is a wrong static use-case.
+        if (!IsStatic)
+          SkipAction = LevitationVarSkipAction::Skip;
+      } else
+        SkipAction = LevitationVarSkipAction::SkipInit;
+    }
+  }
 
-      IsFileVar &&
-      !IsVariableTemplate &&
-      SC != StorageClass::SC_Static &&
-      SC != StorageClass::SC_Extern;
+  if (SkipAction != LevitationVarSkipAction::None) {
+    LevitationVarSkipActions.try_emplace(D, SkipAction);
+    if (SkipAction == LevitationVarSkipAction::Skip)
+      return true;
+  }
 
-  return SkipInit;
+  return false;
+}
+
+Sema::LevitationVarSkipAction Sema::levitationGetSkipActionFor(
+    const Declarator &D
+) {
+  auto Found = LevitationVarSkipActions.find(D);
+  if (Found != LevitationVarSkipActions.end())
+    return Found->second;
+  return LevitationVarSkipAction::None;
 }
 
 void Sema::levitationAddSkippedSourceFragment(

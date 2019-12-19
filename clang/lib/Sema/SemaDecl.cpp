@@ -6763,6 +6763,7 @@ NamedDecl *Sema::ActOnVariableDeclarator(
       //  IsVariableTemplateSpecialization,
       //  IsPartialSpecialization,
       IsVariableTemplate,
+      !Previous.empty(),
       SC
     ))
       return nullptr;

@@ -2254,6 +2254,57 @@ static bool levitationNextIsInitializer(const Token &Tok) {
          Tok.is(tok::l_brace);
 }
 
+template <typename ConsumeToNextF>
+void levitationHandleVarDeclarator(
+    const Declarator &D,
+    const Token &CurToken,
+    Sema &SemaRef,
+    ConsumeToNextF &&consumeToNext
+) {
+    auto SkipAction = SemaRef.levitationGetSkipActionFor(D);
+
+    switch (SkipAction) {
+      case Sema::LevitationVarSkipAction::Skip:
+        {
+          bool IsFirstDeclInGroup = D.isFirstDeclarator();
+
+          SourceLocation StartSkip;
+          if (IsFirstDeclInGroup)
+            StartSkip = D.getCommaLoc();
+          else {
+            auto &NNS = D.getCXXScopeSpec();
+            StartSkip = NNS.isValid() ?
+                NNS.getBeginLoc() : D.getIdentifierLoc();
+          }
+
+          consumeToNext();
+
+          SourceLocation EndSkip = IsFirstDeclInGroup ?
+              NextToken().getLocation() : CurToken.getLocation();
+
+          SemaRef.levitationAddSkippedSourceFragment(StartSkip, EndSkip);
+        }
+
+      case Sema::LevitationVarSkipAction::SkipInit:
+
+        if (levitationNextIsInitializer(CurToken)) {
+          SourceLocation StartSkip = CurToken.getLocation();
+
+          consumeToNext();
+
+          SourceLocation EndSkip = IsFirstDeclInGroup ?
+              NextToken().getLocation() : CurToken.getLocation();
+
+          SemaRef.levitationAddSkippedSourceFragment(StartSkip, EndSkip);
+        }
+        break;
+
+      default:
+        // Do nothing
+        break;
+    }
+}
+
 Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
     Declarator &D, const ParsedTemplateInfo &TemplateInfo, ForRangeInit *FRI) {
   // RAII type used to track whether we're inside an initializer.
@@ -2352,65 +2403,25 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
   // which in turn should run levitationMayBeSkipVarDefinition which
   // do all required checks, and if decl should be skipped it returns false,
   // and ActOnVariableDeclarator will return nullptr.
-  if (Actions.isLevitationMode() &&
-      SkipFunctionBodies &&
-      !ThisDecl &&
-      !D.isFunctionDeclarator() &&
-      levitationNextIsInitializer(Tok)) {
-    // SkipInit for global vars,
-    // if we parse levitation preamble or .decl-ast
 
-    SourceLocation StartSkip;
+  // So two predicates:
+  // 1. If declaration is variable or static field redeclaration,
+  //    * skip this fragment.
+  // 2. If declaration is first time variable declaration,
+  //    * skip definition part if any.
 
-    bool IsFirstDeclInGroup = D.isFirstDeclarator();
+  if (
+    Actions.isLevitationMode() &&
+    !D.isFunctionDefinition() &&
+    SkipFunctionBodies
+  ) {
+    levitationHandleVarDeclarator(
+        D, Tok, Actions,
+        [this] { SkipUntil(tok::comma, StopAtSemi | StopBeforeMatch); }
+    );
 
-    // TODO Levitation: levitationMayBeSkipVarDefinition
-    //   is called in
-    //   this level -> AcOnDeclarator -> ... ->
-    //   once it returns true, ActOnDeclarator returns nullptr,
-    //   and finally we fall into this branch.
-    //
-    //   There is a dilemma:
-    //     * We need to check whether to skip is Sema, because we
-    //       have all we need there (all sorts of Decl Contexts, redecl info and so on).
-    //     * We need to register fragment to skip in parser, because here we can access
-    //       Lexer.
-    //
-    //     It seems that we should filter all redeclarations on first step.
-    //     Somehow we should skip just init part for decls we see first time.
-    bool IsRedecl = true;
-    if (IsRedecl) {
-      // We're about to parse initialization part,
-      // but we've got to skip it and only it,
-      // so start skipping from current location.
-      StartSkip = Tok.getLocation();
-    } else {
-
-      // Keep track of source fragments we skip.
-      // Two cases possible:
-      // Case #1: int decl = <init part>,
-      //   we should keep "int" and start skipping fragment from decl,
-      //   and include "," at the end.
-      // int keepDecl, decl = <init part>
-      //   we should start skipped fragment from leading "," till next
-      //   top-level "," or till ";".
-
-      if (IsFirstDeclInGroup)
-        StartSkip = D.getCommaLoc();
-      else {
-        auto &NNS = D.getCXXScopeSpec();
-        StartSkip = NNS.isValid() ? NNS.getBeginLoc() : D.getIdentifierLoc();
-      }
-    }
-
-    SkipUntil(tok::comma, StopAtSemi | StopBeforeMatch);
-
-    SourceLocation EndSkip = IsFirstDeclInGroup ?
-        NextToken().getLocation() : Tok.getLocation();
-
-    Actions.levitationAddSkippedSourceFragment(StartSkip, EndSkip);
-
-    return nullptr;
+    if (!ThisDecl)
+      return nullptr;
   }
   // end of C++ Levitation
 
