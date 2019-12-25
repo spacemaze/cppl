@@ -79,6 +79,14 @@ void Sema::ActOnLevitationManualDeps() {
     HandleLevitationPackageDependency(DepParts.first, true, DepParts.second);
 }
 
+std::pair<unsigned, unsigned> levitationGetDeclaratorID(const Declarator &D) {
+  const auto &SR = D.getSourceRange();
+  return {
+    SR.getBegin().getRawEncoding(),
+    SR.getEnd().getRawEncoding()
+  };
+}
+
 bool Sema::levitationMayBeSkipVarDefinition(
     const Declarator &D,
     const DeclContext *DC,
@@ -115,13 +123,15 @@ bool Sema::levitationMayBeSkipVarDefinition(
         // that should force diagnostics, for it is a wrong static use-case.
         if (!IsStatic)
           SkipAction = LevitationVarSkipAction::Skip;
-      } else
+      } else if (!IsStatic)
         SkipAction = LevitationVarSkipAction::SkipInit;
     }
   }
 
   if (SkipAction != LevitationVarSkipAction::None) {
-    LevitationVarSkipActions.try_emplace(D, SkipAction);
+    LevitationVarSkipActions.try_emplace(
+        levitationGetDeclaratorID(D), SkipAction
+    );
     if (SkipAction == LevitationVarSkipAction::Skip)
       return true;
   }
@@ -132,7 +142,7 @@ bool Sema::levitationMayBeSkipVarDefinition(
 Sema::LevitationVarSkipAction Sema::levitationGetSkipActionFor(
     const Declarator &D
 ) {
-  auto Found = LevitationVarSkipActions.find(D);
+  auto Found = LevitationVarSkipActions.find(levitationGetDeclaratorID(D));
   if (Found != LevitationVarSkipActions.end())
     return Found->second;
   return LevitationVarSkipAction::None;
@@ -165,6 +175,74 @@ void Sema::levitationAddSkippedSourceFragment(
                << (ReplaceWithSemicolon ? "BURN:\n" : ":\n");
 
   llvm::errs() << "Bytes: 0x";
+  llvm::errs().write_hex(StartSLoc.second) << " : 0x";
+  llvm::errs().write_hex(EndSLoc.second) << "\n";
+
+  Start.dump(getSourceManager());
+  End.dump(getSourceManager());
+
+  llvm::errs() << "\n";
+#endif
+}
+
+void Sema::levitationReplaceLastSkippedSourceFragments(
+    const clang::SourceLocation &Start,
+    const clang::SourceLocation &End
+) {
+
+  auto StartSLoc = getSourceManager().getDecomposedLoc(Start);
+  auto EndSLoc = getSourceManager().getDecomposedLoc(End);
+
+  size_t StartOffset = StartSLoc.second;
+  size_t EndOffset = EndSLoc.second;
+
+  auto MainFileID = getSourceManager().getMainFileID();
+
+  assert(
+      StartSLoc.first == MainFileID &&
+      EndSLoc.first == MainFileID &&
+      "Skipped fragment can only be a part of main file."
+  );
+
+  assert(
+      LevitationSkippedFragments.size() &&
+      "Fragments merging applied for non empty "
+      "LevitationSkippedFragments collection only"
+  );
+
+  // Lookup for first fragment to be replaced
+  size_t FirstRemain = LevitationSkippedFragments.size();
+  while (FirstRemain)
+  {
+    --FirstRemain;
+    if (StartOffset > LevitationSkippedFragments[FirstRemain].End)
+      break;
+  }
+
+  const auto &First = LevitationSkippedFragments[FirstRemain];
+  const auto &Last = LevitationSkippedFragments.back();
+
+  // Extend range in case of intersection
+
+  size_t RemainSize = FirstRemain + 1;
+  if (First.Start < StartOffset) {
+    StartOffset = First.Start;
+    --RemainSize;
+  }
+
+  if (LevitationSkippedFragments.back().End > EndOffset)
+    EndOffset = Last.End;
+
+  LevitationSkippedFragments.resize(RemainSize);
+
+  LevitationSkippedFragments.push_back({StartOffset, EndOffset, false});
+
+#if 1
+  llvm::errs() << "Merged skipped fragment\n"
+               << "  replaced fragments from idx = " << FirstRemain
+               << "\n";
+
+  llvm::errs() << "New bytes: 0x";
   llvm::errs().write_hex(StartSLoc.second) << " : 0x";
   llvm::errs().write_hex(EndSLoc.second) << "\n";
 

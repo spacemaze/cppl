@@ -2188,11 +2188,18 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
     }
   }
 
-  // TODO Levitation: as long as we strip redeclarations with definitions
+  // C++ Levitation: as long as we strip redeclarations with definitions
   //   we may bump into case, when DeclsInGroup is empty.
   //   in this case notify Sema, that whole decl group is a single
   //   fragment to be skipped.
   //   We should merge this new skipped fragment with existing ones.
+  if (DeclsInGroup.empty()) {
+    const auto &SkipBegin = D.getBeginLoc();
+    const auto &SkipEnd = Tok.getLocation();
+
+    Actions.levitationReplaceLastSkippedSourceFragments(SkipBegin, SkipEnd);
+  }
+  // end of C++ Levitation
 
   return Actions.FinalizeDeclaratorGroup(getCurScope(), DS, DeclsInGroup);
 }
@@ -2254,22 +2261,22 @@ static bool levitationNextIsInitializer(const Token &Tok) {
          Tok.is(tok::l_brace);
 }
 
-template <typename ConsumeToNextF>
+template <typename ConsumeToNextF, typename NextTokenF>
 void levitationHandleVarDeclarator(
     const Declarator &D,
     const Token &CurToken,
     Sema &SemaRef,
-    ConsumeToNextF &&consumeToNext
+    ConsumeToNextF &&consumeToNext,
+    NextTokenF &&nextToken
 ) {
     auto SkipAction = SemaRef.levitationGetSkipActionFor(D);
+    bool IsFirstDeclInGroup = D.isFirstDeclarator();
 
     switch (SkipAction) {
       case Sema::LevitationVarSkipAction::Skip:
         {
-          bool IsFirstDeclInGroup = D.isFirstDeclarator();
-
           SourceLocation StartSkip;
-          if (IsFirstDeclInGroup)
+          if (!IsFirstDeclInGroup)
             StartSkip = D.getCommaLoc();
           else {
             auto &NNS = D.getCXXScopeSpec();
@@ -2280,10 +2287,13 @@ void levitationHandleVarDeclarator(
           consumeToNext();
 
           SourceLocation EndSkip = IsFirstDeclInGroup ?
-              NextToken().getLocation() : CurToken.getLocation();
+              nextToken().getLocation() : CurToken.getLocation();
 
-          SemaRef.levitationAddSkippedSourceFragment(StartSkip, EndSkip);
+          SemaRef.levitationAddSkippedSourceFragment(
+              StartSkip, EndSkip, nextToken().is(tok::semi)
+          );
         }
+        break;
 
       case Sema::LevitationVarSkipAction::SkipInit:
 
@@ -2293,9 +2303,13 @@ void levitationHandleVarDeclarator(
           consumeToNext();
 
           SourceLocation EndSkip = IsFirstDeclInGroup ?
-              NextToken().getLocation() : CurToken.getLocation();
+              nextToken().getLocation() : CurToken.getLocation();
 
-          SemaRef.levitationAddSkippedSourceFragment(StartSkip, EndSkip);
+          SemaRef.levitationAddSkippedSourceFragment(
+              StartSkip, EndSkip, nextToken().is(tok::semi)
+              // TODO Levitation: PrefixWithExtern = IsFirstDeclInGroup
+              //   but only for SkipInit action!
+          );
         }
         break;
 
@@ -2417,7 +2431,8 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
   ) {
     levitationHandleVarDeclarator(
         D, Tok, Actions,
-        [this] { SkipUntil(tok::comma, StopAtSemi | StopBeforeMatch); }
+        [this] { SkipUntil(tok::comma, StopAtSemi | StopBeforeMatch); },
+        [this] () -> Token { return NextToken(); }
     );
 
     if (!ThisDecl)

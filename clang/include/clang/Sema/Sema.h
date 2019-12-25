@@ -11661,13 +11661,7 @@ private:
   // source range it associated with.
   // And we identify source range by pair of its
   // source location IDs.
-  struct DeclaratorID : std::pair<unsigned, unsigned> {
-    DeclaratorID(const Declarator &D) {
-      const auto &SR = D.getSourceRange();
-      first = SR.getBegin().getRawEncoding();
-      second = SR.getEnd().getRawEncoding();
-    }
-  };
+  using DeclaratorID = std::pair<unsigned, unsigned>;
   llvm::DenseMap<DeclaratorID, LevitationVarSkipAction> LevitationVarSkipActions;
 
   /// For decl-ast creation mode,
@@ -11742,6 +11736,11 @@ public:
       const SourceLocation &Start,
       const SourceLocation &End,
       bool ReplaceWithSemicolon = false
+  );A
+
+  void levitationReplaceLastSkippedSourceFragments(
+      const SourceLocation &Start,
+      const SourceLocation &End
   );
 
   const levitation::DeclASTMeta::FragmentsVectorTy& levitationGetSourceFragments() const {

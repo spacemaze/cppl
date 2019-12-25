@@ -28,6 +28,7 @@ namespace clang { namespace levitation {
 
     struct FragmentTy {
       size_t Start, End;
+      // TODO Levitation: need "prefix with extern"
       bool ReplaceWithSemicolon;
       bool size() const { return End - Start; }
     };
