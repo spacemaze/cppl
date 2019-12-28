@@ -157,6 +157,12 @@ namespace levitation {
       return *this;
     }
 
+    template<typename CallableTy>
+    RecordReader &readcb(CallableTy&& cb) {
+      cb(Record[CurIdx++]);
+      return *this;
+    }
+
     RecordReader &read(size_t &dest) {
       uint32_t L = Record[CurIdx++];
       uint32_t H = Record[CurIdx++];
