@@ -142,9 +142,6 @@ public:
           if (skippedRange.ReplaceWithSemicolon)
             out << ";";
 
-          if (skippedRange.PrefixWithExtern)
-            out << "extern ";
-
           Start = skippedRange.End;
 
           // If skipped fragment was ended with new line, or \n\s+
@@ -166,9 +163,9 @@ public:
             AfterSkipNewLine = true;
 
           // Case 1: [keep] and [skip] on same line:
-          //   emit spaces we found after [keep]
+          //   emit spaces we found after [skip]
           if (!AfterKeepNewLine && !AfterSkipNewLine) {
-            out.indent((unsigned) AfterKeepSpaces);
+            out.indent((unsigned) AfterSkipSpaces);
           } else
 
           // Case 2: [keep] [skip] \n [some spaces]
@@ -188,6 +185,9 @@ public:
             out << "\n";
             out.indent((unsigned)AfterKeepSpaces);
           }
+
+          if (skippedRange.PrefixWithExtern)
+            out << "extern ";
         }
 
         auto KeepPtr = InStart + Start;

@@ -68,7 +68,8 @@ void Sema::HandleLevitationPackageDependency(
 
 bool Sema::isLevitationFilePublic() const {
   // See task: #49
-  llvm_unreachable("not-implemented");
+  // llvm_unreachable("not-implemented");
+  return true;
 }
 
 void Sema::ActOnLevitationManualDeps() {
@@ -164,6 +165,32 @@ void Sema::levitationAddSkippedSourceFragment(
       "Skipped fragment can only be a part of main file."
   );
 
+  if (LevitationSkippedFragments.size()) {
+    auto &Last = LevitationSkippedFragments.back();
+    if (Last.End >= StartSLoc.second) {
+      Last.End = EndSLoc.second;
+      Last.ReplaceWithSemicolon = ReplaceWithSemicolon;
+
+      #if 0
+        llvm::errs() << "Extended skipped fragment "
+                     << (ReplaceWithSemicolon ? "BURN:\n" : ":\n");
+
+        llvm::errs() << "Bytes: 0x";
+        llvm::errs().write_hex(Last.Start) << " : 0x";
+        llvm::errs().write_hex(Last.End) << "\n";
+
+        llvm::errs() << " extension range:\n";
+
+        Start.dump(getSourceManager());
+        End.dump(getSourceManager());
+
+        llvm::errs() << "\n";
+      #endif
+
+      return;
+    }
+  }
+
   LevitationSkippedFragments.push_back({
     StartSLoc.second,
     EndSLoc.second,
@@ -171,7 +198,7 @@ void Sema::levitationAddSkippedSourceFragment(
     /* prefix with extern */ false
   });
 
-#if 1
+#if 0
   llvm::errs() << "Added skipped fragment "
                << (ReplaceWithSemicolon ? "BURN:\n" : ":\n");
 
@@ -220,27 +247,15 @@ void Sema::levitationReplaceLastSkippedSourceFragments(
       break;
   }
 
-  const auto &First = LevitationSkippedFragments[FirstRemain];
-  const auto &Last = LevitationSkippedFragments.back();
-
-  // Extend range in case of intersection
-
   size_t RemainSize = FirstRemain + 1;
-  if (First.Start < StartOffset) {
-    StartOffset = First.Start;
-    --RemainSize;
-  }
-
-  if (LevitationSkippedFragments.back().End > EndOffset)
-    EndOffset = Last.End;
 
   LevitationSkippedFragments.resize(RemainSize);
 
   LevitationSkippedFragments.push_back({StartOffset, EndOffset, false, false});
 
-#if 1
+#if 0
   llvm::errs() << "Merged skipped fragment\n"
-               << "  replaced fragments from idx = " << FirstRemain
+               << "  replaced fragments from idx = " << RemainSize
                << "\n";
 
   llvm::errs() << "New bytes: 0x";
@@ -295,7 +310,7 @@ void Sema::levitationInsertExternForHeader(
       }
   );
 
-#if 1
+#if 0
   llvm::errs() << "Inserted extern keyword\n";
 
   llvm::errs() << "New bytes: 0x";
