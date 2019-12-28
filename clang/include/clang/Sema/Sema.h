@@ -11736,12 +11736,14 @@ public:
       const SourceLocation &Start,
       const SourceLocation &End,
       bool ReplaceWithSemicolon = false
-  );A
+  );
 
   void levitationReplaceLastSkippedSourceFragments(
       const SourceLocation &Start,
       const SourceLocation &End
   );
+
+  void levitationInsertExternForHeader(const SourceLocation Start);
 
   const levitation::DeclASTMeta::FragmentsVectorTy& levitationGetSourceFragments() const {
     return LevitationSkippedFragments;

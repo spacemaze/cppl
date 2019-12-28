@@ -21,6 +21,7 @@ namespace Inputs {
     int keepThisInit = 77777;
     // static int staticField[];
     static int staticField;
+    static int staticField2[];
   };
 
   template <typename T>
@@ -38,7 +39,7 @@ namespace Inputs {
   int thisSkipToo() { return 11111; }
   static int andThisInitKeepToo = 777777;
 
-  // int m = 123, A::staticField[] = {1, 2, 3}, c, d = 123, e;
+  int m = 123, A::staticField[] = {1, 2, 3}, c, d = 123, e;
   int A::staticField = 123;
 
   template<typename T>

@@ -2188,16 +2188,42 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
     }
   }
 
-  // C++ Levitation: as long as we strip redeclarations with definitions
-  //   we may bump into case, when DeclsInGroup is empty.
-  //   in this case notify Sema, that whole decl group is a single
-  //   fragment to be skipped.
-  //   We should merge this new skipped fragment with existing ones.
-  if (DeclsInGroup.empty()) {
-    const auto &SkipBegin = D.getBeginLoc();
-    const auto &SkipEnd = Tok.getLocation();
+  // C++ Levitation: we are here, because we parse variables. Otherwise we would
+  // quit this method long before.
+  // Below we should properly handle definitions stripping case for
+  // preamble and decl-ast modes.
+  //
+  if (Actions.isLevitationMode(
+      LangOptions::LBSK_BuildPreamble,
+      LangOptions::LBSK_BuildDeclAST
+  )) {
 
-    Actions.levitationReplaceLastSkippedSourceFragments(SkipBegin, SkipEnd);
+    const auto &GroupBegin = D.getBeginLoc();
+
+    if (DeclsInGroup.empty()) {
+
+      // As long as we strip redeclarations with definitions
+      // we may bump into case, when DeclsInGroup is empty.
+      // in this case notify Sema, that whole decl group is a single
+      // fragment to be skipped.
+      // We should merge this new skipped fragment with existing ones.
+
+      const auto &SkipEnd = Tok.getLocation();
+
+      Actions.levitationReplaceLastSkippedSourceFragments(GroupBegin, SkipEnd);
+    } else {
+
+      // If declaration group is not empty, then it contains
+      // only global variables declarations. For corresponent headers
+      // we should add 'extern' keywords.
+
+      auto *Var = cast<VarDecl>(DeclsInGroup[0]);
+      if (
+        Var->getStorageClass() != StorageClass::SC_Extern &&
+        Var->getStorageClass() != StorageClass::SC_Static
+      )
+        Actions.levitationInsertExternForHeader(GroupBegin);
+    }
   }
   // end of C++ Levitation
 

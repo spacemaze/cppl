@@ -142,6 +142,9 @@ public:
           if (skippedRange.ReplaceWithSemicolon)
             out << ";";
 
+          if (skippedRange.PrefixWithExtern)
+            out << "extern ";
+
           Start = skippedRange.End;
 
           // If skipped fragment was ended with new line, or \n\s+

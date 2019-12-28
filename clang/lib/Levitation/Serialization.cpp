@@ -213,6 +213,7 @@ namespace levitation {
     addFieldType<decltype(std::declval<FragmentTy>().Start)>();
     addFieldType<decltype(std::declval<FragmentTy>().End)>();
     addFieldType<decltype(std::declval<FragmentTy>().ReplaceWithSemicolon)>();
+    addFieldType<decltype(std::declval<FragmentTy>().PrefixWithExtern)>();
 
     return *this;
   }
@@ -990,6 +991,7 @@ namespace levitation {
             .emitField(Fragment.Start)
             .emitField(Fragment.End)
             .emitField(Fragment.ReplaceWithSemicolon)
+            .emitField(Fragment.PrefixWithExtern)
           .done();
         }
       }
@@ -1127,6 +1129,7 @@ namespace levitation {
               .read(Fragment.Start)
               .read(Fragment.End)
               .read(Fragment.ReplaceWithSemicolon)
+              .read(Fragment.PrefixWithExtern)
             .done();
 
             Meta.addSkippedFragment(Fragment);

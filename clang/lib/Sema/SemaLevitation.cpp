@@ -167,7 +167,8 @@ void Sema::levitationAddSkippedSourceFragment(
   LevitationSkippedFragments.push_back({
     StartSLoc.second,
     EndSLoc.second,
-    ReplaceWithSemicolon
+    ReplaceWithSemicolon,
+    /* prefix with extern */ false
   });
 
 #if 1
@@ -235,7 +236,7 @@ void Sema::levitationReplaceLastSkippedSourceFragments(
 
   LevitationSkippedFragments.resize(RemainSize);
 
-  LevitationSkippedFragments.push_back({StartOffset, EndOffset, false});
+  LevitationSkippedFragments.push_back({StartOffset, EndOffset, false, false});
 
 #if 1
   llvm::errs() << "Merged skipped fragment\n"
@@ -248,6 +249,60 @@ void Sema::levitationReplaceLastSkippedSourceFragments(
 
   Start.dump(getSourceManager());
   End.dump(getSourceManager());
+
+  llvm::errs() << "\n";
+#endif
+}
+
+void Sema::levitationInsertExternForHeader(
+    const clang::SourceLocation Start
+) {
+
+  auto StartSLoc = getSourceManager().getDecomposedLoc(Start);
+
+  size_t StartOffset = StartSLoc.second;
+
+  auto MainFileID = getSourceManager().getMainFileID();
+
+  assert(
+      StartSLoc.first == MainFileID &&
+      "Position to insert should belong to main file"
+  );
+
+  assert(
+      LevitationSkippedFragments.size() &&
+      "Fragments merging applied for non empty "
+      "LevitationSkippedFragments collection only"
+  );
+
+  // Lookup for first fragment to be replaced
+  size_t InsertAfter = LevitationSkippedFragments.size();
+  size_t InsertPos;
+  while (InsertAfter)
+  {
+    InsertPos = InsertAfter;
+    --InsertAfter;
+    if (LevitationSkippedFragments[InsertAfter].End <= StartOffset)
+      break;
+  }
+
+  LevitationSkippedFragments.insert(
+      LevitationSkippedFragments.begin() + InsertPos,
+      {
+        StartOffset, StartOffset,
+        /* burn with ; */ false,
+        /* prefix with extern keyword */ true
+      }
+  );
+
+#if 1
+  llvm::errs() << "Inserted extern keyword\n";
+
+  llvm::errs() << "New bytes: 0x";
+  llvm::errs().write_hex(StartSLoc.second);
+  llvm::errs() << "\n";
+
+  Start.dump(getSourceManager());
 
   llvm::errs() << "\n";
 #endif

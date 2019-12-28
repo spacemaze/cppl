@@ -28,9 +28,9 @@ namespace clang { namespace levitation {
 
     struct FragmentTy {
       size_t Start, End;
-      // TODO Levitation: need "prefix with extern"
       bool ReplaceWithSemicolon;
-      bool size() const { return End - Start; }
+      bool PrefixWithExtern;
+      size_t size() const { return End - Start; }
     };
     typedef SmallVector<FragmentTy, 64> FragmentsVectorTy;
 
