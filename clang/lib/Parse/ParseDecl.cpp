@@ -2194,7 +2194,7 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
   // preamble and decl-ast modes.
   //
   if (Actions.isLevitationMode(
-      LangOptions::LBSK_BuildPreamble
+      LangOptions::LBSK_BuildDeclAST
   )) {
 
     const auto &GroupBegin = D.getBeginLoc();
@@ -2457,7 +2457,14 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
   ) {
     levitationHandleVarDeclarator(
         D, Tok, Actions,
-        [this] { SkipUntil(tok::comma, StopAtSemi | StopBeforeMatch); },
+        [this] {
+          // TODO: use own lexer:
+          //            Lexer lexer(SM.getLocForStartOfFile(locInfo.first),
+          //              Context.getLangOpts(),
+          //              file.begin(), tokenBegin, file.end());
+          // And prevent comments from skipping.
+          // PP.getCurrentLexer().SetCommentRetentionState(true);
+          SkipUntil(tok::comment, tok::comma, StopAtSemi | StopBeforeMatch); },
         [this] () -> Token { return NextToken(); }
     );
 

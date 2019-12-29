@@ -1306,7 +1306,7 @@ void LevitationDriverImpl::collectSources() {
     );
 
     Files.Header = Path::getPath<SinglePath>(
-        Context.Driver.OutputHeadersDir,
+        Context.Driver.getOutputHeadersDir(),
         PackagePath,
         FileExtensions::Header
     );
