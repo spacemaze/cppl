@@ -653,12 +653,15 @@ function buildDecl {
 
     INPUT_FILE="$(getSrcFileName $MODULE)"
     DECL_AST_FILE="$(getBuildedFileName $MODULE.decl-ast)"
+    DECL_AST_META="$(getBuildedFileName $MODULE.decl-ast-meta)"
 
     if [ "$BUILD_MODE" == "$BUILD_MODE_EXECUTE" ]; then
       createDirFor $DECL_AST_FILE
     fi
 
-    runCommand $CXX $FLAGS $INPUT_FILE "-o" $DECL_AST_FILE
+    runCommand $CXX $FLAGS $INPUT_FILE \
+      "-levitation-decl-ast-meta=$DECL_AST_META" "-o" $DECL_AST_FILE
+
     echoIfDebug
 }
 
