@@ -2241,14 +2241,17 @@ private:
   SmallVector<PPLevitationPartBuff, 64> PPLevitationDepIdBuffs;
   PPLevitationDepsVector PPLevitationDeclDeps;
   PPLevitationDepsVector PPLevitationBodyDeps;
+  bool PPLevitationPublic = false;
 
   bool TryLexLevitationBodyDepAttr(const Token &FirstToken);
   std::pair<SmallVector<StringRef, 16>, SourceRange> LexLevitationImportIdentifier(const Token &FirstTok);
 
 public:
   void HandleLevitationImportDirective(SourceLocation HashLoc, Token &Tok);
+  void HandleLevitationPublicDirective(SourceLocation HashLoc, Token &Tok);
   const PPLevitationDepsVector& getLevitationDeclDeps() const;
   const PPLevitationDepsVector& getLevitationBodyDeps() const;
+  bool isLevitationPublic() const { return PPLevitationPublic; }
 
   //
   // end of C++ Levitation Mode

@@ -67,9 +67,7 @@ void Sema::HandleLevitationPackageDependency(
 }
 
 bool Sema::isLevitationFilePublic() const {
-  // See task: #49
-  // llvm_unreachable("not-implemented");
-  return true;
+  return PP.isLevitationPublic();
 }
 
 void Sema::ActOnLevitationManualDeps() {

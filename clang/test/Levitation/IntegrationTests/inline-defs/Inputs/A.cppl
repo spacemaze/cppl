@@ -12,6 +12,7 @@
 
 // Some notes here, why we keep init parts?
 // Because it can't go to definition part, and mergable just fine. So keep it.
+#public
 
 namespace Inputs {
   class A {

@@ -938,6 +938,9 @@ void Preprocessor::HandleDirective(Token &Result) {
       case tok::pp_import:
       case tok::pp_include_next:
       case tok::pp___include_macros:
+      // C++ Levitation:
+      case tok::pp_public:
+      // end of C++ Levitation
       case tok::pp_pragma:
         Diag(Result, diag::err_embedded_directive) << II->getName();
         Diag(*ArgMacro, diag::note_macro_expansion_here)
@@ -1001,6 +1004,11 @@ void Preprocessor::HandleDirective(Token &Result) {
     case tok::pp___include_macros:
       // Handle -imacros.
       return HandleIncludeMacrosDirective(SavedHash.getLocation(), Result);
+
+    // C++ Levitation:
+    case tok::pp_public:
+      return HandleLevitationPublicDirective(SavedHash.getLocation(), Result);
+    // end of C++ Levitation
 
     // C99 6.10.3 - Macro Replacement.
     case tok::pp_define:
@@ -2297,6 +2305,17 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
     PPLevitationDeclDeps.emplace_back(std::move(Parts), Loc);
   else
     PPLevitationBodyDeps.emplace_back(std::move(Parts), Loc);
+}
+
+/// Handles C++ Levitation #public directive
+///
+/// This directive has no parameters.
+///
+/// \param HashLoc location of '#' symbol
+/// \param Tok reference to 'import' token next to '#' symbol
+void Preprocessor::HandleLevitationPublicDirective(SourceLocation HashLoc, Token &Tok) {
+  PPLevitationPublic = true;
+  DiscardUntilEndOfDirective();
 }
 
 bool Preprocessor::TryLexLevitationBodyDepAttr(const Token &FirstToken) {

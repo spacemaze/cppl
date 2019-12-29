@@ -295,6 +295,9 @@ tok::PPKeywordKind IdentifierInfo::getPPKeywordID() const {
   CASE( 6, 'd', 'f', define);
   CASE( 6, 'i', 'n', ifndef);
   CASE( 6, 'i', 'p', import);
+  // C++ Levitation:
+  CASE( 6, 'p', 'b', public);
+  // end of C++ Levitation
   CASE( 6, 'p', 'a', pragma);
 
   CASE( 7, 'd', 'f', defined);

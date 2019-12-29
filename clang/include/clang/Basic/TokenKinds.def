@@ -286,6 +286,7 @@ KEYWORD(if                          , KEYALL)
 KEYWORD(inline                      , KEYC99|KEYCXX|KEYGNU)
 // C++ Levitation
 KEYWORD(bodydep                     , KEYLEVITATION)
+PPKEYWORD(public)
 // end of C++ Levitation
 KEYWORD(int                         , KEYALL)
 KEYWORD(long                        , KEYALL)
