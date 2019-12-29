@@ -30,6 +30,7 @@ namespace clang { namespace levitation { namespace tools {
 class HeaderGenerator {
   llvm::StringRef OutputFile;
   llvm::StringRef SourceFile;
+  llvm::StringRef Preamble;
   Twine SourceFileFullPath;
   Twine OutputFileFullPath;
   const Paths& Includes;
@@ -41,8 +42,8 @@ class HeaderGenerator {
 public:
   HeaderGenerator(
       llvm::StringRef OutputFile,
-
       const llvm::StringRef &SourceFile,
+      StringRef Preamble,
       const Paths &Includes,
       const DeclASTMeta::FragmentsVectorTy &SkippedBytes,
       bool Verbose,
@@ -50,6 +51,7 @@ public:
   )
   : OutputFile(OutputFile),
     SourceFile(SourceFile),
+    Preamble(Preamble),
     Includes(Includes),
     SkippedBytes(SkippedBytes),
     Verbose(Verbose),
@@ -252,6 +254,14 @@ protected:
   }
 
   void emitIncludes(llvm::raw_ostream &out) {
+
+    if (Includes.empty() && Preamble.empty())
+      return;
+
+    if (!Preamble.empty()) {
+      out << "// C++ Levitation: preamble\n";
+      out << "#include \"" << Preamble << "\"\n\n";
+    }
 
     if (Includes.empty())
       return;

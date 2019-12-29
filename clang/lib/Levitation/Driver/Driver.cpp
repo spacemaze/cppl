@@ -1499,6 +1499,7 @@ bool LevitationDriverImpl::processDeclaration(
   return HeaderGenerator(
       Files.Header,
       Files.Source,
+      N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
       Includes,
       Meta.getFragmentsToSkip(),
       Context.Driver.Verbose,

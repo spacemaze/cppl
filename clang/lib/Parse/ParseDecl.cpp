@@ -2194,8 +2194,7 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
   // preamble and decl-ast modes.
   //
   if (Actions.isLevitationMode(
-      LangOptions::LBSK_BuildPreamble,
-      LangOptions::LBSK_BuildDeclAST
+      LangOptions::LBSK_BuildPreamble
   )) {
 
     const auto &GroupBegin = D.getBeginLoc();
@@ -2220,7 +2219,8 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
       auto *Var = cast<VarDecl>(DeclsInGroup[0]);
       if (
         Var->getStorageClass() != StorageClass::SC_Extern &&
-        Var->getStorageClass() != StorageClass::SC_Static
+        Var->getStorageClass() != StorageClass::SC_Static &&
+        Var->getDeclContext()->isFileContext()
       )
         Actions.levitationInsertExternForHeader(GroupBegin);
     }

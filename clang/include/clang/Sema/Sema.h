@@ -11745,9 +11745,7 @@ public:
 
   void levitationInsertExternForHeader(const SourceLocation Start);
 
-  const levitation::DeclASTMeta::FragmentsVectorTy& levitationGetSourceFragments() const {
-    return LevitationSkippedFragments;
-  }
+  levitation::DeclASTMeta::FragmentsVectorTy levitationGetSourceFragments() const;
 
   //
   // end of C++ Levitation Mode

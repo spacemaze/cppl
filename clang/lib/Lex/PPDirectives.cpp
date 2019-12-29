@@ -1690,6 +1690,7 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
 
   if (LangOpts.isLevitationMode(LangOptions::LBSK_ParseManualDeps)) {
     DiscardUntilEndOfDirective();
+    PPLevitationFirstIncludeMet = true;
     return;
   }
 
@@ -2265,6 +2266,9 @@ void Preprocessor::HandleIncludeNextDirective(SourceLocation HashLoc,
                                 LookupFromFile);
 }
 
+// ============================================================================
+// C++ Levitation
+
 /// Handles C++ Levitation #import directive
 ///
 /// Syntax is as follows:
@@ -2285,7 +2289,13 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
   // Ignore #import directive if we are at later stages.
   if (!LangOpts.isLevitationMode(LangOptions::LBSK_ParseManualDeps)) {
     DiscardUntilEndOfDirective();
+    if (LangOpts.isLevitationMode(LangOptions::LBSK_BuildDeclAST))
+      levitationAddSkippedSourceFragment(HashLoc, CurLexer->getSourceLocation());
     return;
+  }
+
+  if (PPLevitationFirstIncludeMet) {
+    Diag(HashLoc, diag::err_pp_levitation_import_cant_be_after_include);
   }
 
   Token NextTok;
@@ -2315,7 +2325,10 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
 /// \param Tok reference to 'import' token next to '#' symbol
 void Preprocessor::HandleLevitationPublicDirective(SourceLocation HashLoc, Token &Tok) {
   PPLevitationPublic = true;
+
   DiscardUntilEndOfDirective();
+
+  levitationAddSkippedSourceFragment(HashLoc, CurLexer->getSourceLocation());
 }
 
 bool Preprocessor::TryLexLevitationBodyDepAttr(const Token &FirstToken) {
@@ -2445,6 +2458,47 @@ const Preprocessor::PPLevitationDepsVector&
 {
   return PPLevitationBodyDeps;
 }
+
+void Preprocessor::levitationAddSkippedSourceFragment(
+    const clang::SourceLocation &Start,
+    const clang::SourceLocation &End
+) {
+
+  auto StartSLoc = getSourceManager().getDecomposedLoc(Start);
+  auto EndSLoc = getSourceManager().getDecomposedLoc(End);
+
+  auto MainFileID = getSourceManager().getMainFileID();
+  assert(
+      StartSLoc.first == MainFileID &&
+      EndSLoc.first == MainFileID &&
+      "Skipped fragment can only be a part of main file."
+  );
+
+  PPLevitationSkippedFragments.push_back({
+    StartSLoc.second,
+    EndSLoc.second,
+    /* ReplaceWithSemicolon */ false,
+    /* prefix with extern */ false
+  });
+
+#if 0
+  llvm::errs() << "Added skipped fragment "
+               << (ReplaceWithSemicolon ? "BURN:\n" : ":\n");
+
+  llvm::errs() << "Bytes: 0x";
+  llvm::errs().write_hex(StartSLoc.second) << " : 0x";
+  llvm::errs().write_hex(EndSLoc.second) << "\n";
+
+  Start.dump(getSourceManager());
+  End.dump(getSourceManager());
+
+  llvm::errs() << "\n";
+#endif
+}
+
+// end of C++ Levitation
+// ============================================================================
+
 
 /// HandleMicrosoftImportDirective - Implements \#import for Microsoft Mode
 void Preprocessor::HandleMicrosoftImportDirective(Token &Tok) {

@@ -320,3 +320,19 @@ void Sema::levitationInsertExternForHeader(
   llvm::errs() << "\n";
 #endif
 }
+
+levitation::DeclASTMeta::FragmentsVectorTy
+Sema::levitationGetSourceFragments() const {
+
+  levitation::DeclASTMeta::FragmentsVectorTy Fragments(
+      getPreprocessor().getLevitationSkippedFragments()
+  );
+
+  Fragments.insert(
+      Fragments.end(),
+      LevitationSkippedFragments.begin(),
+      LevitationSkippedFragments.end()
+  );
+
+  return Fragments;
+}
