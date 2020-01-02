@@ -1,0 +1,29 @@
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/Inputs/preamble.hpp -lit -c --verbose | \
+// RUN: FileCheck %s --check-prefix=DRIVER-CHECK
+
+// DRIVER-CHECK-DAG: BUILD DECL {{.*}}C.cppl, deps: <empty> -> decl-ast: {{.*}}C.decl-ast
+// DRIVER-CHECK-DAG: BUILD DECL {{.*}}B.cppl, deps:  ({{.*}}C.decl-ast) -> decl-ast: {{.*}}B.decl-ast
+// DRIVER-CHECK-DAG: BUILD DECL {{.*}}A.cppl, deps: ({{.*}}C.decl-ast, {{.*}}B.decl-ast) -> decl-ast: {{.*}}A.decl-ast
+
+// DRIVER-CHECK-DAG: BUILD OBJ {{.*}}C.cppl, deps: <empty> -> object: {{.*}}C.o
+// DRIVER-CHECK-DAG: BUILD OBJ {{.*}}B.cppl, deps: ({{.*}}C.decl-ast) -> object: {{.*}}B.o
+// DRIVER-CHECK-DAG: BUILD OBJ {{.*}}A.cppl, deps: ({{.*}}C.decl-ast, {{.*}}B.decl-ast) -> object: {{.*}}A.o
+// DRIVER-CHECK-NOT: LINK objects
+
+// RUN: FileCheck -input-file=%T/include/A.h %s
+// RUN: FileCheck -input-file=%T/include/Inputs/B.h %S/Inputs/B.cppl
+// RUN: FileCheck -input-file=%T/include/Inputs/C.h %S/Inputs/C.cppl
+
+// TESTS-NOTE: we have a bit weird check directives here.
+// we include a regexp in the beginning.
+// We have to do it, because we check that header generator prevent comments
+// from stripping, and thus all check directives will go into file we're about to check.
+// So we must make FileCheck to to check its own directives.
+
+// CHECK-NOT: {{^\s*[^/]*}}#public
+#public
+
+// CHECK: {{^\s*[^/]*}}#include "Inputs/B.h"
+// CHECK-NOT: {{^\s*[^/]*}}#include "Inputs/C.h"
+// CHECK-NOT: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"
+#import Inputs::B

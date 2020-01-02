@@ -1,0 +1,4 @@
+// RUN: FileCheck -input-file=%T/include/B.h %s
+// CHECK: {{^\s*[^/]*}}#include "Inputs/C.h"
+// CHECK-NOT: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"
+#import Inputs::C
