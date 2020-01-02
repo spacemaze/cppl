@@ -1300,12 +1300,52 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
     return Res;
   }
 
+  // C++ Levitation: keep track of skipped body fragments
+  // Legacy code:
+#if 0
   if (SkipFunctionBodies && (!Res || Actions.canSkipFunctionBody(Res)) &&
       trySkippingFunctionBody()) {
     BodyScope.Exit();
     Actions.ActOnSkippedFunctionBody(Res);
     return Actions.ActOnFinishFunctionBody(Res, nullptr, false);
   }
+#else
+  // Levitation code:
+  if (SkipFunctionBodies && (!Res || Actions.canSkipFunctionBody(Res))) {
+    SourceLocation SkipStart;
+    bool BurnWithSemicolon = false;
+    if (Res) {
+      if (!Res->isOutOfLine() && !Res->getPreviousDecl()) {
+
+        // For regular function definitions, if we haven't seen it's
+        // predeclaration, inform that we strip just a body,
+        // and would like to burn the wound with ';'.
+        assert(
+          Tok.is(tok::l_brace) &&
+          "We're about to skip regular function body, "
+          "so we expect to be at '{' symbol."
+        );
+
+        SkipStart = Tok.getLocation();
+        BurnWithSemicolon = true;
+      } else
+        SkipStart = Res->getBeginLoc();
+    } else {
+      SkipStart = Tok.getLocation();
+    }
+    if (trySkippingFunctionBody()) {
+      Actions.levitationAddSkippedSourceFragment(
+          SkipStart,
+          Tok.getLocation(),
+          BurnWithSemicolon
+      );
+      BodyScope.Exit();
+      Actions.ActOnSkippedFunctionBody(Res);
+      return Actions.ActOnFinishFunctionBody(Res, nullptr, false);
+    }
+  }
+#endif
+  // end of C++ Levitation
 
   if (Tok.is(tok::kw_try))
     return ParseFunctionTryBlock(Res, BodyScope);

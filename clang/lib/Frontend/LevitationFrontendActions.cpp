@@ -269,7 +269,7 @@ std::unique_ptr<ASTConsumer> LevitationParseImportAction::CreateASTConsumer(
     llvm::StringRef InFile
 ) {
   return MultiplexConsumerBuilder()
-      .addRequired(CreateDependenciesASTProcessor(CI, InFile))
+      .addRequired(levitation::CreateDependenciesASTProcessor(CI, InFile))
   .done();
 }
 

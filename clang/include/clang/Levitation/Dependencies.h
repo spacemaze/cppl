@@ -16,6 +16,7 @@
 #define LLVM_CLANG_LEVITATION_DEPENDENCIES_H
 
 #include "clang/Basic/SourceLocation.h"
+#include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Common/IndexedSet.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -36,7 +37,6 @@ namespace levitation {
   /// Implements package dependency metadata
   typedef ArrayRef<StringRef> DependencyComponentsArrRef;
   typedef SmallVector<StringRef, 16> DependencyComponentsVector;
-  typedef SmallString<256> DependencyPath;
 
   class PackageDependencyBuilder;
 
@@ -55,7 +55,7 @@ namespace levitation {
     /// Stores path to dependency file.
     /// This value is set during validation process or
     /// in case of manual dependencies declaration (not implemented yet)
-    DependencyPath Path;
+    SinglePath Path;
 
     PackageDependency() {};
 
@@ -78,7 +78,7 @@ namespace levitation {
       return Components;
     }
 
-    void setPath(DependencyPath &&path) {
+    void setPath(SinglePath &&path) {
       Path.swap(path);
     }
 
@@ -140,6 +140,7 @@ namespace levitation {
     ValidatedDependenciesMap DeclarationDependencies;
     ValidatedDependenciesMap DefinitionDependencies;
     StringRef PackageFilePath;
+    bool IsPublic;
     bool hasMissingDependencies() {
       return DeclarationDependencies.hasMissingDependencies() ||
              DefinitionDependencies.hasMissingDependencies();

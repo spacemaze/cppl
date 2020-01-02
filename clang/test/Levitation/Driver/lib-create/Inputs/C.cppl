@@ -1,0 +1,2 @@
+// RUN: FileCheck -input-file=%T/include/C.h %s
+// CHECK: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"

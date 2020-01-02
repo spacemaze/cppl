@@ -29,6 +29,8 @@ namespace llvm {
 namespace clang {
 namespace levitation {
 
+// FIXME Levitation: get rid of that using directive.
+//   In .h files it's a bad practice to make namespaces usings.
 using namespace llvm;
 
   // TODO Levitation: rename to Path
@@ -63,6 +65,20 @@ using namespace llvm;
 
       llvm::sys::path::remove_dots(Res);
 
+      return Res;
+    }
+
+    /// Replaces extension for given file path
+    /// \tparam SmallStringT type which reprents path
+    /// \param Src File path (may be with or without any extension)
+    /// \param Extension New extension.
+    /// \return
+    template <typename SmallStringT>
+    static SmallStringT replaceExtension(
+        StringRef Src, StringRef Extension
+    ) {
+      SmallStringT Res = Src;
+      llvm::sys::path::replace_extension(Res, Extension);
       return Res;
     }
 

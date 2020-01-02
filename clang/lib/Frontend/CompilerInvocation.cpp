@@ -1920,6 +1920,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
           Args.getLastArgValue(OPT_levitation_dependencies_output_file);
   Opts.LevitationSourcesRootDir =
           Args.getLastArgValue(OPT_levitation_sources_root_dir);
+  Opts.LevitationDeclASTMeta =
+          Args.getLastArgValue(OPT_levitation_decl_ast_meta);
 
   if (const Arg *A = Args.getLastArg(OPT_arcmt_check,
                                      OPT_arcmt_modify,
@@ -3591,6 +3593,13 @@ static void parseLevitationBuildObjectArgs(
   ) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
             << "-flevitation-build-decl" << Stage;
+  }
+  if (
+    FrontendOpts.LevitationBuildDeclaration &&
+    FrontendOpts.LevitationDeclASTMeta.empty()
+  ) {
+    Diags.Report(diag::err_fe_levitation_missed_option)
+    << "-levitation-decl-ast-meta" << Stage;
   }
 
   LangOpts.LevitationMode = 1;

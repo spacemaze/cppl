@@ -1,4 +1,5 @@
 #import Inputs::A
+#public
 
 namespace Inputs {
   class B {

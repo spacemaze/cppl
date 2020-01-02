@@ -19,6 +19,11 @@ namespace levitation {
 
 struct FileExtensions {
   static constexpr char SourceCode [] = "cppl";
+  static constexpr char Header [] = "h";
+
+  // TODO Levitation: rename to Decl AST Meta
+  static constexpr char SkippedBytes [] = "decl-skb";
+
   static constexpr char Object [] = "o";
   static constexpr char DeclarationAST [] = "decl-ast";
   static constexpr char ParsedDependencies [] = "ldeps";

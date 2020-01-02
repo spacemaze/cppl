@@ -1424,6 +1424,25 @@ ASTFileSignature ASTWriter::writeUnhashedControlBlock(Preprocessor &PP,
 
   // For implicit modules, write the hash of the PCM as its signature.
   ASTFileSignature Signature;
+
+  // C++ Levitation, also write signature for .decl-ast files.
+
+#if 1
+  // Levitation code:
+  bool NeedHash = (
+    WritingModule &&
+    PP.getHeaderSearchInfo().getHeaderSearchOpts().ModulesHashContent
+  ) ||
+  getLangOpts().isLevitationMode(LangOptions::LBSK_BuildDeclAST);
+
+  if (NeedHash) {
+    Signature = createSignature(StringRef(Buffer.begin(), StartOfUnhashedControl));
+    Record.append(Signature.begin(), Signature.end());
+    Stream.EmitRecord(SIGNATURE, Record);
+    Record.clear();
+  }
+#else
+  // Legacy code:
   if (WritingModule &&
       PP.getHeaderSearchInfo().getHeaderSearchOpts().ModulesHashContent) {
     Signature = createSignature(StringRef(Buffer.begin(), StartOfUnhashedControl));
@@ -1431,6 +1450,8 @@ ASTFileSignature ASTWriter::writeUnhashedControlBlock(Preprocessor &PP,
     Stream.EmitRecord(SIGNATURE, Record);
     Record.clear();
   }
+#endif
+  // end of C++ Levitation
 
   // Diagnostic options.
   const auto &Diags = Context.getDiagnostics();

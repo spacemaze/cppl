@@ -654,6 +654,9 @@ HelpText<"Include C++ Levitation precompiled preamble">;
 def cppl_include_dependency_EQ : Joined<["-"], "cppl-include-dependency=">, Flags<[DriverOption, HelpHidden]>,
 HelpText<"Include C++ Levitation dependency file">;
 
+def cppl_meta_EQ : Joined<["-"], "cppl-meta=">, Flags<[DriverOption, HelpHidden]>,
+HelpText<"Include C++ Levitation Declaration AST Meta file">;
+
 def cppl_preamble : Flag<["-"], "cppl-preamble">,
   HelpText<"Runs Levitation Preamble stage for input file">;
 

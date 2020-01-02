@@ -22,6 +22,7 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TokenKinds.h"
+#include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
 #include "clang/Lex/Lexer.h"
 #include "clang/Lex/MacroInfo.h"
 #include "clang/Lex/ModuleLoader.h"
@@ -2241,14 +2242,30 @@ private:
   SmallVector<PPLevitationPartBuff, 64> PPLevitationDepIdBuffs;
   PPLevitationDepsVector PPLevitationDeclDeps;
   PPLevitationDepsVector PPLevitationBodyDeps;
+  bool PPLevitationPublic = false;
+  levitation::DeclASTMeta::FragmentsVectorTy PPLevitationSkippedFragments;
+  bool PPLevitationFirstIncludeMet = false;
+
 
   bool TryLexLevitationBodyDepAttr(const Token &FirstToken);
   std::pair<SmallVector<StringRef, 16>, SourceRange> LexLevitationImportIdentifier(const Token &FirstTok);
 
+  void levitationAddSkippedSourceFragment(
+      const SourceLocation &Start,
+      const SourceLocation &End
+  );
+
 public:
+  void setLevitationKeepComments(bool value);
+
   void HandleLevitationImportDirective(SourceLocation HashLoc, Token &Tok);
+  void HandleLevitationPublicDirective(SourceLocation HashLoc, Token &Tok);
   const PPLevitationDepsVector& getLevitationDeclDeps() const;
   const PPLevitationDepsVector& getLevitationBodyDeps() const;
+  bool isLevitationPublic() const { return PPLevitationPublic; }
+  levitation::DeclASTMeta::FragmentsVectorTy& getLevitationSkippedFragments() {
+    return PPLevitationSkippedFragments;
+  }
 
   //
   // end of C++ Levitation Mode

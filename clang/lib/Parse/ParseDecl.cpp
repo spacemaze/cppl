@@ -2188,6 +2188,45 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
     }
   }
 
+  // C++ Levitation: we are here, because we parse variables. Otherwise we would
+  // quit this method long before.
+  // Below we should properly handle definitions stripping case for
+  // preamble and decl-ast modes.
+  //
+  if (Actions.isLevitationMode(
+      LangOptions::LBSK_BuildDeclAST
+  )) {
+
+    const auto &GroupBegin = D.getBeginLoc();
+
+    if (DeclsInGroup.empty()) {
+
+      // As long as we strip redeclarations with definitions
+      // we may bump into case, when DeclsInGroup is empty.
+      // in this case notify Sema, that whole decl group is a single
+      // fragment to be skipped.
+      // We should merge this new skipped fragment with existing ones.
+
+      const auto &SkipEnd = Tok.getLocation();
+
+      Actions.levitationReplaceLastSkippedSourceFragments(GroupBegin, SkipEnd);
+    } else {
+
+      // If declaration group is not empty, then it contains
+      // only global variables declarations. For corresponent headers
+      // we should add 'extern' keywords.
+
+      auto *Var = cast<VarDecl>(DeclsInGroup[0]);
+      if (
+        Var->getStorageClass() != StorageClass::SC_Extern &&
+        Var->getStorageClass() != StorageClass::SC_Static &&
+        Var->getDeclContext()->isFileContext()
+      )
+        Actions.levitationInsertExternForHeader(GroupBegin);
+    }
+  }
+  // end of C++ Levitation
+
   return Actions.FinalizeDeclaratorGroup(getCurScope(), DS, DeclsInGroup);
 }
 
@@ -2239,6 +2278,71 @@ Decl *Parser::ParseDeclarationAfterDeclarator(
     return nullptr;
 
   return ParseDeclarationAfterDeclaratorAndAttributes(D, TemplateInfo);
+}
+
+static bool levitationNextIsInitializer(const Token &Tok) {
+  return Tok.is(tok::equal) ||
+         Tok.is(tok::l_paren) ||
+         /*true for levitation getLangOpts().CPlusPlus11 && */
+         Tok.is(tok::l_brace);
+}
+
+template <typename ConsumeToNextF, typename NextTokenF>
+void levitationHandleVarDeclarator(
+    const Declarator &D,
+    const Token &CurToken,
+    Sema &SemaRef,
+    ConsumeToNextF &&consumeToNext,
+    NextTokenF &&nextToken
+) {
+    auto SkipAction = SemaRef.levitationGetSkipActionFor(D);
+    bool IsFirstDeclInGroup = D.isFirstDeclarator();
+
+    switch (SkipAction) {
+      case Sema::LevitationVarSkipAction::Skip:
+        {
+          SourceLocation StartSkip;
+          if (!IsFirstDeclInGroup)
+            StartSkip = D.getCommaLoc();
+          else {
+            auto &NNS = D.getCXXScopeSpec();
+            StartSkip = NNS.isValid() ?
+                NNS.getBeginLoc() : D.getIdentifierLoc();
+          }
+
+          consumeToNext();
+
+          SourceLocation EndSkip = IsFirstDeclInGroup ?
+              nextToken().getLocation() : CurToken.getLocation();
+
+          SemaRef.levitationAddSkippedSourceFragment(
+              StartSkip, EndSkip, nextToken().is(tok::semi)
+          );
+        }
+        break;
+
+      case Sema::LevitationVarSkipAction::SkipInit:
+
+        if (levitationNextIsInitializer(CurToken)) {
+          SourceLocation StartSkip = CurToken.getLocation();
+
+          consumeToNext();
+
+          SourceLocation EndSkip = IsFirstDeclInGroup ?
+              nextToken().getLocation() : CurToken.getLocation();
+
+          SemaRef.levitationAddSkippedSourceFragment(
+              StartSkip, EndSkip, nextToken().is(tok::semi)
+              // TODO Levitation: PrefixWithExtern = IsFirstDeclInGroup
+              //   but only for SkipInit action!
+          );
+        }
+        break;
+
+      default:
+        // Do nothing
+        break;
+    }
 }
 
 Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
@@ -2335,15 +2439,37 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
 
   // C++ Levitation: skip global vars initializer if we parse preamble,
   // or building a .decl-ast files.
-  // Some above in this method ActOnVariableDeclarator should be called,
+  // One of subcalls of this method is ActOnVariableDeclarator call,
   // which in turn should run levitationMayBeSkipVarDefinition which
-  // do all required checks, and if decl should be skipped it
-  // ActOnVariableDeclarator will return nullptr.
-  if (Actions.isLevitationMode() && SkipFunctionBodies && !ThisDecl) {
-    // SkipInit for global vars,
-    // if we parse levitation preamble or .decl-ast
-    SkipUntil(tok::comma, StopAtSemi | StopBeforeMatch);
-    return nullptr;
+  // do all required checks, and if decl should be skipped it returns false,
+  // and ActOnVariableDeclarator will return nullptr.
+
+  // So two predicates:
+  // 1. If declaration is variable or static field redeclaration,
+  //    * skip this fragment.
+  // 2. If declaration is first time variable declaration,
+  //    * skip definition part if any.
+
+  if (
+    Actions.isLevitationMode() &&
+    !D.isFunctionDefinition() &&
+    SkipFunctionBodies
+  ) {
+    levitationHandleVarDeclarator(
+        D, Tok, Actions,
+        [this] {
+          // TODO: use own lexer:
+          //            Lexer lexer(SM.getLocForStartOfFile(locInfo.first),
+          //              Context.getLangOpts(),
+          //              file.begin(), tokenBegin, file.end());
+          // And prevent comments from skipping.
+          // PP.getCurrentLexer().SetCommentRetentionState(true);
+          SkipUntil(tok::comment, tok::comma, StopAtSemi | StopBeforeMatch); },
+        [this] () -> Token { return NextToken(); }
+    );
+
+    if (!ThisDecl)
+      return nullptr;
   }
   // end of C++ Levitation
 

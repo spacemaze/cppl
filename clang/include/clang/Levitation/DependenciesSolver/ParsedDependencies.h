@@ -40,6 +40,7 @@ public:
     }
 
     NewDeps->PackageFilePathID = OldToNew[Deps.PackageFilePathID];
+    NewDeps->IsPublic = Deps.IsPublic;
 
     for (auto &DeclDep : Deps.DeclarationDependencies) {
       NewDeps->DeclarationDependencies.emplace_back(

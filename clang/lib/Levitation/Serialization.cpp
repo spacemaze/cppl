@@ -112,8 +112,88 @@ namespace levitation {
     }
   };
 
+  class RecordWriter {
+    BitstreamWriter &Writer;
+    unsigned int RecordID;
+    unsigned int AbbrevID;
+    RecordData Record;
+  public:
+    RecordWriter(
+        BitstreamWriter &writer,
+        unsigned int recordID,
+        unsigned int abbrevID
+    ) : Writer(writer),
+        RecordID(recordID),
+        AbbrevID(abbrevID)
+    {}
+
+    template<typename T>
+    RecordWriter& emitField(T v) {
+      Record.push_back(v);
+      return *this;
+    }
+
+    RecordWriter& emitField(size_t v) {
+      Record.push_back(v & ((1L << 32) - 1L));
+      Record.push_back(v >> 32);
+      return *this;
+    }
+
+    void done() {
+      Writer.EmitRecord(RecordID, Record, AbbrevID);
+    }
+  };
+
+  template <typename RecordTy>
+  class RecordReader {
+    const RecordTy &Record;
+    size_t CurIdx = 0;
+  public:
+    RecordReader(const RecordTy &Record) : Record(Record) {}
+
+    template<typename T>
+    RecordReader &read(T& dest) {
+      dest = Record[CurIdx++];
+      return *this;
+    }
+
+    template<typename CallableTy>
+    RecordReader &readcb(CallableTy&& cb) {
+      cb(Record[CurIdx++]);
+      return *this;
+    }
+
+    RecordReader &read(size_t &dest) {
+      uint32_t L = Record[CurIdx++];
+      uint32_t H = Record[CurIdx++];
+      dest = L | ((size_t)H << 32);
+      return *this;
+    }
+
+    void done() const {}
+  };
+
+  template <>
+  AbbrevsBuilder& AbbrevsBuilder::addFieldType<bool>() {
+    Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1));
+    return *this;
+  }
+
+  template <>
+  AbbrevsBuilder& AbbrevsBuilder::addFieldType<uint8_t>() {
+    Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 8));
+    return *this;
+  }
+
   template <>
   AbbrevsBuilder& AbbrevsBuilder::addFieldType<uint32_t>() {
+    Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 32));
+    return *this;
+  }
+
+  template <>
+  AbbrevsBuilder& AbbrevsBuilder::addFieldType<size_t>() {
+    Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 32));
     Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 32));
     return *this;
   }
@@ -130,7 +210,21 @@ namespace levitation {
     return *this;
   }
 
-    class BlockScope : public WithOperand {
+  template<>
+  AbbrevsBuilder &
+  AbbrevsBuilder::addRecordFieldTypes<DeclASTMeta::FragmentTy>() {
+
+    using FragmentTy = DeclASTMeta::FragmentTy;
+
+    addFieldType<decltype(std::declval<FragmentTy>().Start)>();
+    addFieldType<decltype(std::declval<FragmentTy>().End)>();
+    addFieldType<decltype(std::declval<FragmentTy>().ReplaceWithSemicolon)>();
+    addFieldType<decltype(std::declval<FragmentTy>().PrefixWithExtern)>();
+
+    return *this;
+  }
+
+  class BlockScope : public WithOperand {
     BitstreamWriter &Writer;
     bool Moved;
   public:
@@ -196,6 +290,8 @@ namespace levitation {
       return BlockScope(Writer, BlockID, CodeLen);
     }
 
+    // TODO Levitation: Perhaps we could also introduce template class,
+    //   just like LevitationBitstreamReader
     void writeSignature() {
 
       // Note: only 4 first bytes can be used for magic number.
@@ -213,7 +309,7 @@ namespace levitation {
 #define RECORD(X) EmitRecordID(X ## _ID, #X, Writer, Record)
 
         BLOCK(DEPS_DEPENDENCIES_MAIN_BLOCK);
-        RECORD(DEPS_PACKAGE_FILE_PATH_RECORD);
+        RECORD(DEPS_PACKAGE_TOP_LEVEL_FIELDS_RECORD);
 
         BLOCK(DEPS_STRINGS_BLOCK);
         RECORD(DEPS_STRING_RECORD);
@@ -249,6 +345,7 @@ namespace levitation {
 
       Data.PackageFilePathID =
           Data.Strings->addItem(Dependencies.PackageFilePath);
+      Data.IsPublic = Dependencies.IsPublic;
       return Data;
     }
 
@@ -290,7 +387,10 @@ namespace levitation {
 
         writeStrings(*Data.Strings);
 
-        writeDependentPackageFilePath(Data.PackageFilePathID);
+        writePackageTopLevelFields(
+            Data.PackageFilePathID,
+            Data.IsPublic
+        );
 
         writeDeclarations(
                 DEPS_DECLARATION_DEPENDENCIES_BLOCK_ID,
@@ -326,9 +426,11 @@ namespace levitation {
       }
     }
 
-    void writeDependentPackageFilePath(StringID PathID) {
-      RecordData::value_type Record[] { PathID };
-      Writer.EmitRecord(DEPS_PACKAGE_FILE_PATH_RECORD_ID, Record);
+    void writePackageTopLevelFields(
+        StringID PathID, bool IsPublic
+    ) {
+      RecordData::value_type Record[] { PathID, (uint64_t)IsPublic };
+      Writer.EmitRecord(DEPS_PACKAGE_TOP_LEVEL_FIELDS_RECORD_ID, Record);
     }
 
     void writeDeclaration(
@@ -368,17 +470,229 @@ namespace levitation {
   }
 
   // ==========================================================================
+  // Levitation Bitstream Reader
+
+  template<
+      typename DataTy,
+      char B0, char B1, char B2, char B3,
+      unsigned MainBlockID
+  >
+  class LevitationBitstreamReader : public Failable {
+  protected:
+    BitstreamCursor Reader;
+    Optional<llvm::BitstreamBlockInfo> BlockInfo;
+
+    LevitationBitstreamReader(const llvm::MemoryBuffer &MemoryBuffer)
+    : Reader(MemoryBuffer) {}
+
+    bool readSignature() {
+      return Reader.canSkipToPos(4) &&
+          readAndCheckByte(B0) &&
+          readAndCheckByte(B1) &&
+          readAndCheckByte(B2) &&
+          readAndCheckByte(B3);
+    }
+
+    bool readAndCheckByte(char B) {
+        auto Res = Reader.Read(8);
+        return Res && Res.get();
+    }
+
+    bool enterBlock(unsigned ID) {
+      if (!isValid()) return false;
+
+      while (true) {
+        auto EntryRes = Reader.advance();
+        if (!EntryRes) {
+          setFailure("Failed to advance on record reading (enterBlock)");
+          return false;
+        }
+        auto &Entry = EntryRes.get();
+
+        switch (Entry.Kind) {
+          case BitstreamEntry::Error:
+            setFailure("Failed to enter read bitstream.");
+            return false;
+
+          case BitstreamEntry::EndBlock:
+            break;
+          case BitstreamEntry::SubBlock:
+            if (Entry.ID != ID) {
+              if (Reader.SkipBlock()) {
+                setFailure("Failed to skip block.");
+                return false;
+              }
+            } else {
+              if (!Reader.EnterSubBlock(Entry.ID))
+                return true;
+              setFailure("Failed to enter subblock.");
+              return false;
+            }
+            break;
+          case BitstreamEntry::Record:
+            break;
+        }
+      }
+    }
+
+    bool readBlockInfo() {
+
+      // Read the top level blocks.
+      if (Reader.AtEndOfStream()) {
+        setFailure("No blocks.");
+        return false;
+      }
+
+      while (!Reader.AtEndOfStream()) {
+
+        auto CodeRes = Reader.ReadCode();
+
+        if (!CodeRes || CodeRes.get() != llvm::bitc::ENTER_SUBBLOCK) {
+          setFailure("Expected BlockInfo Subblock, malformed file.");
+          return false;
+        }
+
+        std::error_code EC;
+        auto SubBlockIDRes = Reader.ReadSubBlockID();
+        if (!SubBlockIDRes) {
+          setFailure("Failed to read subblock ID");
+          return false;
+        }
+
+        switch (SubBlockIDRes.get()) {
+          case llvm::bitc::BLOCKINFO_BLOCK_ID: {
+            auto BlockInfoRes = Reader.ReadBlockInfoBlock();
+            if (!BlockInfoRes) {
+              setFailure("Failed to read block info.");
+              return false;
+            }
+            if ((BlockInfo = BlockInfoRes.get())) {
+              Reader.setBlockInfo(BlockInfo.getPointer());
+              return true;
+            } else {
+              setFailure("Malformed BlockInfo.");
+              return false;
+            }
+          }
+          case MainBlockID:
+            setFailure("Blockinfo missed");
+            return false;
+          default:
+            break;
+            // Skip all unknown blocks.
+        }
+      }
+
+      setFailure("BlockInfo missed");
+      return false;
+    }
+
+    using RecordTy = SmallVector<uint64_t, 64>;
+    using OnReadRecordFn = std::function<void(const RecordTy&, StringRef)>;
+
+    bool readAllRecords(
+        unsigned BlockID,
+        unsigned RecordID,
+        bool WithBlob,
+        OnReadRecordFn &&OnReadRecord) {
+      RecordTy RecordStorage;
+      StringRef BlobRef;
+
+      if (!Reader.EnterSubBlock(BlockID)) {
+
+        while (readRecord(
+            RecordID, RecordStorage, BlobRef, WithBlob, OnReadRecord
+        )) {
+          // do nothing
+        }
+        return isValid();
+      }
+      setFailure("Failed to read records, can't enter subblock");
+      return false;
+    }
+
+    /// Reads record
+    /// \param RecordStorage heap for reacord values
+    /// \param BlobRef blob variable
+    /// \param RecordID record ID, is used to pick up prober abbrev.
+    /// \param WithBlob true if record has blob data.
+    /// \param OnReadRecord record handler.
+    /// \return true, if we can read more,
+    /// false if there was an error, or end of block.
+    bool readRecord(
+        unsigned RecordID,
+        RecordTy &RecordStorage,
+        StringRef &BlobRef,
+        bool WithBlob,
+        const OnReadRecordFn &OnReadRecord
+    ) {
+      auto EntryRes = Reader.advanceSkippingSubblocks();
+      if (!EntryRes) {
+        setFailure("Failed to read record");
+        return false;
+      }
+      auto &Entry = EntryRes.get();
+
+      switch (Entry.Kind) {
+        case BitstreamEntry::Error:
+          setFailure("Failed to read strings");
+          return false;
+        case BitstreamEntry::Record: {
+            RecordStorage.clear();
+
+            StringRef *BlobPtr = WithBlob ? &BlobRef : nullptr;
+
+            auto ObtainedRecordIDRes = Reader.readRecord(Entry.ID, RecordStorage, BlobPtr);
+            if (!ObtainedRecordIDRes) {
+                setFailure("Failed to read record ID");
+                return false;
+            }
+
+            unsigned int ObtainedRecordID = ObtainedRecordIDRes.get();
+
+            if (!checkRecordType(RecordID, ObtainedRecordID))
+              return false;
+
+            OnReadRecord(RecordStorage, BlobRef);
+          }
+          return true;
+        case BitstreamEntry::EndBlock:
+          return false;
+        default:
+          return true;
+      }
+    }
+
+    bool checkRecordType(
+        unsigned RecordID,
+        unsigned int ObtainedID
+    ) {
+      if (ObtainedID != RecordID) {
+        setFailure("Malformed file. Wrong record type read.");
+        return false;
+      }
+      return true;
+    }
+
+  public:
+
+  };
+
+  // ==========================================================================
   // Dependencies Bitstream Reader
 
   class DependenciesBitstreamReader
-      : public DependenciesReader,
-        public Failable {
-    BitstreamCursor Reader;
+      : public LevitationBitstreamReader<
+          DependenciesData, 'L', 'D', 'E', 'P',
+          DEPS_DEPENDENCIES_MAIN_BLOCK_ID
+        >,
+        public DependenciesReader
+  {
     StringRef ErrorMessage;
     Optional<llvm::BitstreamBlockInfo> BlockInfo;
   public:
     DependenciesBitstreamReader(const llvm::MemoryBuffer &MemoryBuffer)
-    : Reader(MemoryBuffer) {}
+    : LevitationBitstreamReader(MemoryBuffer) {}
 
     bool read(DependenciesData &Data) override {
       if (!readSignature())
@@ -393,19 +707,6 @@ namespace levitation {
     const Failable &getStatus() const override { return *this; }
 
   protected:
-
-    bool readSignature() {
-      return Reader.canSkipToPos(4) &&
-          readAndCheckByte('L') &&
-          readAndCheckByte('D') &&
-          readAndCheckByte('E') &&
-          readAndCheckByte('P');
-    }
-
-    bool readAndCheckByte(char B) {
-        auto Res = Reader.Read(8);
-        return Res && Res.get();
-    }
 
     bool readData(DependenciesData &Data) {
       if (!readBlockInfo())
@@ -465,7 +766,7 @@ namespace levitation {
               }
               break;
             case BitstreamEntry::Record:
-              if (!readPackageFilePath(Entry.ID, Data))
+              if (!readPackageTopLevelFields(Entry.ID, Data))
                 return false;
               break;
           }
@@ -477,59 +778,7 @@ namespace levitation {
       return false;
     }
 
-    bool readBlockInfo() {
-
-      // Read the top level blocks.
-      if (Reader.AtEndOfStream()) {
-        setFailure("No blocks.");
-        return false;
-      }
-
-      while (!Reader.AtEndOfStream()) {
-
-        auto CodeRes = Reader.ReadCode();
-
-        if (!CodeRes || CodeRes.get() != llvm::bitc::ENTER_SUBBLOCK) {
-          setFailure("Expected BlockInfo Subblock, malformed file.");
-          return false;
-        }
-
-        std::error_code EC;
-        auto SubBlockIDRes = Reader.ReadSubBlockID();
-        if (!SubBlockIDRes) {
-          setFailure("Failed to read subblock ID");
-          return false;
-        }
-
-        switch (SubBlockIDRes.get()) {
-          case llvm::bitc::BLOCKINFO_BLOCK_ID: {
-            auto BlockInfoRes = Reader.ReadBlockInfoBlock();
-            if (!BlockInfoRes) {
-              setFailure("Failed to read block info.");
-              return false;
-            }
-            if ((BlockInfo = BlockInfoRes.get())) {
-              Reader.setBlockInfo(BlockInfo.getPointer());
-              return true;
-            } else {
-              setFailure("Malformed BlockInfo.");
-              return false;
-            }
-          }
-          case DEPS_DEPENDENCIES_MAIN_BLOCK_ID:
-            setFailure("Blockinfo missed");
-            return false;
-          default:
-            break;
-            // Skip all unknown blocks.
-        }
-      }
-
-      setFailure("BlockInfo missed");
-      return false;
-    }
-
-    using RecordTy = SmallVector<uint64_t, 64>;
+    using RecordTy = LevitationBitstreamReader::RecordTy;
 
     bool readStringsTable(DependenciesData &Data) {
 
@@ -587,7 +836,7 @@ namespace levitation {
       );
     }
 
-    bool readPackageFilePath(unsigned int AbbrevID, DependenciesData &Data) {
+    bool readPackageTopLevelFields(unsigned int AbbrevID, DependenciesData &Data) {
       RecordTy Record;
 
       auto RecordIDRes = Reader.readRecord(AbbrevID, Record, nullptr);
@@ -600,138 +849,309 @@ namespace levitation {
       Data.PackageFilePathID = normalizeIfNeeded(
           *Data.Strings, (StringID)Record[0]
       );
+      Data.IsPublic = (bool)Record[1];
 
-      return checkRecordType(DEPS_PACKAGE_FILE_PATH_RECORD_ID, RecordID);
+      return checkRecordType(DEPS_PACKAGE_TOP_LEVEL_FIELDS_RECORD_ID, RecordID);
     }
 
-    using OnReadRecordFn = std::function<void(const RecordTy&, StringRef)>;
-
-    bool readAllRecords(
-        DependenciesBlockIDs BlockID,
-        DependenciesRecordTypes RecordID,
-        bool WithBlob,
-        OnReadRecordFn &&OnReadRecord) {
-      RecordTy RecordStorage;
-      StringRef BlobRef;
-
-      if (!Reader.EnterSubBlock(BlockID)) {
-
-        while (readRecord(
-            RecordID, RecordStorage, BlobRef, WithBlob, OnReadRecord
-        )) {
-          // do nothing
-        }
-        return isValid();
-      }
-      setFailure("Failed to read records, can't enter subblock");
-      return false;
-    }
-
-    /// Reads record
-    /// \param RecordStorage heap for reacord values
-    /// \param BlobRef blob variable
-    /// \param RecordID record ID, is used to pick up prober abbrev.
-    /// \param WithBlob true if record has blob data.
-    /// \param OnReadRecord record handler.
-    /// \return true, if we can read more,
-    /// false if there was an error, or end of block.
-    bool readRecord(
-        DependenciesRecordTypes RecordID,
-        RecordTy &RecordStorage,
-        StringRef &BlobRef,
-        bool WithBlob,
-        const OnReadRecordFn &OnReadRecord
-    ) {
-      auto EntryRes = Reader.advanceSkippingSubblocks();
-      if (!EntryRes) {
-        setFailure("Failed to read record");
-        return false;
-      }
-      auto &Entry = EntryRes.get();
-
-      switch (Entry.Kind) {
-        case BitstreamEntry::Error:
-          setFailure("Failed to read strings");
-          return false;
-        case BitstreamEntry::Record: {
-            RecordStorage.clear();
-
-            StringRef *BlobPtr = WithBlob ? &BlobRef : nullptr;
-
-            auto ObtainedRecordIDRes = Reader.readRecord(Entry.ID, RecordStorage, BlobPtr);
-            if (!ObtainedRecordIDRes) {
-                setFailure("Failed to read record ID");
-                return false;
-            }
-
-            unsigned int ObtainedRecordID = ObtainedRecordIDRes.get();
-
-            if (!checkRecordType(RecordID, ObtainedRecordID))
-              return false;
-
-            OnReadRecord(RecordStorage, BlobRef);
-          }
-          return true;
-        case BitstreamEntry::EndBlock:
-          return false;
-        default:
-          return true;
-      }
-    }
-
-    bool checkRecordType(
-        DependenciesRecordTypes RecordID,
-        unsigned int ObtainedID
-    ) {
-      if (ObtainedID != RecordID) {
-        setFailure("Malformed file. Wrong record type read.");
-        return false;
-      }
-      return true;
-    }
-
-    bool enterBlock(DependenciesBlockIDs ID) {
-      if (!isValid()) return false;
-
-      while (true) {
-        auto EntryRes = Reader.advance();
-        if (!EntryRes) {
-          setFailure("Failed to advance on record reading (enterBlock)");
-          return false;
-        }
-        auto &Entry = EntryRes.get();
-
-        switch (Entry.Kind) {
-          case BitstreamEntry::Error:
-            setFailure("Failed to enter read bitstream.");
-            return false;
-
-          case BitstreamEntry::EndBlock:
-            break;
-          case BitstreamEntry::SubBlock:
-            if (Entry.ID != ID) {
-              if (Reader.SkipBlock()) {
-                setFailure("Failed to skip block.");
-                return false;
-              }
-            } else {
-              if (!Reader.EnterSubBlock(Entry.ID))
-                return true;
-              setFailure("Failed to enter subblock.");
-              return false;
-            }
-            break;
-          case BitstreamEntry::Record:
-            break;
-        }
-      }
-    }
   };
 
   std::unique_ptr<DependenciesReader> CreateBitstreamReader(
       const llvm::MemoryBuffer &MB
   ) {
     return std::make_unique<DependenciesBitstreamReader>(MB);
+  }
+
+  // ==========================================================================
+  // Meta Dependencies Bitstream Writer
+
+  class DeclASTMetaBitstreamWriter : public DeclASTMetaWriter {
+  private:
+    static const size_t BUFFER_DEFAULT_SIZE = 4096;
+
+    llvm::raw_ostream &OutputStream;
+
+    SmallVector<char, BUFFER_DEFAULT_SIZE> Buffer;
+    BitstreamWriter Writer;
+
+    bool HeaderWritten;
+    bool Finalized;
+
+  public:
+    DeclASTMetaBitstreamWriter(llvm::raw_ostream &OS)
+        : OutputStream(OS),
+          Writer(Buffer),
+          HeaderWritten(false),
+          Finalized(false) {}
+
+    ~DeclASTMetaBitstreamWriter() override = default;
+
+    void writeAndFinalize(const DeclASTMeta &Meta) override {
+      if (Finalized)
+        llvm_unreachable("Can't write dependencies structure twice.");
+
+      writeHeader();
+
+      write(Meta);
+
+      OutputStream << Buffer;
+
+      Finalized = true;
+    }
+
+    void writeHeader() {
+      if (HeaderWritten)
+        llvm_unreachable("Can't write header twice.");
+
+      writeSignature();
+
+      HeaderWritten = true;
+    }
+
+    void writeSignature() {
+
+      // Note: only 4 first bytes can be used for magic number.
+      Writer.Emit((unsigned)'L', 8);
+      Writer.Emit((unsigned)'M', 8);
+      Writer.Emit((unsigned)'E', 8);
+      Writer.Emit((unsigned)'T', 8);
+
+      RecordData Record;
+
+      Writer.EnterBlockInfoBlock();
+      with (auto BlockInfoScope = make_scope_exit([&] { Writer.ExitBlock(); })) {
+
+#define BLOCK(X) EmitBlockID(X ## _ID, #X, Writer, Record)
+#define RECORD(X) EmitRecordID(X ## _ID, #X, Writer, Record)
+
+        //  At current moment we should store only three arrays:
+        //  0. Source hash
+        //  1. Decl AST hash
+        //  2. Skipped bytes ranges.
+        //  So there is no reason in main block itself.
+        //
+        //  BLOCK(META_MAIN_BLOCK);
+        //  RECORD(META_TOP_LEVEL_FIELDS_RECORD);
+
+        // Note: order block-record matters.
+        // Put record decls straight beneath the block it
+        // belongs to.
+        BLOCK(META_ARRAYS_BLOCK);
+        RECORD(META_SOURCE_HASH_RECORD);
+        RECORD(META_DECL_AST_HASH_RECORD);
+
+        BLOCK(META_SKIPPED_FRAGMENT_BLOCK);
+        RECORD(META_SKIPPED_FRAGMENT_RECORD);
+
+#undef RECORD
+#undef BLOCK
+      }
+    }
+
+    void write(const DeclASTMeta &Meta) {
+
+      with (auto MainBlockScope = enterBlock(META_ARRAYS_BLOCK_ID)) {
+        writeArrays(
+            Meta.getSourceHash(),
+            Meta.getDeclASTHash()
+        );
+
+        writeSkippedFragments(Meta.getFragmentsToSkip());
+      }
+    }
+
+    void writeArrays(
+        ArrayRef<uint8_t> SourceHash,
+        ArrayRef<uint8_t> DeclASTHash
+    ) {
+      unsigned SourceHashRecordAbbrev = AbbrevsBuilder(META_SOURCE_HASH_RECORD_ID, Writer)
+          .addArrayType<uint8_t>()
+      .done();
+
+      unsigned DeclAstRecordAbbrev = AbbrevsBuilder(META_DECL_AST_HASH_RECORD_ID, Writer)
+          .addArrayType<uint8_t>()
+      .done();
+
+      Writer.EmitRecord(
+          META_SOURCE_HASH_RECORD_ID,
+          SourceHash,
+          SourceHashRecordAbbrev
+      );
+      Writer.EmitRecord(
+          META_DECL_AST_HASH_RECORD_ID,
+          DeclASTHash,
+          DeclAstRecordAbbrev
+      );
+    }
+
+    void writeSkippedFragments(const DeclASTMeta::FragmentsVectorTy &SkippedFragments) {
+
+      with (auto FragmentsBlock = enterBlock(META_SKIPPED_FRAGMENT_BLOCK_ID)) {
+
+        auto FragmentAbb = AbbrevsBuilder(META_SKIPPED_FRAGMENT_RECORD_ID, Writer)
+            .addRecordFieldTypes<DeclASTMeta::FragmentTy>()
+        .done();
+
+        for (const auto &Fragment : SkippedFragments) {
+          RecordWriter(Writer, META_SKIPPED_FRAGMENT_RECORD_ID, FragmentAbb)
+            .emitField(Fragment.Start)
+            .emitField(Fragment.End)
+            .emitField(Fragment.ReplaceWithSemicolon)
+            .emitField(Fragment.PrefixWithExtern)
+          .done();
+        }
+      }
+    }
+
+  private:
+    BlockScope enterBlock(unsigned BlockID, unsigned CodeLen = 3) {
+      return BlockScope(Writer, BlockID, CodeLen);
+    }
+  };
+
+  std::unique_ptr<DeclASTMetaWriter> CreateMetaBitstreamWriter(
+      llvm::raw_ostream &OS
+  ) {
+    return std::make_unique<DeclASTMetaBitstreamWriter>(OS);
+  }
+
+  // ==========================================================================
+  // Meta Dependencies Bitstream Reader
+
+  class DeclASTMetaBitstreamReader
+      : public LevitationBitstreamReader<
+          DeclASTMeta,
+          'L', 'M', 'E', 'T',
+          META_ARRAYS_BLOCK_ID
+        >,
+        public DeclASTMetaReader
+  {
+    StringRef ErrorMessage;
+    using RecordTy = SmallVector<uint64_t, 64>;
+  public:
+    DeclASTMetaBitstreamReader(const llvm::MemoryBuffer &MemoryBuffer)
+        : LevitationBitstreamReader(MemoryBuffer) {}
+
+    // TODO Levitation
+    ~DeclASTMetaBitstreamReader() override = default;
+
+    bool read(DeclASTMeta &Meta) override {
+      if (!readSignature())
+        return false;
+
+      if (!readData(Meta))
+        return false;
+
+      return true;
+    }
+
+    bool readData(DeclASTMeta &Meta) {
+      if (!readBlockInfo())
+        return false;
+
+      if (enterBlock(META_ARRAYS_BLOCK_ID)) {
+        bool EndOfBlock = false;
+        while (!EndOfBlock) {
+
+          auto EntryRes = Reader.advance();
+          if (!EntryRes) {
+            setFailure("Failed to advance on reading bitstream.");
+            return false;
+          }
+
+          auto &Entry = EntryRes.get();
+          switch (Entry.Kind) {
+            case BitstreamEntry::Error:
+              setFailure("Failed to enter read bitstream.");
+              return false;
+
+            case BitstreamEntry::EndBlock:
+              Reader.ReadBlockEnd();
+              EndOfBlock = true;
+              break;
+            case BitstreamEntry::SubBlock: {
+
+                auto BlockID = (MetaBlockIDs)Entry.ID;
+
+                switch (BlockID) {
+                  case META_SKIPPED_FRAGMENT_BLOCK_ID:
+                    if (!readSkippedFragments(BlockID, Meta))
+                      return false;
+                    break;
+                  case META_ARRAYS_BLOCK_ID:
+                    llvm_unreachable("Recursive main block.");
+                }
+              }
+              break;
+            case BitstreamEntry::Record:
+              if (!readArrays(Entry.ID, Meta))
+                return false;
+              break;
+          }
+        }
+
+        return true;
+      }
+
+      return false;
+    }
+
+    bool readArrays(unsigned int AbbrevID, DeclASTMeta &Meta) {
+      RecordTy Record;
+      StringRef Blob;
+
+
+      auto RecordIDRes = Reader.readRecord(AbbrevID, Record, &Blob);
+      if (!RecordIDRes) {
+        setFailure("Failed to read record ID");
+        return false;
+      }
+      auto &RecordID = RecordIDRes.get();
+
+      switch (RecordID) {
+        case META_SOURCE_HASH_RECORD_ID:
+          Meta.setSourceHash(Record);
+          break;
+        case META_DECL_AST_HASH_RECORD_ID:
+          Meta.setDeclASTHash(Record);
+          break;
+        default:
+          llvm_unreachable("Unknown record ID.");
+      }
+      return true;
+    }
+
+    bool readSkippedFragments(unsigned int BlockID, DeclASTMeta &Meta) {
+      return readAllRecords(
+          BlockID,
+          META_SKIPPED_FRAGMENT_RECORD_ID,
+          /*WithBlob*/false,
+
+          [&](const RecordTy &Record, StringRef BlobStr) {
+
+            DeclASTMeta::FragmentTy Fragment;
+
+            RecordReader<RecordTy>(Record)
+              .read(Fragment.Start)
+              .read(Fragment.End)
+              .read(Fragment.ReplaceWithSemicolon)
+              .read(Fragment.PrefixWithExtern)
+            .done();
+
+            Meta.addSkippedFragment(Fragment);
+          }
+      );
+    }
+
+    const Failable &getStatus() const override {
+      return *this;
+    }
+  };
+
+  std::unique_ptr<DeclASTMetaReader> CreateMetaBitstreamReader(
+      const llvm::MemoryBuffer &MB
+  ) {
+    return std::make_unique<DeclASTMetaBitstreamReader>(MB);
   }
 }
 }

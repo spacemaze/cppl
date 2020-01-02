@@ -3785,12 +3785,22 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
       // assert(JA.getType() == types::TY_AST && "Type must be AST");
 
+      StringRef DeclASTMeta = Args.getLastArgValue(options::OPT_cppl_meta_EQ);
+
+      if (DeclASTMeta.empty())
+        D.Diag(diag::err_drv_missed_cppl_value)
+            << "-cppl-meta="
+            << "PARSE";
+
       CmdArgs.push_back("-flevitation-build-decl");
       CmdArgs.push_back("-emit-pch");
 
       levitationParseIncludePreamble(CmdArgs, Args);
       levitationParseIncludeDeps(CmdArgs, Args);
 
+      CmdArgs.push_back(Args.MakeArgString(
+          Twine("-levitation-decl-ast-meta=") + DeclASTMeta
+      ));
     }
 
     // end of C++ Levitation

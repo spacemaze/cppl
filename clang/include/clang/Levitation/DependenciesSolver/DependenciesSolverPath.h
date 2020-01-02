@@ -44,6 +44,17 @@ public:
         BuildRoot, Package, FileExtensions::DeclarationAST
     ));
   }
+  static void addIncPathsFor(
+      Paths &Dst,
+      StringRef BuildRoot,
+      StringRef Package,
+      bool MainFile = false
+  ) {
+    Dst.emplace_back(levitation::Path::replaceExtension<SinglePath>(
+        Package, FileExtensions::Header
+    ));
+  }
+
 };
 
 }}}

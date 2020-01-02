@@ -14,14 +14,18 @@
 #include "clang/Basic/FileManager.h"
 
 #include "clang/Levitation/Common/Failable.h"
+#include "clang/Levitation/Common/File.h"
 #include "clang/Levitation/Common/FileSystem.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/Common/StringBuilder.h"
+#include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
+#include "clang/Levitation/DeclASTMeta/DeclASTMetaLoader.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesGraph.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesSolverPath.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesSolver.h"
 #include "clang/Levitation/DependenciesSolver/SolvedDependenciesInfo.h"
 #include "clang/Levitation/Driver/Driver.h"
+#include "clang/Levitation/Driver/HeaderGenerator.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
 
@@ -50,8 +54,13 @@ namespace {
 
   struct FilesInfo {
     SinglePath Source;
+    SinglePath Header;
     SinglePath LDeps;
+    SinglePath SkippedBytes;
+
+    // FIXME Levitation: deprecated
     SinglePath AST;
+
     SinglePath DeclAST;
     SinglePath Object;
   };
@@ -64,6 +73,8 @@ namespace {
     Failable Status;
 
     Paths Packages;
+
+    // TODO Levitation: key may be an integer (string ID for PackagePath)
     llvm::DenseMap<StringRef, FilesInfo> Files;
 
     std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
@@ -76,6 +87,7 @@ namespace {
 
 class LevitationDriverImpl {
   RunContext &Context;
+  DependenciesStringsPool &Strings;
 
   Failable &Status;
   log::Logger &Log;
@@ -85,6 +97,7 @@ public:
 
   explicit LevitationDriverImpl(RunContext &context)
   : Context(context),
+    Strings(CreatableSingleton<DependenciesStringsPool>::get()),
     Status(context.Status),
     Log(log::Logger::get()),
     TM(TasksManager::get())
@@ -112,6 +125,25 @@ public:
   bool processDependencyNode(
       const DependenciesGraph::Node &N
   );
+
+  bool processDefinition(const DependenciesGraph::Node &N);
+
+  bool processDeclaration(const DependenciesGraph::Node &N);
+
+  const FilesInfo& getFilesInfoFor(
+      const DependenciesGraph::Node &N
+  ) const;
+
+  Paths getFullDependencies(
+      const DependenciesGraph::Node &N,
+      const DependenciesGraph &Graph
+  ) const;
+
+  Paths getIncludes(
+      const DependenciesGraph::Node &N,
+      const DependenciesGraph &Graph
+  ) const;
+
 };
 
 /*static*/
@@ -326,6 +358,7 @@ public:
     SinglePath ExecutablePath;
     Args CommandArgs;
 
+    bool Condition = true;
     bool Verbose;
     bool DryRun;
 
@@ -487,23 +520,27 @@ public:
     }
 
     CommandInfo& addArg(StringRef Arg) {
+      if (!Condition) return *this;
       CommandArgs.emplace_back(Arg);
       return *this;
     }
 
     CommandInfo& addKVArgSpace(StringRef Arg, StringRef Value) {
+      if (!Condition) return *this;
       CommandArgs.emplace_back(Arg);
       CommandArgs.emplace_back(Value);
       return *this;
     }
 
     CommandInfo& addKVArgEq(StringRef Arg, StringRef Value) {
+      if (!Condition) return *this;
       OwnArgs.emplace_back((Arg + "=" + Value).str());
       CommandArgs.emplace_back(OwnArgs.back());
       return *this;
     }
 
     CommandInfo& addKVArgEqIfNotEmpty(StringRef Arg, StringRef Value) {
+      if (!Condition) return *this;
       if (Value.size())
         addKVArgEq(Arg, Value);
       return *this;
@@ -511,6 +548,7 @@ public:
 
     template <typename ValuesT>
     CommandInfo& addArgs(const ValuesT& Values) {
+      if (!Condition) return *this;
       for (const auto &Value : Values) {
         CommandArgs.emplace_back(Value);
       }
@@ -519,10 +557,26 @@ public:
 
     template <typename ValuesT>
     CommandInfo& addKVArgsEq(StringRef Name, const ValuesT Values) {
+      if (!Condition) return *this;
       for (const auto &Value : Values) {
         OwnArgs.emplace_back((Name + "=" + Value).str());
         CommandArgs.emplace_back(OwnArgs.back());
       }
+      return *this;
+    }
+
+    CommandInfo& condition(bool Value) {
+      Condition = Value;
+      return *this;
+    }
+
+    CommandInfo& conditionElse() {
+      Condition = !Condition;
+      return *this;
+    }
+
+    CommandInfo& conditionEnd() {
+      Condition = true;
       return *this;
     }
 
@@ -561,15 +615,6 @@ public:
       return Failable();
     }
   protected:
-
-    template <typename ValueT>
-    void addOwnArg(const ValueT& V) {
-      OwnArgs.emplace_back(V);
-    }
-
-    void addOwnArg(const Twine& V) {
-      OwnArgs.emplace_back(V.str());
-    }
 
     static SinglePath getClangPath(llvm::StringRef BinDir) {
 
@@ -767,6 +812,7 @@ public:
       StringRef BinDir,
       StringRef PrecompiledPreamble,
       StringRef OutDeclASTFile,
+      StringRef OutDeflASTMetaFile,
       StringRef InputFile,
       const Paths &Deps,
       StringRef StdLib,
@@ -777,7 +823,7 @@ public:
     assert(OutDeclASTFile.size() && InputFile.size());
 
     if (!DryRun || Verbose)
-      dumpBuildDecl(OutDeclASTFile, InputFile, Deps);
+      dumpBuildDecl(OutDeclASTFile, OutDeflASTMetaFile, InputFile, Deps);
 
     levitation::Path::createDirsForFile(OutDeclASTFile);
 
@@ -788,7 +834,15 @@ public:
     .addKVArgsEq("-cppl-include-dependency", Deps)
     .addArgs(ExtraParserArgs)
     .addArg(InputFile)
+    // TODO Levitation: don't emit .decl-ast files
+    //  in some cases. See task #48
+    //    .condition(OutDeclASTFile.size())
+    //        .addKVArgSpace("-o", OutDeclASTFile)
+    //    .conditionElse()
+    //        .addArg("-cppl-no-out")
+    //    .conditionEnd()
     .addKVArgSpace("-o", OutDeclASTFile)
+    .addKVArgEq("-cppl-meta", OutDeflASTMetaFile)
     .execute();
 
     return processStatus(ExecutionStatus);
@@ -884,6 +938,10 @@ public:
 
 protected:
 
+  // FIXME Levitation: Deprecated
+  //   all dump methods below are deprecated,
+  //   use DriverPhaseDump methods instead.
+
   static void dumpBuildPreamble(
       StringRef PreambleSource,
       StringRef PreambleOut
@@ -931,10 +989,13 @@ protected:
 
   static void dumpBuildDecl(
       StringRef OutDeclASTFile,
+      StringRef OutDeclASTMetaFile,
       StringRef InputObject,
       const Paths &Deps
   ) {
     assert(OutDeclASTFile.size() && InputObject.size());
+
+    // TODO Levitation: also dump OutDeclASTMetaFile
 
     dumpInstantiate(OutDeclASTFile, InputObject, Deps, "BUILD DECL", "decl-ast");
   }
@@ -1244,11 +1305,24 @@ void LevitationDriverImpl::collectSources() {
         FileExtensions::SourceCode
     );
 
+    Files.Header = Path::getPath<SinglePath>(
+        Context.Driver.getOutputHeadersDir(),
+        PackagePath,
+        FileExtensions::Header
+    );
+
+    Files.SkippedBytes = Path::getPath<SinglePath>(
+        Context.Driver.BuildRoot,
+        PackagePath,
+        FileExtensions::SkippedBytes
+    );
+
     Files.LDeps = Path::getPath<SinglePath>(
         Context.Driver.BuildRoot,
         PackagePath,
         FileExtensions::ParsedDependencies
     );
+
     Files.DeclAST = Path::getPath<SinglePath>(
         Context.Driver.BuildRoot,
         PackagePath,
@@ -1270,12 +1344,24 @@ void LevitationDriverImpl::collectSources() {
   << " '." << FileExtensions::SourceCode << "' files.\n\n";
 }
 
+// TODO Levitation: try to make this method const.
 bool LevitationDriverImpl::processDependencyNode(
     const DependenciesGraph::Node &N
 ) {
-  const auto &Strings = CreatableSingleton<DependenciesStringsPool>::get();
-  const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
+  switch (N.Kind) {
+    case DependenciesGraph::NodeKind::Declaration:
+      return processDeclaration(N);
+    case DependenciesGraph::NodeKind::Definition: {
+      return processDefinition(N);
+    }
+    default:
+      llvm_unreachable("Unknown dependency kind");
+  }
+}
 
+const FilesInfo& LevitationDriverImpl::getFilesInfoFor(
+    const DependenciesGraph::Node &N
+) const {
   const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
 
   auto FoundFiles = Context.Files.find(SrcRel);
@@ -1285,62 +1371,141 @@ bool LevitationDriverImpl::processDependencyNode(
     llvm_unreachable("Package not found");
   }
 
-  const auto &Files = FoundFiles->second;
+  return FoundFiles->second;
+}
 
-  auto &fullDepsRanged = Context.DependenciesInfo->getRangedDependencies(N.ID);
+Paths LevitationDriverImpl::getFullDependencies(
+    const DependenciesGraph::Node &N,
+    const DependenciesGraph &Graph
+) const {
+  auto &FullDepsRanged = Context.DependenciesInfo->getRangedDependencies(N.ID);
 
-  Paths fullDependencies;
-  for (auto RangeNID : fullDepsRanged) {
+  Paths FullDeps;
+  for (auto RangeNID : FullDepsRanged) {
     auto &DNode = Graph.getNode(RangeNID.second);
     auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
 
     DependenciesSolverPath::addDepPathsFor(
-        fullDependencies,
+        FullDeps,
         Context.Driver.BuildRoot,
         DepPath
     );
   }
+  return FullDeps;
+}
 
-  switch (N.Kind) {
+Paths LevitationDriverImpl::getIncludes(
+    const DependenciesGraph::Node &N,
+    const DependenciesGraph &Graph
+) const {
+  Paths Includes;
+  for (auto DepNID : N.Dependencies) {
+    auto &DNode = Graph.getNode(DepNID);
+    auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
 
-    case DependenciesGraph::NodeKind::Declaration:
-      if (N.DependentNodes.empty()) {
-        auto &Verbose = Log.verbose();
-        Verbose << "Skip building unused declaration for ";
-        Graph.dumpNodeShort(Verbose, N.ID, Strings);
-        Verbose << "\n";
-        return true;
-      }
-      return Commands::buildDecl(
-          Context.Driver.BinDir,
-          Context.Driver.PreambleOutput,
-          Files.DeclAST,
-          Files.Source,
-          fullDependencies,
-          Context.Driver.StdLib,
-          Context.Driver.ExtraParseArgs,
-          Context.Driver.Verbose,
-          Context.Driver.DryRun
-      );
-
-    case DependenciesGraph::NodeKind::Definition: {
-      return Commands::buildObject(
-        Context.Driver.BinDir,
-        Context.Driver.PreambleOutput,
-        Files.Object,
-        Files.Source,
-        fullDependencies,
-        Context.Driver.StdLib,
-        Context.Driver.ExtraParseArgs,
-        Context.Driver.ExtraCodeGenArgs,
-        Context.Driver.Verbose,
-        Context.Driver.DryRun
-      );
-    }
-
-    default:
-      llvm_unreachable("Unknown dependency kind");
+    DependenciesSolverPath::addIncPathsFor(
+        Includes,
+        Context.Driver.BuildRoot,
+        DepPath
+    );
   }
+  return Includes;
+}
+
+bool LevitationDriverImpl::processDefinition(
+    const DependenciesGraph::Node &N
+) {
+  assert(
+      N.Kind == DependenciesGraph::NodeKind::Definition &&
+      "Only definition nodes expected here"
+  );
+
+  const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
+  const auto &Files = getFilesInfoFor(N);
+
+  Paths fullDependencies = getFullDependencies(N, Graph);
+
+  return Commands::buildObject(
+    Context.Driver.BinDir,
+    Context.Driver.PreambleOutput,
+    Files.Object,
+    Files.Source,
+    fullDependencies,
+    Context.Driver.StdLib,
+    Context.Driver.ExtraParseArgs,
+    Context.Driver.ExtraCodeGenArgs,
+    Context.Driver.Verbose,
+    Context.Driver.DryRun
+  );
+}
+
+bool LevitationDriverImpl::processDeclaration(
+    const DependenciesGraph::Node &N
+) {
+
+  const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
+  const auto &Files = getFilesInfoFor(N);
+  Paths fullDependencies = getFullDependencies(N, Graph);
+
+  bool NeedDeclAST = true;
+
+  // TODO Levitation: need #public directive to handle this part
+#if 0
+  if (N.DependentNodes.empty()) {
+    auto &Verbose = Log.verbose();
+    Verbose << "Skip building unused declaration for ";
+    Graph.dumpNodeShort(Verbose, N.ID, Strings);
+    Verbose << "\n";
+    NeedDeclAST = false;
+  }
+#endif
+
+  // TODO Levitation: MD5 check
+  // 1. DeclASTMeta MetaOld = DeclASTMetaLoader::fromFile(Files.SkippedBytes);
+  // 2. Calc source file MD5
+  // 3. Compare source MD5 hashes, if they differ, build new decl-ast.
+
+  bool buildDeclSuccessfull = Commands::buildDecl(
+      Context.Driver.BinDir,
+      Context.Driver.PreambleOutput,
+      (NeedDeclAST ? Files.DeclAST.str() : StringRef()),
+      (NeedDeclAST ? Files.SkippedBytes.str() : StringRef()),
+      Files.Source,
+      fullDependencies,
+      Context.Driver.StdLib,
+      Context.Driver.ExtraParseArgs,
+      Context.Driver.Verbose,
+      Context.Driver.DryRun
+  );
+
+  if (!buildDeclSuccessfull)
+    return false;
+
+  bool MustGenerateHeaders =
+      Context.Driver.shouldCreateHeaders() &&
+      Graph.isPublic(N.ID);
+
+  if (!MustGenerateHeaders)
+    return true;
+
+  auto Includes = getIncludes(N, Graph);
+
+  DeclASTMeta Meta;
+  if (!DeclASTMetaLoader::fromFile(
+      Meta, Context.Driver.BuildRoot, Files.SkippedBytes
+  ))
+    return false;
+
+  return HeaderGenerator(
+      Files.Header,
+      Files.Source,
+      N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
+      Includes,
+      Meta.getFragmentsToSkip(),
+      Context.Driver.Verbose,
+      Context.Driver.DryRun
+  )
+  .execute();
 }
 
 // TODO Levitation: Deprecated
@@ -1421,6 +1586,10 @@ LevitationDriver::LevitationDriver(StringRef CommandPath)
   }
 
   BinDir = llvm::sys::path::parent_path(P);
+
+  OutputHeadersDir = levitation::Path::getPath<SinglePath>(
+      BuildRoot, DriverDefaults::HEADER_DIR_SUFFIX
+  );
 }
 
 void LevitationDriver::setExtraPreambleArgs(StringRef Args) {
@@ -1499,7 +1668,7 @@ void LevitationDriver::dumpParameters() {
   << "    PreambleSource: " << (PreambleSource.empty() ? "<preamble compilation not requested>" : PreambleSource) << "\n"
   << "    JobsNumber: " << JobsNumber << "\n"
   << "    Output: " << Output << "\n"
-  << "    OutputHeader: " << (OutputHeader.empty() ? "<header creation not requested>" : OutputHeader) << "\n"
+  << "    OutputHeadersDir: " << (isLinkPhaseEnabled() ? "<n/a>" : OutputHeadersDir.c_str()) << "\n"
   << "    DryRun: " << (DryRun ? "yes" : "no") << "\n"
   << "\n";
 

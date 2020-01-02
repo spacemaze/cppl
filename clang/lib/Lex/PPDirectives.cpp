@@ -938,6 +938,9 @@ void Preprocessor::HandleDirective(Token &Result) {
       case tok::pp_import:
       case tok::pp_include_next:
       case tok::pp___include_macros:
+      // C++ Levitation:
+      case tok::pp_public:
+      // end of C++ Levitation
       case tok::pp_pragma:
         Diag(Result, diag::err_embedded_directive) << II->getName();
         Diag(*ArgMacro, diag::note_macro_expansion_here)
@@ -1001,6 +1004,11 @@ void Preprocessor::HandleDirective(Token &Result) {
     case tok::pp___include_macros:
       // Handle -imacros.
       return HandleIncludeMacrosDirective(SavedHash.getLocation(), Result);
+
+    // C++ Levitation:
+    case tok::pp_public:
+      return HandleLevitationPublicDirective(SavedHash.getLocation(), Result);
+    // end of C++ Levitation
 
     // C99 6.10.3 - Macro Replacement.
     case tok::pp_define:
@@ -1682,6 +1690,7 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
 
   if (LangOpts.isLevitationMode(LangOptions::LBSK_ParseManualDeps)) {
     DiscardUntilEndOfDirective();
+    PPLevitationFirstIncludeMet = true;
     return;
   }
 
@@ -2257,6 +2266,16 @@ void Preprocessor::HandleIncludeNextDirective(SourceLocation HashLoc,
                                 LookupFromFile);
 }
 
+// ============================================================================
+// C++ Levitation
+
+void Preprocessor::setLevitationKeepComments(bool value) {
+  assert(CurLexerKind == CLK_Lexer || CurLexerKind == CLK_CachingLexer);
+  if (CurLexer->isKeepWhitespaceMode())
+    return;
+  CurLexer->SetCommentRetentionState(value);
+}
+
 /// Handles C++ Levitation #import directive
 ///
 /// Syntax is as follows:
@@ -2277,7 +2296,13 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
   // Ignore #import directive if we are at later stages.
   if (!LangOpts.isLevitationMode(LangOptions::LBSK_ParseManualDeps)) {
     DiscardUntilEndOfDirective();
+    if (LangOpts.isLevitationMode(LangOptions::LBSK_BuildDeclAST))
+      levitationAddSkippedSourceFragment(HashLoc, CurLexer->getSourceLocation());
     return;
+  }
+
+  if (PPLevitationFirstIncludeMet) {
+    Diag(HashLoc, diag::err_pp_levitation_import_cant_be_after_include);
   }
 
   Token NextTok;
@@ -2297,6 +2322,20 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
     PPLevitationDeclDeps.emplace_back(std::move(Parts), Loc);
   else
     PPLevitationBodyDeps.emplace_back(std::move(Parts), Loc);
+}
+
+/// Handles C++ Levitation #public directive
+///
+/// This directive has no parameters.
+///
+/// \param HashLoc location of '#' symbol
+/// \param Tok reference to 'import' token next to '#' symbol
+void Preprocessor::HandleLevitationPublicDirective(SourceLocation HashLoc, Token &Tok) {
+  PPLevitationPublic = true;
+
+  DiscardUntilEndOfDirective();
+
+  levitationAddSkippedSourceFragment(HashLoc, CurLexer->getSourceLocation());
 }
 
 bool Preprocessor::TryLexLevitationBodyDepAttr(const Token &FirstToken) {
@@ -2426,6 +2465,47 @@ const Preprocessor::PPLevitationDepsVector&
 {
   return PPLevitationBodyDeps;
 }
+
+void Preprocessor::levitationAddSkippedSourceFragment(
+    const clang::SourceLocation &Start,
+    const clang::SourceLocation &End
+) {
+
+  auto StartSLoc = getSourceManager().getDecomposedLoc(Start);
+  auto EndSLoc = getSourceManager().getDecomposedLoc(End);
+
+  auto MainFileID = getSourceManager().getMainFileID();
+  assert(
+      StartSLoc.first == MainFileID &&
+      EndSLoc.first == MainFileID &&
+      "Skipped fragment can only be a part of main file."
+  );
+
+  PPLevitationSkippedFragments.push_back({
+    StartSLoc.second,
+    EndSLoc.second,
+    /* ReplaceWithSemicolon */ false,
+    /* prefix with extern */ false
+  });
+
+#if 0
+  llvm::errs() << "Added skipped fragment "
+               << (ReplaceWithSemicolon ? "BURN:\n" : ":\n");
+
+  llvm::errs() << "Bytes: 0x";
+  llvm::errs().write_hex(StartSLoc.second) << " : 0x";
+  llvm::errs().write_hex(EndSLoc.second) << "\n";
+
+  Start.dump(getSourceManager());
+  End.dump(getSourceManager());
+
+  llvm::errs() << "\n";
+#endif
+}
+
+// end of C++ Levitation
+// ============================================================================
+
 
 /// HandleMicrosoftImportDirective - Implements \#import for Microsoft Mode
 void Preprocessor::HandleMicrosoftImportDirective(Token &Tok) {

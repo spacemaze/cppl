@@ -44,7 +44,8 @@ namespace clang { namespace levitation { namespace tools {
 
     int JobsNumber = DriverDefaults::JOBS_NUMBER;
 
-    llvm::StringRef OutputHeader;
+    bool OutputHeadersDirDefault = true;
+    levitation::SinglePath OutputHeadersDir;
     llvm::StringRef Output;
 
     bool LinkPhaseEnabled = true;
@@ -82,6 +83,10 @@ namespace clang { namespace levitation { namespace tools {
 
     void setBuildRoot(llvm::StringRef BuildRoot) {
       LevitationDriver::BuildRoot = BuildRoot;
+      if (OutputHeadersDirDefault)
+        OutputHeadersDir = levitation::Path::getPath<SinglePath>(
+            BuildRoot, DriverDefaults::HEADER_DIR_SUFFIX
+        );
     }
 
     llvm::StringRef getPreambleSource() const {
@@ -116,16 +121,17 @@ namespace clang { namespace levitation { namespace tools {
       LevitationDriver::Output = Output;
     }
 
-    void setOutputHeader(llvm::StringRef h) {
-      OutputHeader = h;
+    void setOutputHeadersDir(llvm::StringRef h) {
+      OutputHeadersDir = h;
+      OutputHeadersDirDefault = false;
     }
 
-    llvm::StringRef getOutputHeader() const {
-      return OutputHeader;
+    llvm::StringRef getOutputHeadersDir() const {
+      return OutputHeadersDir;
     }
 
-    bool isOutputHeaderCreationRequested() const {
-      return OutputHeader.size();
+    bool shouldCreateHeaders() const {
+      return !LinkPhaseEnabled;
     }
 
     bool isLinkPhaseEnabled() const {

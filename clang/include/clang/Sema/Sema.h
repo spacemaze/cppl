@@ -37,6 +37,7 @@
 #include "clang/Basic/Specifiers.h"
 #include "clang/Basic/TemplateKinds.h"
 #include "clang/Basic/TypeTraits.h"
+#include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Sema/AnalysisBasedWarnings.h"
 #include "clang/Sema/CleanupInfo.h"
@@ -11648,6 +11649,27 @@ private:
   levitation::DependenciesMap LevitationDefinitionDependencies;
 
 public:
+  enum struct LevitationVarSkipAction {
+    None, Skip, SkipInit
+  };
+
+
+private:
+
+  // Keep track of actions for var declarators.
+  // Note, that we identify Declarator instance by
+  // source range it associated with.
+  // And we identify source range by pair of its
+  // source location IDs.
+  using DeclaratorID = std::pair<unsigned, unsigned>;
+  llvm::DenseMap<DeclaratorID, LevitationVarSkipAction> LevitationVarSkipActions;
+
+  /// For decl-ast creation mode,
+  /// holds bytes skipped during parsing (skipped function bodies and
+  /// variable definitions).
+  levitation::DeclASTMeta::FragmentsVectorTy LevitationSkippedFragments;
+
+public:
 
   const levitation::DependenciesMap &getLevitationDeclarationDependencies() {
     return LevitationDeclarationDependencies;
@@ -11656,6 +11678,8 @@ public:
   const levitation::DependenciesMap &getLevitationDefinitionDependencies() {
     return LevitationDefinitionDependencies;
   }
+
+  bool isLevitationFilePublic() const;
 
   /// Check whether levitation mode is on.
   /// \return
@@ -11702,8 +11726,26 @@ public:
         const Declarator &D,
         const DeclContext* DC,
         bool IsVariableTemplate,
+        bool IsRedeclaration,
         StorageClass SC
-    ) const;
+    );
+
+  LevitationVarSkipAction levitationGetSkipActionFor(const Declarator &D);
+
+  void levitationAddSkippedSourceFragment(
+      const SourceLocation &Start,
+      const SourceLocation &End,
+      bool ReplaceWithSemicolon = false
+  );
+
+  void levitationReplaceLastSkippedSourceFragments(
+      const SourceLocation &Start,
+      const SourceLocation &End
+  );
+
+  void levitationInsertExternForHeader(const SourceLocation Start);
+
+  levitation::DeclASTMeta::FragmentsVectorTy levitationGetSourceFragments() const;
 
   //
   // end of C++ Levitation Mode

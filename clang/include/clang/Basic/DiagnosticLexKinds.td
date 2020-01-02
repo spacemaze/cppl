@@ -825,7 +825,10 @@ def err_pp_levitation_import_missed_dep_part : Error<
   "missed scope name between '::' symbols'">;
 
 def err_pp_levitation_import_missed_dep_part_semi : Error<
-  "missed scope name'">;
+  "missed scope name">;
+
+def err_pp_levitation_import_cant_be_after_include : Error<
+  "#import directives should be placed before any #include directives'">;
 
 // end of C++ Levitation
 
