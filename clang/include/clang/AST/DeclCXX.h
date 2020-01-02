@@ -1046,7 +1046,8 @@ public:
 
   /// Get all conversion functions visible in current class,
   /// including conversion function templates.
-  llvm::iterator_range<conversion_iterator> getVisibleConversionFunctions();
+  llvm::iterator_range<conversion_iterator>
+  getVisibleConversionFunctions() const;
 
   /// Determine whether this class is an aggregate (C++ [dcl.init.aggr]),
   /// which is a class with no user-declared constructors, no private
@@ -1993,16 +1994,6 @@ public:
   }
   const CXXMethodDecl *getMostRecentDecl() const {
     return const_cast<CXXMethodDecl*>(this)->getMostRecentDecl();
-  }
-
-  /// True if this method is user-declared and was not
-  /// deleted or defaulted on its first declaration.
-  bool isUserProvided() const {
-    auto *DeclAsWritten = this;
-    if (auto *Pattern = getTemplateInstantiationPattern())
-      DeclAsWritten = cast<CXXMethodDecl>(Pattern);
-    return !(DeclAsWritten->isDeleted() ||
-             DeclAsWritten->getCanonicalDecl()->isDefaulted());
   }
 
   void addOverriddenMethod(const CXXMethodDecl *MD);
@@ -3041,7 +3032,9 @@ public:
 
 /// Implicit declaration of a temporary that was materialized by
 /// a MaterializeTemporaryExpr and lifetime-extended by a declaration
-class LifetimeExtendedTemporaryDecl final : public Decl {
+class LifetimeExtendedTemporaryDecl final
+    : public Decl,
+      public Mergeable<LifetimeExtendedTemporaryDecl> {
   friend class MaterializeTemporaryExpr;
   friend class ASTDeclReader;
 

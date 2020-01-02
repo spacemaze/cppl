@@ -83,7 +83,8 @@ class CGDebugInfo {
   /// Cache of previously constructed Types.
   llvm::DenseMap<const void *, llvm::TrackingMDRef> TypeCache;
 
-  llvm::SmallDenseMap<llvm::StringRef, llvm::StringRef> DebugPrefixMap;
+  std::map<llvm::StringRef, llvm::StringRef, std::greater<llvm::StringRef>>
+      DebugPrefixMap;
 
   /// Cache that maps VLA types to size expressions for that type,
   /// represented by instantiated Metadata nodes.
@@ -477,6 +478,9 @@ public:
   /// Emit a constant global variable's debug info.
   void EmitGlobalVariable(const ValueDecl *VD, const APValue &Init);
 
+  /// Emit information about an external variable.
+  void EmitExternalVariable(llvm::GlobalVariable *GV, const VarDecl *Decl);
+
   /// Emit C++ using directive.
   void EmitUsingDirective(const UsingDirectiveDecl &UD);
 
@@ -747,6 +751,7 @@ public:
   ApplyDebugLocation(ApplyDebugLocation &&Other) : CGF(Other.CGF) {
     Other.CGF = nullptr;
   }
+  ApplyDebugLocation &operator=(ApplyDebugLocation &&) = default;
 
   ~ApplyDebugLocation();
 

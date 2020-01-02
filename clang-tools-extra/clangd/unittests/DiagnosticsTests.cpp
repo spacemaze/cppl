@@ -19,6 +19,7 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticSema.h"
 #include "llvm/Support/ScopedPrinter.h"
+#include "llvm/Support/TargetSelect.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <algorithm>
@@ -405,6 +406,15 @@ TEST(DiagnosticsTest, NoFixItInMacro) {
                                 Not(WithFix(_)))));
 }
 
+TEST(ClangdTest, MSAsm) {
+  // Parsing MS assembly tries to use the target MCAsmInfo, which we don't link.
+  // We used to crash here. Now clang emits a diagnostic, which we filter out.
+  llvm::InitializeAllTargetInfos(); // As in ClangdMain
+  auto TU = TestTU::withCode("void fn() { __asm { cmp cl,64 } }");
+  TU.ExtraArgs = {"-fms-extensions"};
+  EXPECT_THAT(TU.build().getDiagnostics(), IsEmpty());
+}
+
 TEST(DiagnosticsTest, ToLSP) {
   URIForFile MainFile =
       URIForFile::canonicalize(testPath("foo/bar/main.cpp"), "");
@@ -709,7 +719,10 @@ void bar(X *x) {
 
   auto Parsed = TU.build();
   for (const auto &D : Parsed.getDiagnostics()) {
-    EXPECT_EQ(D.Fixes.size(), 1u);
+    if (D.Fixes.size() != 1) {
+      ADD_FAILURE() << "D.Fixes.size() != 1";
+      continue;
+    }
     EXPECT_EQ(D.Fixes[0].Message,
               std::string("Add include \"a.h\" for symbol X"));
   }

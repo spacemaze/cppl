@@ -258,9 +258,9 @@ Fuchsia::GetCXXStdlibType(const ArgList &Args) const {
 void Fuchsia::addClangTargetOptions(const ArgList &DriverArgs,
                                     ArgStringList &CC1Args,
                                     Action::OffloadKind) const {
-  if (DriverArgs.hasFlag(options::OPT_fuse_init_array,
-                         options::OPT_fno_use_init_array, true))
-    CC1Args.push_back("-fuse-init-array");
+  if (!DriverArgs.hasFlag(options::OPT_fuse_init_array,
+                          options::OPT_fno_use_init_array, true))
+    CC1Args.push_back("-fno-use-init-array");
 }
 
 void Fuchsia::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
@@ -351,10 +351,9 @@ SanitizerMask Fuchsia::getDefaultSanitizers() const {
   case llvm::Triple::x86_64:
     Res |= SanitizerKind::SafeStack;
     break;
-  case llvm::Triple::riscv64:
-    break;
   default:
-    llvm_unreachable("invalid architecture");
+    // TODO: Enable SafeStack on RISC-V once tested.
+    break;
   }
   return Res;
 }

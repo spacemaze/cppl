@@ -112,7 +112,7 @@ void Variable::Dump(Stream *s, bool show_context) const {
   if (m_symfile_type_sp) {
     Type *type = m_symfile_type_sp->GetType();
     if (type) {
-      *s << ", type = {" << type->GetID() << "} " << (void *)type << " (";
+      s->Format(", type = {{{0:x-16}} {1} (", type->GetID(), type);
       type->DumpTypeName(s);
       s->PutChar(')');
     }
@@ -134,7 +134,7 @@ void Variable::Dump(Stream *s, bool show_context) const {
       s->PutCString("thread local");
       break;
     default:
-      *s << "??? (" << m_scope << ')';
+      s->AsRawOstream() << "??? (" << m_scope << ')';
     }
   }
 
@@ -492,13 +492,6 @@ static void PrivateAutoCompleteMembers(
     llvm::StringRef partial_path,
     const llvm::Twine
         &prefix_path, // Anything that has been resolved already will be in here
-    const CompilerType &compiler_type, CompletionRequest &request);
-
-static void PrivateAutoCompleteMembers(
-    StackFrame *frame, const std::string &partial_member_name,
-    llvm::StringRef partial_path,
-    const llvm::Twine
-        &prefix_path, // Anything that has been resolved already will be in here
     const CompilerType &compiler_type, CompletionRequest &request) {
 
   // We are in a type parsing child members
@@ -712,9 +705,9 @@ static void PrivateAutoComplete(
             if (!var_sp)
               continue;
 
-            const char *variable_name = var_sp->GetName().AsCString();
-            if (strstr(variable_name, token.c_str()) == variable_name) {
-              if (strcmp(variable_name, token.c_str()) == 0) {
+            llvm::StringRef variable_name = var_sp->GetName().GetStringRef();
+            if (variable_name.startswith(token)) {
+              if (variable_name == token) {
                 Type *variable_type = var_sp->GetType();
                 if (variable_type) {
                   CompilerType variable_compiler_type(

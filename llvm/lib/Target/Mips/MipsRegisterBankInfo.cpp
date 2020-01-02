@@ -451,6 +451,7 @@ MipsRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
   case G_LSHR:
   case G_BRINDIRECT:
   case G_VASTART:
+  case G_BSWAP:
     OperandsMapping = &Mips::ValueMappings[Mips::GPRIdx];
     break;
   case G_ADD:
@@ -651,8 +652,9 @@ void MipsRegisterBankInfo::setRegBank(MachineInstr &MI,
 static void
 combineAwayG_UNMERGE_VALUES(LegalizationArtifactCombiner &ArtCombiner,
                             MachineInstr &MI) {
+  SmallVector<Register, 4> UpdatedDefs;
   SmallVector<MachineInstr *, 2> DeadInstrs;
-  ArtCombiner.tryCombineMerges(MI, DeadInstrs);
+  ArtCombiner.tryCombineMerges(MI, DeadInstrs, UpdatedDefs);
   for (MachineInstr *DeadMI : DeadInstrs)
     DeadMI->eraseFromParent();
 }

@@ -1081,7 +1081,7 @@ bool SIInsertWaitcnts::generateWaitcntInstBefore(
           assert(II->getOpcode() == AMDGPU::S_WAITCNT_VSCNT);
           assert(II->getOperand(0).getReg() == AMDGPU::SGPR_NULL);
           ScoreBrackets.applyWaitcnt(
-              AMDGPU::Waitcnt(0, 0, 0, II->getOperand(1).getImm()));
+              AMDGPU::Waitcnt(~0u, ~0u, ~0u, II->getOperand(1).getImm()));
         }
       }
     }
@@ -1211,7 +1211,7 @@ void SIInsertWaitcnts::updateEventWaitcntAfter(MachineInstr &Inst,
       ScoreBrackets->updateByEvent(TII, TRI, MRI, LDS_ACCESS, Inst);
     }
   } else if (TII->isFLAT(Inst)) {
-    assert(Inst.mayLoad() || Inst.mayStore());
+    assert(Inst.mayLoadOrStore());
 
     if (TII->usesVM_CNT(Inst)) {
       if (!ST->hasVscnt())

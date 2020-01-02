@@ -3046,7 +3046,7 @@ bool Sema::checkTargetAttr(SourceLocation LiteralLoc, StringRef AttrStr) {
       return Diag(LiteralLoc, diag::warn_unsupported_target_attribute)
              << Unsupported << None << Str;
 
-  TargetAttr::ParsedTargetAttr ParsedAttrs = TargetAttr::parse(AttrStr);
+  ParsedTargetAttr ParsedAttrs = TargetAttr::parse(AttrStr);
 
   if (!ParsedAttrs.Architecture.empty() &&
       !Context.getTargetInfo().isValidCPUName(ParsedAttrs.Architecture))
@@ -5394,9 +5394,11 @@ UuidAttr *Sema::mergeUuidAttr(Decl *D, const AttributeCommonInfo &CI,
   if (const auto *UA = D->getAttr<UuidAttr>()) {
     if (UA->getGuid().equals_lower(Uuid))
       return nullptr;
-    Diag(UA->getLocation(), diag::err_mismatched_uuid);
-    Diag(CI.getLoc(), diag::note_previous_uuid);
-    D->dropAttr<UuidAttr>();
+    if (!UA->getGuid().empty()) {
+      Diag(UA->getLocation(), diag::err_mismatched_uuid);
+      Diag(CI.getLoc(), diag::note_previous_uuid);
+      D->dropAttr<UuidAttr>();
+    }
   }
 
   return ::new (Context) UuidAttr(Context, CI, Uuid);
@@ -5752,6 +5754,28 @@ static void handleBPFPreserveAccessIndexAttr(Sema &S, Decl *D,
   auto *Rec = cast<RecordDecl>(D);
   handleBPFPreserveAIRecord(S, Rec);
   Rec->addAttr(::new (S.Context) BPFPreserveAccessIndexAttr(S.Context, AL));
+}
+
+static void handleWebAssemblyExportNameAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  if (!isFunctionOrMethod(D)) {
+    S.Diag(D->getLocation(), diag::warn_attribute_wrong_decl_type)
+        << "'export_name'" << ExpectedFunction;
+    return;
+  }
+
+  auto *FD = cast<FunctionDecl>(D);
+  if (FD->isThisDeclarationADefinition()) {
+    S.Diag(D->getLocation(), diag::err_alias_is_definition) << FD << 0;
+    return;
+  }
+
+  StringRef Str;
+  SourceLocation ArgLoc;
+  if (!S.checkStringLiteralArgumentAttr(AL, 0, Str, &ArgLoc))
+    return;
+
+  D->addAttr(::new (S.Context) WebAssemblyExportNameAttr(S.Context, AL, Str));
+  D->addAttr(UsedAttr::CreateImplicit(S.Context));
 }
 
 static void handleWebAssemblyImportModuleAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
@@ -6412,6 +6436,45 @@ static void handleOpenCLAccessAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   D->addAttr(::new (S.Context) OpenCLAccessAttr(S.Context, AL));
 }
 
+static void handleSYCLKernelAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  // The 'sycl_kernel' attribute applies only to function templates.
+  const auto *FD = cast<FunctionDecl>(D);
+  const FunctionTemplateDecl *FT = FD->getDescribedFunctionTemplate();
+  assert(FT && "Function template is expected");
+
+  // Function template must have at least two template parameters.
+  const TemplateParameterList *TL = FT->getTemplateParameters();
+  if (TL->size() < 2) {
+    S.Diag(FT->getLocation(), diag::warn_sycl_kernel_num_of_template_params);
+    return;
+  }
+
+  // Template parameters must be typenames.
+  for (unsigned I = 0; I < 2; ++I) {
+    const NamedDecl *TParam = TL->getParam(I);
+    if (isa<NonTypeTemplateParmDecl>(TParam)) {
+      S.Diag(FT->getLocation(),
+             diag::warn_sycl_kernel_invalid_template_param_type);
+      return;
+    }
+  }
+
+  // Function must have at least one argument.
+  if (getFunctionOrMethodNumParams(D) != 1) {
+    S.Diag(FT->getLocation(), diag::warn_sycl_kernel_num_of_function_params);
+    return;
+  }
+
+  // Function must return void.
+  QualType RetTy = getFunctionOrMethodResultType(D);
+  if (!RetTy->isVoidType()) {
+    S.Diag(FT->getLocation(), diag::warn_sycl_kernel_return_type);
+    return;
+  }
+
+  handleSimpleAttribute<SYCLKernelAttr>(S, D, AL);
+}
+
 static void handleDestroyAttr(Sema &S, Decl *D, const ParsedAttr &A) {
   if (!cast<VarDecl>(D)->hasGlobalStorage()) {
     S.Diag(D->getLocation(), diag::err_destroy_attr_on_non_static_var)
@@ -6540,6 +6603,31 @@ static void handleMSAllocatorAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   handleSimpleAttribute<MSAllocatorAttr>(S, D, AL);
 }
 
+static void handeAcquireHandleAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  if (AL.isUsedAsTypeAttr())
+    return;
+  // Warn if the parameter is definitely not an output parameter.
+  if (const auto *PVD = dyn_cast<ParmVarDecl>(D)) {
+    if (PVD->getType()->isIntegerType()) {
+      S.Diag(AL.getLoc(), diag::err_attribute_output_parameter)
+          << AL.getRange();
+      return;
+    }
+  }
+  StringRef Argument;
+  if (!S.checkStringLiteralArgumentAttr(AL, 0, Argument))
+    return;
+  D->addAttr(AcquireHandleAttr::Create(S.Context, Argument, AL));
+}
+
+template<typename Attr>
+static void handleHandleAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  StringRef Argument;
+  if (!S.checkStringLiteralArgumentAttr(AL, 0, Argument))
+    return;
+  D->addAttr(Attr::Create(S.Context, Argument, AL));
+}
+
 //===----------------------------------------------------------------------===//
 // Top Level Sema Entry Points
 //===----------------------------------------------------------------------===//
@@ -6632,6 +6720,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case ParsedAttr::AT_BPFPreserveAccessIndex:
     handleBPFPreserveAccessIndexAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_WebAssemblyExportName:
+    handleWebAssemblyExportNameAttr(S, D, AL);
     break;
   case ParsedAttr::AT_WebAssemblyImportModule:
     handleWebAssemblyImportModuleAttr(S, D, AL);
@@ -6738,6 +6829,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case ParsedAttr::AT_Flatten:
     handleSimpleAttribute<FlattenAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_SYCLKernel:
+    handleSYCLKernelAttr(S, D, AL);
     break;
   case ParsedAttr::AT_Format:
     handleFormatAttr(S, D, AL);
@@ -7310,6 +7404,18 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
 
   case ParsedAttr::AT_ArmMveAlias:
     handleArmMveAliasAttr(S, D, AL);
+    break;
+
+  case ParsedAttr::AT_AcquireHandle:
+    handeAcquireHandleAttr(S, D, AL);
+    break;
+
+  case ParsedAttr::AT_ReleaseHandle:
+    handleHandleAttr<ReleaseHandleAttr>(S, D, AL);
+    break;
+
+  case ParsedAttr::AT_UseHandle:
+    handleHandleAttr<UseHandleAttr>(S, D, AL);
     break;
   }
 }
