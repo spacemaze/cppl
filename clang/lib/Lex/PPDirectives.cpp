@@ -2269,6 +2269,13 @@ void Preprocessor::HandleIncludeNextDirective(SourceLocation HashLoc,
 // ============================================================================
 // C++ Levitation
 
+void Preprocessor::setLevitationKeepComments(bool value) {
+  assert(CurLexerKind == CLK_Lexer || CurLexerKind == CLK_CachingLexer);
+  if (CurLexer->isKeepWhitespaceMode())
+    return;
+  CurLexer->SetCommentRetentionState(value);
+}
+
 /// Handles C++ Levitation #import directive
 ///
 /// Syntax is as follows:

@@ -18,6 +18,44 @@
 #include "clang/Sema/Scope.h"
 using namespace clang;
 
+template <
+    typename ConsumeTokenF,
+    typename ConsumeAndStoreFunctionPrologueF,
+    typename SkipMalformedDefF,
+    typename SkipUntil2F
+>
+void levitationSkipFunctionBodyUntilComment(
+    const Token &Tok,
+    Preprocessor &PP,
+    ConsumeTokenF &&consumeToken,
+    ConsumeAndStoreFunctionPrologueF &&consumeAndStoreFunctionPrologue,
+    SkipMalformedDefF &&skipMalformedDecl,
+    SkipUntil2F &&skipUntil
+) {
+  PP.setLevitationKeepComments(true);
+  auto RestoreComments = llvm::make_scope_exit([&] {PP.setLevitationKeepComments(false);});
+
+  if (Tok.is(tok::equal)) {
+    skipUntil(tok::comment, tok::semi);
+    return;
+  }
+
+  bool IsFunctionTryBlock = Tok.is(tok::kw_try);
+  if (IsFunctionTryBlock)
+    consumeToken();
+
+  CachedTokens Skipped;
+  if (consumeAndStoreFunctionPrologue(Skipped))
+    skipMalformedDecl();
+  else {
+    skipUntil(tok::comment, tok::r_brace);
+    while (IsFunctionTryBlock && Tok.is(tok::kw_catch)) {
+      skipUntil(tok::comment, tok::l_brace);
+      skipUntil(tok::comment, tok::r_brace);
+    }
+  }
+}
+
 /// ParseCXXInlineMethodDef - We parsed and verified that the specified
 /// Declarator is a well formed C++ inline method definition. Now lex its body
 /// and store its tokens for parsing after the C++ class is complete.
@@ -124,24 +162,37 @@ NamedDecl *Parser::ParseCXXInlineMethodDef(
 
   if (SkipFunctionBodies &&
       !LevitationInlineFunction &&
-      (!FnD || Actions.canSkipFunctionBody(FnD))
+      (!FnD || Actions.canSkipFunctionBody(FnD)) &&
+      !PP.isCodeCompletionEnabled()
   ) {
     // C++ Levitation: keep track of skipped source fragments, start
     SourceLocation LevitationStartSkip = Tok.getLocation();
 
-    if (trySkippingFunctionBody()) {
-      Actions.ActOnSkippedFunctionBody(FnD);
+    levitationSkipFunctionBodyUntilComment(
+        Tok,
+        PP,
+        [&] { ConsumeToken(); },
+        [&](CachedTokens &Toks) { return ConsumeAndStoreFunctionPrologue(Toks); },
+        [&] { SkipMalformedDecl(); },
+        [&](tok::TokenKind Tok1, tok::TokenKind Tok2) { SkipUntil(Tok1, Tok2); }
+    );
 
-      // C++ Levitation: keep track of skipped source fragments, end
-      Actions.levitationAddSkippedSourceFragment(
-          LevitationStartSkip, Tok.getLocation(),
-          // We keep prototype, and thus should burn stripped part with ';'
-          // set replaceWithSemicolon = true
-          true
-      );
+    SourceLocation EndLoc = Tok.getLocation();
 
-      return FnD;
-    }
+    if (Tok.is(tok::comment))
+      ConsumeToken();
+
+    Actions.ActOnSkippedFunctionBody(FnD);
+
+    // C++ Levitation: keep track of skipped source fragments, end
+    Actions.levitationAddSkippedSourceFragment(
+        LevitationStartSkip, EndLoc,
+        // We keep prototype, and thus should burn stripped part with ';'
+        // set replaceWithSemicolon = true
+        true
+    );
+
+    return FnD;
   }
 #endif
 

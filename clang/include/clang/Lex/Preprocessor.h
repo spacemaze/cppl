@@ -2256,6 +2256,8 @@ private:
   );
 
 public:
+  void setLevitationKeepComments(bool value);
+
   void HandleLevitationImportDirective(SourceLocation HashLoc, Token &Tok);
   void HandleLevitationPublicDirective(SourceLocation HashLoc, Token &Tok);
   const PPLevitationDepsVector& getLevitationDeclDeps() const;

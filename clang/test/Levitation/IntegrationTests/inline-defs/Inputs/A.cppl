@@ -18,6 +18,7 @@ namespace Inputs {
   class A {
   public:
     static int thisSkip() { return 1111; }
+    // some comment here
     static int protoKeepDefSkip();
     int keepThisInit = 77777;
     // static int staticField[];

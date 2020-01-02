@@ -1,0 +1,72 @@
+// RUN: cppl -root=%S -buildRoot=%T -lit -c --verbose
+// RUN: FileCheck -input-file=%T/include/A.h %s
+
+// TESTS-NOTE: we have a bit weird check directives here.
+// we include a regexp in the beginning.
+// We have to do it, because we check that header generator prevent comments
+// from stripping, and thus all check directives will go into file we're about to check.
+// So we must make FileCheck to to check its own directives.
+
+// CHECK-NOT: {{^\s*[^/]*}}#public
+#public
+
+// CHECK: {{^\s*[^/]*}}#include "Inputs/Dep.h"
+#import Inputs::Dep
+
+namespace Inputs {
+  class A {
+  public:
+    // CHECK-NOT: {{^\s*[^/]*}} return 1111;
+    static int thisSkip() { return 1111; }
+
+    // CHECK: {{^\s*[^/]*}} // Some comment
+    // Some comment
+
+    // CHECK: {{^\s*[^/]*}} protoKeepDefSkip
+
+    static int protoKeepDefSkip();
+    // CHECK: {{^\s*[^/]*}} int keepThisInit = 77777;
+    int keepThisInit = 77777;
+
+    static int staticField;
+    static int staticField2[];
+  };
+
+  template <typename T>
+  class AA {
+  public:
+    // CHECK: {{^\s*[^/]*}} return 5555;
+    static int thisLeave() { return 5555; }
+
+    // CHECK: {{^\s*[^/]*}} int keepThisInit = 88888;
+    int keepThisInit = 88888;
+    static int staticField3;
+  };
+
+  // CHECK-NOT: {{^\s*[^/]*}} return 11112222
+  int A::protoKeepDefSkip() {
+    return 11112222;
+  }
+
+  // CHECK-NOT: {{^\s*[^/]*}} return 11111;
+  int thisSkipToo() { return 11111; }
+
+  // CHECK: {{^\s*[^/]*}} static int andThisInitKeepToo = 777777;
+  static int andThisInitKeepToo = 777777;
+
+  // CHECK: {{^\s*[^/]*}} extern int m,
+  // CHECK: {{^\s*[^/]*}} c, d, Pe;
+
+  int m = 123, A::staticField2[] = {1, 2, 3},
+  c, d = 123, Pe;
+
+  // CHECK-NOT: {{^\s*[^/]*}} A::staticField = 234;
+  int A::staticField = 123;
+
+  // CHECK: {{^\s*[^/]*}}::staticField3
+  template<typename T>
+  int AA<T>::staticField3 = 235;
+
+  // CHECK: {{^\s*[^/]*}} keepExtern
+  extern int keepExtern;
+}
