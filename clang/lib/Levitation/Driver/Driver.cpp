@@ -29,9 +29,11 @@
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
 
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Program.h"
 #include "llvm/ADT/None.h"
 
+#include <algorithm>
 #include <memory>
 #include <system_error>
 #include <utility>
@@ -79,6 +81,8 @@ namespace {
 
     std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
 
+    DependenciesGraph::NodesSet UpdatedNodes;
+
     RunContext(LevitationDriver &driver)
     : Driver(driver)
     {}
@@ -113,6 +117,8 @@ public:
 
   void collectSources();
 
+private:
+
   void addMainFileInfo();
 
   bool processDependencyNodeDeprecated(
@@ -128,7 +134,12 @@ public:
 
   bool processDefinition(const DependenciesGraph::Node &N);
 
-  bool processDeclaration(const DependenciesGraph::Node &N);
+  bool processDeclaration(
+      HashRef ExistingMeta,
+      const DependenciesGraph::Node &N
+  );
+
+  bool isUpToDate(DeclASTMeta &Meta, const DependenciesGraph::Node &N);
 
   const FilesInfo& getFilesInfoFor(
       const DependenciesGraph::Node &N
@@ -1348,9 +1359,13 @@ void LevitationDriverImpl::collectSources() {
 bool LevitationDriverImpl::processDependencyNode(
     const DependenciesGraph::Node &N
 ) {
+  DeclASTMeta ExistingMeta;
+  if (isUpToDate(ExistingMeta, N))
+    return true;
+
   switch (N.Kind) {
     case DependenciesGraph::NodeKind::Declaration:
-      return processDeclaration(N);
+      return processDeclaration(ExistingMeta.getDeclASTHash(), N);
     case DependenciesGraph::NodeKind::Definition: {
       return processDefinition(N);
     }
@@ -1440,25 +1455,24 @@ bool LevitationDriverImpl::processDefinition(
 }
 
 bool LevitationDriverImpl::processDeclaration(
+    HashRef OldDeclASTHash,
     const DependenciesGraph::Node &N
 ) {
-
   const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
   const auto &Files = getFilesInfoFor(N);
   Paths fullDependencies = getFullDependencies(N, Graph);
 
   bool NeedDeclAST = true;
 
-  // TODO Levitation: need #public directive to handle this part
-#if 0
-  if (N.DependentNodes.empty()) {
+  if (N.DependentNodes.empty() && !Graph.isPublic(N.ID)) {
     auto &Verbose = Log.verbose();
-    Verbose << "Skip building unused declaration for ";
+    Verbose << "TODO: Skip building unused declaration for ";
     Graph.dumpNodeShort(Verbose, N.ID, Strings);
     Verbose << "\n";
-    NeedDeclAST = false;
+
+    // TODO Levitation: see #48
+    // NeedDeclAST = false;
   }
-#endif
 
   // TODO Levitation: MD5 check
   // 1. DeclASTMeta MetaOld = DeclASTMetaLoader::fromFile(Files.SkippedBytes);
@@ -1496,7 +1510,7 @@ bool LevitationDriverImpl::processDeclaration(
   ))
     return false;
 
-  return HeaderGenerator(
+  bool HeaderGenerated = HeaderGenerator(
       Files.Header,
       Files.Source,
       N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
@@ -1506,6 +1520,63 @@ bool LevitationDriverImpl::processDeclaration(
       Context.Driver.DryRun
   )
   .execute();
+
+  // Mark that node was updated, if it was updated
+
+  if (!equal(OldDeclASTHash, Meta.getDeclASTHash()))
+    Context.UpdatedNodes.insert(N.ID);
+
+  auto &Verbose = Log.verbose();
+  Verbose << "Node ";
+  Graph.dumpNodeShort(Verbose, N.ID, Strings);
+  Verbose << " is up-to-date.\n";
+
+  return HeaderGenerated;
+}
+
+bool LevitationDriverImpl::isUpToDate(
+    DeclASTMeta &Meta,
+    const DependenciesGraph::Node &N
+) {
+  for (auto D : N.Dependencies)
+    if (Context.UpdatedNodes.count(D))
+      return false;
+
+  const auto &Files = getFilesInfoFor(N);
+
+  if (!llvm::sys::fs::exists(Files.SkippedBytes))
+    return false;
+
+  if (!DeclASTMetaLoader::fromFile(
+      Meta, Context.Driver.BuildRoot, Files.SkippedBytes
+  )) {
+    Log.warning()
+    << "Failed to load existing meta file for '"
+    << Files.Source << "'\n"
+    << "  Must rebuild dependent chains.";
+    return false;
+  }
+
+  // Get source MD5
+
+  auto &FM = CreatableSingleton<FileManager>::get();
+
+  if (auto Buffer = FM.getBufferForFile(Files.Source)) {
+    auto SrcMD5 = calcMD5(Buffer->get()->getBuffer());
+    bool Res = equal(Meta.getSourceHash(), SrcMD5.Bytes);
+    if (Res) {
+      const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
+      auto &Verbose = Log.verbose();
+      Verbose << "Source  for node ";
+      Graph.dumpNodeShort(Verbose, N.ID, Strings);
+      Verbose << " is up-to-date.\n";
+    }
+  } else
+     Log.warning()
+    << "Failed to load source '"
+    << Files.Source << "' during up-to-date checks.\n"
+    << "  Must rebuild dependent chains. But I think I'll fail, dude...";
+    return false;
 }
 
 // TODO Levitation: Deprecated

@@ -36,8 +36,8 @@ namespace clang { namespace levitation {
 
   private:
 
-    llvm::SmallVector<uint8_t, 16> SourceHash;
-    llvm::SmallVector<uint8_t, 16> DeclASTHash;
+    HashVectorTy SourceHash;
+    HashVectorTy DeclASTHash;
     FragmentsVectorTy FragmentsToSkip;
 
   public:
@@ -45,8 +45,8 @@ namespace clang { namespace levitation {
     DeclASTMeta() = default;
 
     DeclASTMeta(
-        llvm::ArrayRef<uint8_t> sourceHash,
-        llvm::ArrayRef<uint8_t> declASTHash,
+        HashRef sourceHash,
+        HashRef declASTHash,
         const FragmentsVectorTy &skippedBytes
     )
     : SourceHash(sourceHash.begin(), sourceHash.end()),
@@ -57,11 +57,11 @@ namespace clang { namespace levitation {
       return FragmentsToSkip;
     }
 
-    const llvm::SmallVector<uint8_t, 16> &getSourceHash() const {
+    const HashVectorTy &getSourceHash() const {
       return SourceHash;
     }
 
-    const llvm::SmallVector<uint8_t, 16> &getDeclASTHash() const {
+    const HashVectorTy &getDeclASTHash() const {
       return DeclASTHash;
     }
 

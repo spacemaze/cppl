@@ -25,6 +25,7 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Levitation/Common/File.h"
 #include "clang/Levitation/Common/Path.h"
+#include "clang/Levitation/Common/Utility.h"
 #include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/FileExtensions.h"
@@ -32,7 +33,6 @@
 #include "clang/Lex/Preprocessor.h"
 
 #include "llvm/Bitstream/BitstreamWriter.h"
-#include "llvm/Support/MD5.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
@@ -306,15 +306,6 @@ namespace {
       );
 
       return ArrayRef<DestT>((const DestT*)arr.data(), DestArrSize);
-    }
-
-    template<typename BuffT>
-    static MD5::MD5Result calcMD5(BuffT Buff) {
-      MD5 Md5Builder;
-      Md5Builder.update(Buff);
-      MD5::MD5Result Result;
-      Md5Builder.final(Result);
-      return Result;
     }
 
     bool hasErrors() const {

@@ -18,12 +18,31 @@
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/MD5.h"
+
+#include <algorithm>
 
 namespace clang { namespace levitation {
 
+typedef llvm::ArrayRef<uint8_t> HashRef;
+typedef llvm::SmallVector<uint8_t, 16> HashVectorTy;
+
 typedef std::pair<size_t, size_t> RangeTy;
 typedef llvm::SmallVector<RangeTy, 64> RangesVector;
+
+template<typename BuffT>
+static llvm::MD5::MD5Result calcMD5(BuffT Buff) {
+  llvm::MD5 Md5Builder;
+  Md5Builder.update(Buff);
+  llvm::MD5::MD5Result Result;
+  Md5Builder.final(Result);
+  return Result;
+}
+
+template <typename ArrLeftT, typename ArrRightT>
+bool equal(const ArrLeftT &L, const ArrRightT &R) {
+  return std::equal(L.begin(), L.end(), R.begin(), R.end());
+}
 
 }}
 
