@@ -159,11 +159,17 @@ NamedDecl *Parser::ParseCXXInlineMethodDef(
     return FnD;
   }
 #else
-
-  if (SkipFunctionBodies &&
-      !LevitationInlineFunction &&
-      (!FnD || Actions.canSkipFunctionBody(FnD)) &&
-      !PP.isCodeCompletionEnabled()
+  if (!Actions.isLevitationMode(
+      LangOptions::LBSK_BuildDeclAST, LangOptions::LBSK_BuildPreamble
+  )) {
+    if (SkipFunctionBodies && (!FnD || Actions.canSkipFunctionBody(FnD)) &&
+          trySkippingFunctionBody()) {
+      Actions.ActOnSkippedFunctionBody(FnD);
+      return FnD;
+    }
+  } else if (
+      !LevitationInlineFunction && (!FnD || Actions.canSkipFunctionBody(FnD)) &&
+      !PP.isCodeCompletionEnabled() /* here we expand trySkippingFunctionBody */
   ) {
     // C++ Levitation: keep track of skipped source fragments, start
     SourceLocation LevitationStartSkip = Tok.getLocation();
@@ -185,12 +191,14 @@ NamedDecl *Parser::ParseCXXInlineMethodDef(
     Actions.ActOnSkippedFunctionBody(FnD);
 
     // C++ Levitation: keep track of skipped source fragments, end
-    Actions.levitationAddSkippedSourceFragment(
-        LevitationStartSkip, EndLoc,
-        // We keep prototype, and thus should burn stripped part with ';'
-        // set replaceWithSemicolon = true
-        true
-    );
+    if (Actions.isLevitationMode(LangOptions::LBSK_BuildDeclAST)) {
+      Actions.levitationAddSkippedSourceFragment(
+          LevitationStartSkip, EndLoc,
+          // We keep prototype, and thus should burn stripped part with ';'
+          // set replaceWithSemicolon = true
+          true
+      );
+    }
 
     return FnD;
   }

@@ -1314,8 +1314,22 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
     return Actions.ActOnFinishFunctionBody(Res, nullptr, false);
   }
 #else
-  // Levitation code:
-  if (SkipFunctionBodies && (!Res || Actions.canSkipFunctionBody(Res))) {
+  if (!Actions.isLevitationMode(
+      LangOptions::LBSK_BuildDeclAST, LangOptions::LBSK_BuildPreamble
+  )) {
+
+    // Legacy with no changes
+
+    if (SkipFunctionBodies && (!Res || Actions.canSkipFunctionBody(Res)) &&
+    trySkippingFunctionBody()) {
+      BodyScope.Exit();
+      Actions.ActOnSkippedFunctionBody(Res);
+      return Actions.ActOnFinishFunctionBody(Res, nullptr, false);
+    }
+  } else if (!Res || Actions.canSkipFunctionBody(Res)) {
+
+    // Levitation altered
+
     SourceLocation SkipStart;
     bool BurnWithSemicolon = false;
     if (Res) {

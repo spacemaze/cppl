@@ -156,12 +156,11 @@ void Sema::levitationAddSkippedSourceFragment(
   auto StartSLoc = getSourceManager().getDecomposedLoc(Start);
   auto EndSLoc = getSourceManager().getDecomposedLoc(End);
 
-  auto MainFileID = getSourceManager().getMainFileID();
-  assert(
-      StartSLoc.first == MainFileID &&
-      EndSLoc.first == MainFileID &&
-      "Skipped fragment can only be a part of main file."
-  );
+  if(
+    !getSourceManager().isInMainFile(Start) ||
+    !getSourceManager().isInMainFile(End)
+  )
+    return;
 
   if (LevitationSkippedFragments.size()) {
     auto &Last = LevitationSkippedFragments.back();

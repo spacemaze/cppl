@@ -13,6 +13,9 @@
 // CHECK: {{^\s*[^/]*}}#include "Inputs/Dep.h"
 #import Inputs::Dep
 
+// CHECK-NOT: {{^\s*[^/]*}} int a = 123123;
+#include "Inputs/IncludedPart.h"
+
 namespace Inputs {
   class A {
   public:

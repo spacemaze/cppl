@@ -1,3 +1,7 @@
+
+// CHECK-NOT: int a = 123123
+#include "IncludedPart.h"
+
 // CHECK-NOT: int a = 1
 // CHECK: int b = 55;
 // CHECK: int keepThisInit = 777;
