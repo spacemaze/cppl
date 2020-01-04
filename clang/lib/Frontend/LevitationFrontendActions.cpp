@@ -137,7 +137,6 @@ void CreateMetaWrapper(
 
   StringRef OutFile = CI.getCurrentOutputFilePath();
 
-  // TODO Levitation
   assert(OutFile.size());
 
   if (auto OutBufferRes = FM.getBufferForFile(OutFile)) {
