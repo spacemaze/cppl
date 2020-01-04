@@ -2213,16 +2213,17 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
     } else {
 
       // If declaration group is not empty, then it contains
-      // only global variables declarations. For corresponent headers
-      // we should add 'extern' keywords.
+      // only global variables declarations or typedefs.
+      // For corresponent headers we should add 'extern' keywords.
 
-      auto *Var = cast<VarDecl>(DeclsInGroup[0]);
-      if (
-        Var->getStorageClass() != StorageClass::SC_Extern &&
-        Var->getStorageClass() != StorageClass::SC_Static &&
-        Var->getDeclContext()->isFileContext()
-      )
-        Actions.levitationInsertExternForHeader(GroupBegin);
+      if (auto *Var = dyn_cast<VarDecl>(DeclsInGroup[0])) {
+        if (
+            Var->getStorageClass() != StorageClass::SC_Extern &&
+            Var->getStorageClass() != StorageClass::SC_Static &&
+            Var->getDeclContext()->isFileContext()
+            )
+          Actions.levitationInsertExternForHeader(GroupBegin);
+      }
     }
   }
   // end of C++ Levitation

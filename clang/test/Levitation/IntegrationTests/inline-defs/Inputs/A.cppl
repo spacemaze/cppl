@@ -49,4 +49,7 @@ namespace Inputs {
   template<typename T>
   int AA<T>::staticField = 234;
   extern int keepExtern;
+
+  // CHECK: my_int_t
+  typedef int my_int_t
 }
