@@ -1,3 +1,4 @@
+// RUN: rm -Rf %T/*
 // RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
 // RUN:    --verbose | FileCheck %s
 // RUN: %T/a.out
