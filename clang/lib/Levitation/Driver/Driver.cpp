@@ -1571,6 +1571,7 @@ bool LevitationDriverImpl::isUpToDate(
       Graph.dumpNodeShort(Verbose, N.ID, Strings);
       Verbose << " is up-to-date.\n";
     }
+    return Res;
   } else
      Log.warning()
     << "Failed to load source '"
