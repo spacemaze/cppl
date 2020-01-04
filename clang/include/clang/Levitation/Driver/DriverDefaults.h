@@ -28,6 +28,7 @@ namespace clang { namespace levitation { namespace tools {
       static constexpr char OUTPUT_EXECUTABLE [] = "a.out";
       static constexpr char OUTPUT_OBJECTS_DIR [] = "a.dir";
       static constexpr char PREAMBLE_OUT [] = "preamble.pch";
+      static constexpr char PREAMBLE_OUT_META [] = "preamble.meta";
   };
 }}}
 

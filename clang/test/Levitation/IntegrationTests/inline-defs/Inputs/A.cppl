@@ -51,5 +51,5 @@ namespace Inputs {
   extern int keepExtern;
 
   // CHECK: my_int_t
-  typedef int my_int_t
+  typedef int my_int_t;
 }

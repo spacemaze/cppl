@@ -3586,6 +3586,10 @@ static void parseLevitationBuildPreambleArgs(
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-flevitation-build-decl" << Stage;
   }
+  if (FrontendOpts.LevitationDeclASTMeta.empty()) {
+    Diags.Report(diag::err_fe_levitation_missed_option)
+    << "-levitation-decl-ast-meta" << Stage;
+  }
 
   LangOpts.LevitationMode = 1;
 
@@ -3631,10 +3635,7 @@ static void parseLevitationBuildObjectArgs(
     Diags.Report(diag::err_fe_levitation_wrong_option)
             << "-flevitation-build-decl" << Stage;
   }
-  if (
-    FrontendOpts.LevitationBuildDeclaration &&
-    FrontendOpts.LevitationDeclASTMeta.empty()
-  ) {
+  if (FrontendOpts.LevitationDeclASTMeta.empty()) {
     Diags.Report(diag::err_fe_levitation_missed_option)
     << "-levitation-decl-ast-meta" << Stage;
   }

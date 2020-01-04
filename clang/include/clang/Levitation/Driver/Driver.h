@@ -41,6 +41,7 @@ namespace clang { namespace levitation { namespace tools {
 
     llvm::StringRef PreambleSource;
     levitation::SinglePath PreambleOutput;
+    levitation::SinglePath PreambleOutputMeta;
 
     int JobsNumber = DriverDefaults::JOBS_NUMBER;
 

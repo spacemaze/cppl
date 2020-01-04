@@ -20,7 +20,9 @@
 #include "clang/Frontend/Utils.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/DeserializationListeners.h"
+#include "clang/Levitation/Common/File.h"
 #include "clang/Levitation/Common/WithOperator.h"
+#include "clang/Levitation/Serialization.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"
@@ -84,12 +86,90 @@ public:
     return *this;
   }
 
-  std::unique_ptr<MultiplexConsumer> done() {
-    return Successful ?
-        std::make_unique<MultiplexConsumer>(std::move(Consumers)) :
-        nullptr;
+  std::unique_ptr<ASTConsumer> done() {
+    if (!Successful)
+      return nullptr;
+
+    if (Consumers.size() == 1)
+      return std::move(Consumers[0]);
+
+    return std::make_unique<MultiplexConsumer>(std::move(Consumers));
   }
 };
+
+void diagMetaFileIOIssues(
+    DiagnosticsEngine &Diag,
+    levitation::File::StatusEnum status
+) {
+  switch (status) {
+    case levitation::File::HasStreamErrors:
+      Diag.Report(diag::err_fe_levitation_decl_ast_meta_file_io_troubles);
+      break;
+    case levitation::File::FiledToRename:
+    case levitation::File::FailedToCreateTempFile:
+      Diag.Report(diag::err_fe_levitation_decl_ast_meta_failed_to_create);
+      break;
+    default:
+      break;
+  }
+}
+
+template <typename EndSourceFileActionF>
+void CreateMetaWrapper(
+    FrontendAction &Action, EndSourceFileActionF &&EndSourceFileParentAction
+) {
+    // Remember everything we need for pos-processing.
+  // After FrontendAction::EndSourceFile()
+  // Compiler invocation and Sema will be destroyed.
+  // Only SourceManager and FileManager remain.
+
+  auto &CI = Action.getCompilerInstance();
+  StringRef MetaOut = CI.getFrontendOpts().LevitationDeclASTMeta;
+  auto &SM = CI.getSourceManager();
+  auto &FM = SM.getFileManager();
+  auto &Diag = CI.getDiagnostics();
+  auto SkippedSrcFragments = CI.getSema().levitationGetSourceFragments();
+
+  EndSourceFileParentAction();
+
+  auto SrcBuffer = SM.getBufferData(SM.getMainFileID());
+  std::unique_ptr<llvm::MemoryBuffer> OutBuffer;
+
+  StringRef OutFile = CI.getCurrentOutputFilePath();
+
+  // TODO Levitation
+  assert(OutFile.size());
+
+  if (auto OutBufferRes = FM.getBufferForFile(OutFile)) {
+    OutBuffer = std::move(OutBufferRes.get());
+  } else {
+    Diag.Report(diag::err_fe_levitation_decl_ast_meta_failed_to_create)
+    << OutFile;
+    return;
+  }
+
+  auto SourceMD5 = levitation::calcMD5(SrcBuffer);
+  auto OutputMD5 = levitation::calcMD5(OutBuffer->getBuffer());
+
+  levitation::DeclASTMeta Meta(
+    SourceMD5.Bytes,
+    OutputMD5.Bytes,
+    SkippedSrcFragments
+  );
+
+  assert(MetaOut.size());
+  levitation::File F(MetaOut);
+
+  if (auto OpenedFile = F.open()) {
+    auto Writer = levitation::CreateMetaBitstreamWriter(OpenedFile.getOutputStream());
+    Writer->writeAndFinalize(Meta);
+  }
+
+  if (F.hasErrors()) {
+    diagMetaFileIOIssues(Diag, F.getStatus());
+    return;
+  }
+}
 
 } // end of anonymous namespace
 
@@ -262,7 +342,13 @@ private:
   }
 };
 
+void LevitationBuildPreambleAction::EndSourceFileAction() {
+  CreateMetaWrapper(*this, [&] { GeneratePCHAction::EndSourceFileAction(); });
+}
 } // end of namespace clang
+
+//==============================================================================
+// Frontend Actions
 
 std::unique_ptr<ASTConsumer> LevitationParseImportAction::CreateASTConsumer(
     clang::CompilerInstance &CI,
@@ -462,8 +548,8 @@ LevitationBuildObjectAction::createASTConsumerInternal(
   std::unique_ptr<ASTConsumer> AstPrinter;
 
   if (CI.getFrontendOpts().LevitationASTPrint) {
-    if (std::unique_ptr<raw_ostream> OS =
-        CI.createDefaultOutputFile(false, "-"))
+    std::error_code EC;
+    std::unique_ptr<raw_ostream> OS(new llvm::raw_fd_ostream("-", EC));
       AstPrinter = CreateASTPrinter(std::move(OS), CI.getFrontendOpts().ASTDumpFilter);
   }
 
@@ -471,4 +557,8 @@ LevitationBuildObjectAction::createASTConsumerInternal(
     .addRequired(std::move(AdoptedConsumer))
     .addOptional(std::move(AstPrinter))
   .done();
+}
+
+void LevitationBuildObjectAction::EndSourceFileAction() {
+  CreateMetaWrapper(*this, [&] { ASTMergeAction::EndSourceFileAction(); });
 }

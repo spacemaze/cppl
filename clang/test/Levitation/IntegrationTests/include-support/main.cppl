@@ -8,9 +8,9 @@
 // Building declaration 'Inputs/A'...
 // RUN:  %clang -cc1 -std=c++17 -xc++ -flevitation-build-decl -emit-pch %S/Inputs/A.cppl -levitation-decl-ast-meta=%T/Inputs_A.decl-ast-meta -o %T/Inputs_A.decl-ast
 // Building object 'Inputs/A'...
-// RUN:  %clang -cc1 -std=c++17 -xc++ -flevitation-build-object -emit-obj %S/Inputs/A.cppl -o %T/Inputs_A.o
+// RUN:  %clang -cc1 -std=c++17 -xc++ -flevitation-build-object -emit-obj %S/Inputs/A.cppl -levitation-decl-ast-meta=%T/Inputs_A.decl-ast-meta -o %T/Inputs_A.o
 // Building object 'main'...
-// RUN:  %clang -cc1 -std=c++17 -xc++ -flevitation-build-object -levitation-dependency=%T/Inputs_A.decl-ast -emit-obj %S/main.cppl -o %T/main.o
+// RUN:  %clang -cc1 -std=c++17 -xc++ -flevitation-build-object -levitation-dependency=%T/Inputs_A.decl-ast -emit-obj %S/main.cppl -levitation-decl-ast-meta=%T/Inputs_A.decl-ast-meta -o %T/main.o
 // RUN:  %clangxx %T/main.o %T/Inputs_A.o -o %T/app.out
 // RUN:  %T/app.out
 #import Inputs::A

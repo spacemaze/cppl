@@ -243,101 +243,6 @@ namespace {
     }
   };
 
-  class DeclASTMetaGenerator : public SemaObjHolderConsumer {
-    const CompilerInstance &CI;
-
-    // Note, even though we can use PCHBuffer::Signature field,
-    // we still ask for whole buffer. Perhaps we would
-    // calc own signature in future.
-    std::shared_ptr<PCHBuffer> Buffer;
-  public:
-    DeclASTMetaGenerator(
-        const CompilerInstance &ci,
-        std::shared_ptr<PCHBuffer> buffer
-    )
-    : CI(ci),
-      Buffer(buffer)
-    {}
-
-    void HandleTranslationUnit(ASTContext &Ctx) override {
-
-      if (hasErrors())
-        return;
-
-      const auto &SM = SemaObj->getSourceManager();
-      auto SourceMD5 = calcMD5(SM.getBufferData(SM.getMainFileID()));
-
-      levitation::DeclASTMeta Meta(
-        SourceMD5.Bytes,
-        arr_cast<uint8_t>(Buffer->Signature),
-        SemaObj->levitationGetSourceFragments()
-      );
-
-      // LevitationDeclASTMeta should not be empty.
-      assert(CI.getFrontendOpts().LevitationDeclASTMeta.size());
-      File F(CI.getFrontendOpts().LevitationDeclASTMeta);
-
-      if (auto OpenedFile = F.open()) {
-        auto Writer = CreateMetaBitstreamWriter(OpenedFile.getOutputStream());
-        Writer->writeAndFinalize(Meta);
-      }
-
-      if (F.hasErrors()) {
-        diagMetaFileIOIssues(F.getStatus());
-        return;
-      }
-    }
-
-  private:
-
-    template <typename DestT, typename SrcCollectionT>
-    static const ArrayRef<DestT> arr_cast(const SrcCollectionT &arr) {
-
-      constexpr auto SrcItemSize = sizeof(decltype(
-          std::declval<SrcCollectionT>()[0]
-      ));
-      constexpr auto DestItemSize = sizeof(DestT);
-      auto SrcBytes = SrcItemSize * arr.size();
-      auto DestArrSize = SrcBytes / DestItemSize;
-
-      assert(
-          DestArrSize && (SrcBytes % DestItemSize == 0) &&
-          "There should be no unused bytes in dest array"
-      );
-
-      return ArrayRef<DestT>((const DestT*)arr.data(), DestArrSize);
-    }
-
-    bool hasErrors() const {
-
-      const auto &PP = CI.getPreprocessor();
-
-      // Don't create a PCH if there were fatal failures during module loading.
-      if (PP.getModuleLoader().HadFatalFailure)
-        return true;
-
-      if (PP.getDiagnostics().hasErrorOccurred())
-        return true;
-
-      return false;
-    }
-
-    void diagMetaFileIOIssues(File::StatusEnum status) {
-      auto &Diag = SemaObj->getDiagnostics();
-      switch (status) {
-        case File::HasStreamErrors:
-          Diag.Report(diag::err_fe_levitation_decl_ast_meta_file_io_troubles);
-          break;
-        case File::FiledToRename:
-        case File::FailedToCreateTempFile:
-          Diag.Report(diag::err_fe_levitation_decl_ast_meta_failed_to_create);
-          break;
-        default:
-          break;
-      }
-    }
-  };
-
 } // end anonymous namespace
 
 namespace clang { namespace levitation {
@@ -355,16 +260,6 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
   );
 
   return std::make_unique<ASTDependenciesProcessor>(CI, std::move(InFileRel));
-}
-
-std::unique_ptr<ASTConsumer> CreateDeclASTMetaGenerator(
-    const CompilerInstance &CI,
-    std::shared_ptr<PCHBuffer> Buffer
-) {
-  if (CI.getFrontendOpts().LevitationDeclASTMeta.empty())
-    return nullptr;
-
-  return std::make_unique<DeclASTMetaGenerator>(CI, Buffer);
 }
 
 }}

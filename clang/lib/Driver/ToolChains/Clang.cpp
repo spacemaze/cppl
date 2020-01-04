@@ -3796,6 +3796,21 @@ void levitationParseIncludeDeps(
   }
 }
 
+void levitationSetMeta(
+    const Driver &D, ArgStringList &CmdArgs, const ArgList &Args
+) {
+  StringRef DeclASTMeta = Args.getLastArgValue(options::OPT_cppl_meta_EQ);
+
+  if (DeclASTMeta.empty())
+    D.Diag(diag::err_drv_missed_cppl_value)
+        << "-cppl-meta="
+        << "PARSE";
+
+  CmdArgs.push_back(Args.MakeArgString(
+      Twine("-levitation-decl-ast-meta=") + DeclASTMeta
+  ));
+}
+
 void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                          const InputInfo &Output, const InputInfoList &Inputs,
                          const ArgList &Args, const char *LinkingOutput) const {
@@ -4006,6 +4021,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
       levitationParseIncludePreamble(CmdArgs, Args);
       levitationParseIncludeDeps(CmdArgs, Args);
+      levitationSetMeta(D, CmdArgs, Args);
     }
 
     // end of C++ Levitation
@@ -4020,6 +4036,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
     if (Args.hasArg(options::OPT_cppl_preamble)) {
       CmdArgs.push_back("-levitation-build-preamble");
+      levitationSetMeta(D, CmdArgs, Args);
     } else
 
     // end of C++ Levitation mode
@@ -4107,22 +4124,12 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
       // assert(JA.getType() == types::TY_AST && "Type must be AST");
 
-      StringRef DeclASTMeta = Args.getLastArgValue(options::OPT_cppl_meta_EQ);
-
-      if (DeclASTMeta.empty())
-        D.Diag(diag::err_drv_missed_cppl_value)
-            << "-cppl-meta="
-            << "PARSE";
-
       CmdArgs.push_back("-flevitation-build-decl");
       CmdArgs.push_back("-emit-pch");
 
       levitationParseIncludePreamble(CmdArgs, Args);
       levitationParseIncludeDeps(CmdArgs, Args);
-
-      CmdArgs.push_back(Args.MakeArgString(
-          Twine("-levitation-decl-ast-meta=") + DeclASTMeta
-      ));
+      levitationSetMeta(D, CmdArgs, Args);
     }
 
     // end of C++ Levitation

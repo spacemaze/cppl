@@ -23,4 +23,5 @@ namespace clang { namespace levitation { namespace tools {
   constexpr char DriverDefaults::OUTPUT_EXECUTABLE[];
   constexpr char DriverDefaults::OUTPUT_OBJECTS_DIR[];
   constexpr char DriverDefaults::PREAMBLE_OUT[];
+  constexpr char DriverDefaults::PREAMBLE_OUT_META[];
 }}}

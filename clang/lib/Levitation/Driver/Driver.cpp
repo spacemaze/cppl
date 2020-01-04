@@ -58,7 +58,8 @@ namespace {
     SinglePath Source;
     SinglePath Header;
     SinglePath LDeps;
-    SinglePath SkippedBytes;
+    SinglePath DeclASTMetaFile;
+    SinglePath ObjMetaFile;
 
     // FIXME Levitation: deprecated
     SinglePath AST;
@@ -140,6 +141,13 @@ private:
   );
 
   bool isUpToDate(DeclASTMeta &Meta, const DependenciesGraph::Node &N);
+
+  bool isUpToDate(
+    DeclASTMeta &Meta,
+    StringRef MetaFile,
+    StringRef SourceFile,
+    StringRef ItemDescr
+  );
 
   const FilesInfo& getFilesInfoFor(
       const DependenciesGraph::Node &N
@@ -863,6 +871,7 @@ public:
       StringRef BinDir,
       StringRef PrecompiledPreamble,
       StringRef OutObjFile,
+      StringRef OutMetaFile,
       StringRef InputObject,
       const Paths &Deps,
       StringRef StdLib,
@@ -887,6 +896,7 @@ public:
     .addArgs(ExtraCodeGenArgs)
     .addArg(InputObject)
     .addKVArgSpace("-o", OutObjFile)
+    .addKVArgEq("-cppl-meta", OutMetaFile)
     .execute();
 
     return processStatus(ExecutionStatus);
@@ -896,6 +906,7 @@ public:
       StringRef BinDir,
       StringRef PreambleSource,
       StringRef PCHOutput,
+      StringRef PCHOutputMeta,
       StringRef StdLib,
       const LevitationDriver::Args &ExtraPreambleArgs,
       bool Verbose,
@@ -913,6 +924,7 @@ public:
     )
     .addArg(PreambleSource)
     .addKVArgSpace("-o", PCHOutput)
+    .addKVArgEq("-cppl-meta", PCHOutputMeta)
     .addArgs(ExtraPreambleArgs)
     .execute();
 
@@ -1130,12 +1142,26 @@ void LevitationDriverImpl::buildPreamble() {
       Context.Driver.BuildRoot,
       DriverDefaults::PREAMBLE_OUT
     );
+    Context.Driver.PreambleOutputMeta = levitation::Path::getPath<SinglePath>(
+      Context.Driver.BuildRoot,
+      DriverDefaults::PREAMBLE_OUT_META
+    );
   }
+
+  DeclASTMeta Meta;
+  if (isUpToDate(
+      Meta,
+      Context.Driver.PreambleOutputMeta,
+      Context.Driver.PreambleSource,
+      Context.Driver.PreambleSource
+  ))
+    return;
 
   auto Res = Commands::buildPreamble(
     Context.Driver.BinDir,
     Context.Driver.PreambleSource,
     Context.Driver.PreambleOutput,
+    Context.Driver.PreambleOutputMeta,
     Context.Driver.StdLib,
     Context.Driver.ExtraPreambleArgs,
     Context.Driver.Verbose,
@@ -1322,10 +1348,16 @@ void LevitationDriverImpl::collectSources() {
         FileExtensions::Header
     );
 
-    Files.SkippedBytes = Path::getPath<SinglePath>(
+    Files.DeclASTMetaFile = Path::getPath<SinglePath>(
         Context.Driver.BuildRoot,
         PackagePath,
-        FileExtensions::SkippedBytes
+        FileExtensions::DeclASTMeta
+    );
+
+    Files.ObjMetaFile = Path::getPath<SinglePath>(
+        Context.Driver.BuildRoot,
+        PackagePath,
+        FileExtensions::ObjMeta
     );
 
     Files.LDeps = Path::getPath<SinglePath>(
@@ -1444,6 +1476,7 @@ bool LevitationDriverImpl::processDefinition(
     Context.Driver.BinDir,
     Context.Driver.PreambleOutput,
     Files.Object,
+    Files.ObjMetaFile,
     Files.Source,
     fullDependencies,
     Context.Driver.StdLib,
@@ -1474,16 +1507,11 @@ bool LevitationDriverImpl::processDeclaration(
     // NeedDeclAST = false;
   }
 
-  // TODO Levitation: MD5 check
-  // 1. DeclASTMeta MetaOld = DeclASTMetaLoader::fromFile(Files.SkippedBytes);
-  // 2. Calc source file MD5
-  // 3. Compare source MD5 hashes, if they differ, build new decl-ast.
-
   bool buildDeclSuccessfull = Commands::buildDecl(
       Context.Driver.BinDir,
       Context.Driver.PreambleOutput,
       (NeedDeclAST ? Files.DeclAST.str() : StringRef()),
-      (NeedDeclAST ? Files.SkippedBytes.str() : StringRef()),
+      (NeedDeclAST ? Files.DeclASTMetaFile.str() : StringRef()),
       Files.Source,
       fullDependencies,
       Context.Driver.StdLib,
@@ -1499,39 +1527,41 @@ bool LevitationDriverImpl::processDeclaration(
       Context.Driver.shouldCreateHeaders() &&
       Graph.isPublic(N.ID);
 
-  if (!MustGenerateHeaders)
-    return true;
-
   auto Includes = getIncludes(N, Graph);
 
   DeclASTMeta Meta;
   if (!DeclASTMetaLoader::fromFile(
-      Meta, Context.Driver.BuildRoot, Files.SkippedBytes
+      Meta, Context.Driver.BuildRoot, Files.DeclASTMetaFile
   ))
     return false;
 
-  bool HeaderGenerated = HeaderGenerator(
-      Files.Header,
-      Files.Source,
-      N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
-      Includes,
-      Meta.getFragmentsToSkip(),
-      Context.Driver.Verbose,
-      Context.Driver.DryRun
-  )
-  .execute();
+  bool Success = true;
+
+  if (MustGenerateHeaders) {
+    Success = HeaderGenerator(
+        Files.Header,
+        Files.Source,
+        N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
+        Includes,
+        Meta.getFragmentsToSkip(),
+        Context.Driver.Verbose,
+        Context.Driver.DryRun
+    )
+    .execute();
+  }
 
   // Mark that node was updated, if it was updated
 
   if (!equal(OldDeclASTHash, Meta.getDeclASTHash()))
     Context.UpdatedNodes.insert(N.ID);
+  else {
+    auto &Verbose = Log.info();
+    Verbose << "Node ";
+    Graph.dumpNodeShort(Verbose, N.ID, Strings);
+    Verbose << " is up-to-date.\n";
+  }
 
-  auto &Verbose = Log.verbose();
-  Verbose << "Node ";
-  Graph.dumpNodeShort(Verbose, N.ID, Strings);
-  Verbose << " is up-to-date.\n";
-
-  return HeaderGenerated;
+  return Success;
 }
 
 bool LevitationDriverImpl::isUpToDate(
@@ -1544,15 +1574,40 @@ bool LevitationDriverImpl::isUpToDate(
 
   const auto &Files = getFilesInfoFor(N);
 
-  if (!llvm::sys::fs::exists(Files.SkippedBytes))
+  StringRef MetaFile;
+
+  switch (N.Kind) {
+    case DependenciesGraph::NodeKind::Declaration:
+      MetaFile = Files.DeclASTMetaFile;
+      break;
+    case DependenciesGraph::NodeKind::Definition:
+      MetaFile = Files.ObjMetaFile;
+      break;
+    default:
+      return false;
+  }
+
+  auto NodeDescr = Context.DependenciesInfo->getDependenciesGraph()
+      .nodeDescrShort(N.ID, Strings);
+
+  return isUpToDate(Meta, MetaFile, Files.Source, NodeDescr);
+}
+
+bool LevitationDriverImpl::isUpToDate(
+    DeclASTMeta &Meta,
+    llvm::StringRef MetaFile,
+    llvm::StringRef SourceFile,
+    llvm::StringRef ItemDescr
+) {
+  if (!llvm::sys::fs::exists(MetaFile))
     return false;
 
   if (!DeclASTMetaLoader::fromFile(
-      Meta, Context.Driver.BuildRoot, Files.SkippedBytes
+      Meta, Context.Driver.BuildRoot, MetaFile
   )) {
     Log.warning()
     << "Failed to load existing meta file for '"
-    << Files.Source << "'\n"
+    << SourceFile << "'\n"
     << "  Must rebuild dependent chains.";
     return false;
   }
@@ -1561,21 +1616,45 @@ bool LevitationDriverImpl::isUpToDate(
 
   auto &FM = CreatableSingleton<FileManager>::get();
 
-  if (auto Buffer = FM.getBufferForFile(Files.Source)) {
+  if (auto Buffer = FM.getBufferForFile(SourceFile)) {
     auto SrcMD5 = calcMD5(Buffer->get()->getBuffer());
-    bool Res = equal(Meta.getSourceHash(), SrcMD5.Bytes);
-    if (Res) {
-      const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
+
+#if 0
+    auto &Verbose = Log.verbose();
+    Verbose << "Old Hash: ";
+    for (auto b : Meta.getSourceHash()) {
+      Verbose.write_hex(b);
+      Verbose << " ";
+    }
+
+    Verbose << "\n";
+
+    Verbose << "Src Hash: ";
+    for (auto b : SrcMD5.Bytes) {
+      Verbose.write_hex(b);
+      Verbose << " ";
+    }
+
+    Verbose << "\n";
+#endif
+
+  // FIXME Levitation: we either should give up and remove this check
+  //  or somehow separation md5 for source locations block
+  //  and rest of decl-ast file.
+  // Currently each time you change source, you change source locations.
+  // So, even though declaration itself may remain same, .decl-ast
+  // will be different.
+  bool Res = equal(Meta.getSourceHash(), SrcMD5.Bytes);
+
+  if (Res) {
       auto &Verbose = Log.verbose();
-      Verbose << "Source  for node ";
-      Graph.dumpNodeShort(Verbose, N.ID, Strings);
-      Verbose << " is up-to-date.\n";
+      Verbose << "Source  for item '" << ItemDescr << "' is up-to-date.\n";
     }
     return Res;
   } else
      Log.warning()
     << "Failed to load source '"
-    << Files.Source << "' during up-to-date checks.\n"
+    << SourceFile << "' during up-to-date checks.\n"
     << "  Must rebuild dependent chains. But I think I'll fail, dude...";
     return false;
 }

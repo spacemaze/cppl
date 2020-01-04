@@ -585,13 +585,17 @@ function buildPreamble {
     then
         echoIfDebug "Preamble exists, skipping..."
     else
+
+        META="preamble.meta"
+
         runCommand $CXX $CC_FLAGS -xc++ \
                    -levitation-build-preamble $PREAMBLE_FLAGS \
-                   $PREAMBLE_SRC -o $PREAMBLE_PCH
+                   "-levitation-decl-ast-meta=$META" $PREAMBLE_SRC -o $PREAMBLE_PCH
 
         if [ "$PREAMBLE_OBJECT" == "1" ]; then
           PREAMBLE_OBJ=$(getBuildedFileName preamble.o)
-          runCommand $CXX $CC_FLAGS -xc++ $PREAMBLE_SRC -emit-obj -o $PREAMBLE_OBJ
+          runCommand $CXX $CC_FLAGS -xc++ $PREAMBLE_SRC -emit-obj \
+          "-levitation-decl-ast-meta=$META" -o $PREAMBLE_OBJ
         fi
     fi
     echoIfDebug
@@ -692,12 +696,15 @@ function buildObject {
 
     INPUT_FILE="$(getSrcFileName $MODULE)"
     OUTPUT_FILE="$(getBuildedFileName $MODULE.o)"
+    OBJ_META="$(getBuildedFileName $MODULE.o.meta)"
+
 
     if [ "$BUILD_MODE" == "$BUILD_MODE_EXECUTE" ]; then
       createDirFor $OUTPUT_FILE
     fi
 
-    runCommand $CXX $FLAGS $INPUT_FILE "-o" $OUTPUT_FILE
+    runCommand $CXX $FLAGS $INPUT_FILE \
+    "-levitation-decl-ast-meta=$DECL_AST_META" "-o" $OUTPUT_FILE
     echoIfDebug
 }
 

@@ -18,7 +18,8 @@ namespace clang {
 namespace levitation {
   constexpr char FileExtensions::SourceCode[];
   constexpr char FileExtensions::Header[];
-  constexpr char FileExtensions::SkippedBytes[];
+  constexpr char FileExtensions::DeclASTMeta[];
+  constexpr char FileExtensions::ObjMeta[];
   constexpr char FileExtensions::Object[];
   constexpr char FileExtensions::DeclarationAST[];
   constexpr char FileExtensions::ParsedDependencies[];

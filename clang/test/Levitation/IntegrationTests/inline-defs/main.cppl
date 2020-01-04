@@ -1,7 +1,7 @@
-// RUN:  %clang -cc1 -std=c++17 -xc++ -levitation-build-preamble %S/Inputs/Preamble.h -o %T/preamble.pch
-// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -levitation-decl-ast-meta=%T/A.decl-ast-meta -flevitation-build-decl %S/Inputs/A.cppl -ast-print | FileCheck %S/Inputs/Preamble.h
+// RUN:  %clang -cc1 -std=c++17 -xc++ -levitation-build-preamble -levitation-decl-ast-meta=%T/preamble.meta %S/Inputs/Preamble.h -o %T/preamble.pch
+// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -levitation-decl-ast-meta=%T/A.decl-ast-meta -flevitation-build-decl %S/Inputs/A.cppl -o %T/A.decl-ast -flevitation-ast-print | FileCheck %S/Inputs/Preamble.h
 // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -levitation-decl-ast-meta=%T/A.decl-ast-meta -flevitation-build-decl %S/Inputs/A.cppl -emit-pch -o %T/A.decl-ast
-// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -levitation-decl-ast-meta=%T/A.decl-ast-meta -flevitation-build-decl -levitation-dependency=%T/A.decl-ast %S/main.cppl -ast-print | FileCheck %S/Inputs/A.cppl
+// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -levitation-decl-ast-meta=%T/A.decl-ast-meta -flevitation-build-decl -levitation-dependency=%T/A.decl-ast %S/main.cppl -o %T/A.decl-ast -flevitation-ast-print | FileCheck %S/Inputs/A.cppl
 
 #import Inputs::A
 

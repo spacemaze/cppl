@@ -303,6 +303,9 @@ def err_fe_levitation_decl_ast_meta_file_io_troubles : Error<
 def err_fe_levitation_decl_ast_meta_failed_to_create : Error<
   "Failed to create C++ Levitation Decl AST Meta file">;
 
+def err_fe_levitation_meta_failed_to_calc_md5 : Error<
+  "Failed to calculate MD5 for file '%0', perhaps it doesn't exist.">;
+
 } // end of instrumentation issue category
 
 }

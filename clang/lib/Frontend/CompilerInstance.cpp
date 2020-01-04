@@ -667,6 +667,20 @@ void CompilerInstance::clearOutputFiles(bool EraseFiles) {
   NonSeekStream.reset();
 }
 
+StringRef CompilerInstance::getCurrentOutputFilePath() {
+
+  if (OutputFiles.empty())
+    return getFrontendOpts().OutputFile;
+
+  assert(OutputFiles.size() == 1);
+
+  auto &OutputFile = OutputFiles.front();
+  StringRef TempFilePath = OutputFile.TempFilename;
+  StringRef PermanentPath = OutputFile.Filename;
+
+  return TempFilePath.empty() ? PermanentPath : TempFilePath;
+}
+
 std::unique_ptr<raw_pwrite_stream>
 CompilerInstance::createDefaultOutputFile(bool Binary, StringRef InFile,
                                           StringRef Extension) {

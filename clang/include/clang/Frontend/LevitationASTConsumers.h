@@ -25,14 +25,6 @@ std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
     StringRef InFile
 );
 
-std::unique_ptr<ASTConsumer> CreateDeclASTMetaGenerator(
-    const CompilerInstance &CI,
-    // Note, even though we can use PCHBuffer::Signature field,
-    // we still ask for whole buffer. Perhaps we would
-    // calc own signature in future.
-    std::shared_ptr<PCHBuffer> Buffer
-);
-
 } // end of namespace levitation
 } // end of namespace clang
 

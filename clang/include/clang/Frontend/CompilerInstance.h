@@ -595,6 +595,15 @@ public:
   /// \param EraseFiles - If true, attempt to erase the files from disk.
   void clearOutputFiles(bool EraseFiles);
 
+  // C++ Levitation
+
+  /// Until some point we can store output file in temporary path.
+  /// In order to access its contents we need temporary path in this case.
+  /// \return
+  StringRef getCurrentOutputFilePath();
+
+  // end of C++ Levitation
+
   /// }
   /// @name Construction Utility Methods
   /// {

@@ -12,7 +12,6 @@
 #include "clang/Basic/LangStandard.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "clang/Frontend/LevitationASTConsumers.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/Utils.h"
@@ -117,19 +116,6 @@ GeneratePCHAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
       FrontendOpts.IncludeTimestamps, +CI.getLangOpts().CacheGeneratedPCH));
   Consumers.push_back(CI.getPCHContainerWriter().CreatePCHContainerGenerator(
       CI, InFile, OutputFile, std::move(OS), Buffer));
-
-  // C++ Levitation:
-
-  // TODO Levitation: after you get stable work, create clone of
-  // GeneratePCHAction, and do whatever you want there.
-  if (CI.getLangOpts().isLevitationMode(LangOptions::LBSK_BuildDeclAST))
-    if (
-      auto MetaGeneratorConsumer = levitation::CreateDeclASTMetaGenerator(CI, Buffer)
-    ) {
-      Consumers.push_back(std::move(MetaGeneratorConsumer));
-    }
-
-  // end of C++ Levitation
 
   return std::make_unique<MultiplexConsumer>(std::move(Consumers));
 }

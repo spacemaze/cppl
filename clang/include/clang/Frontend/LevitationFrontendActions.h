@@ -31,7 +31,10 @@ public:
 };
 
 class LevitationBuildPreambleAction : public GeneratePCHAction {
-  // same same
+public:
+
+  // Calls create meta wrapper.
+  void EndSourceFileAction() override;
 };
 
 class LevitationBuildObjectAction : public ASTMergeAction {
@@ -68,6 +71,9 @@ public:
   void ExecuteAction() override;
 
   bool usesPreprocessorOnly() const override { return false; }
+
+  // Calls create meta wrapper.
+  void EndSourceFileAction() override;
 
 protected:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(
