@@ -330,6 +330,15 @@ public:
     out << "]: " << *Strings.getItem(Node.PackageInfo->PackagePath);
   }
 
+  std::string nodeDescrShort(
+      NodeID::Type NodeID,
+      const DependenciesStringsPool &Strings
+  ) const {
+    std::string Descr;
+    llvm::raw_string_ostream out(Descr);
+    dumpNodeShort(out, NodeID, Strings);
+    return Descr;
+  }
 
   static void dumpNodeID(llvm::raw_ostream &out, NodeID::Type NodeID) {
     NodeKind Kind;
