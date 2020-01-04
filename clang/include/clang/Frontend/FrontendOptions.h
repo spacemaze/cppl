@@ -450,6 +450,7 @@ public:
   std::string LevitationDependenciesOutputFile;
   std::string LevitationSourcesRootDir;
   std::string LevitationDeclASTMeta;
+  bool LevitationASTPrint;
 
   std::string LevitationPreambleFileName;
 

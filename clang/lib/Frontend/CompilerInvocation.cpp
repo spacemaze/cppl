@@ -1925,6 +1925,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
           Args.getLastArgValue(OPT_levitation_sources_root_dir);
   Opts.LevitationDeclASTMeta =
           Args.getLastArgValue(OPT_levitation_decl_ast_meta);
+  Opts.LevitationASTPrint =
+          Args.hasArg(OPT_flevitation_ast_print);
 
   if (const Arg *A = Args.getLastArg(OPT_arcmt_check,
                                      OPT_arcmt_modify,

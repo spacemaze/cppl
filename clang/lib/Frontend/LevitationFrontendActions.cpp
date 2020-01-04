@@ -459,12 +459,16 @@ LevitationBuildObjectAction::createASTConsumerInternal(
 
   auto AdoptedConsumer = ASTMergeAction::CreateASTConsumer(CI, InFile);
 
-  if (getCurrentFileKind().getFormat() != InputKind::Precompiled)
-    return AdoptedConsumer;
+  std::unique_ptr<ASTConsumer> AstPrinter;
+
+  if (CI.getFrontendOpts().LevitationASTPrint) {
+    if (std::unique_ptr<raw_ostream> OS =
+        CI.createDefaultOutputFile(false, "-"))
+      AstPrinter = CreateASTPrinter(std::move(OS), CI.getFrontendOpts().ASTDumpFilter);
+  }
 
   return MultiplexConsumerBuilder()
-      // Deprecated: auto deps resolution is no longer supported
-      // .addNotNull(CreatePackageInstantiator())
-      .addRequired(std::move(AdoptedConsumer))
+    .addRequired(std::move(AdoptedConsumer))
+    .addOptional(std::move(AstPrinter))
   .done();
 }
