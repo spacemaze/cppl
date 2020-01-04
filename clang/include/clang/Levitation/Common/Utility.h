@@ -14,13 +14,17 @@
 #ifndef LLVM_CLANG_LEVITATION_UTILITY_H
 #define LLVM_CLANG_LEVITATION_UTILITY_H
 
+#include "clang/Basic/FileManager.h"
 #include "clang/Levitation/Common/StringBuilder.h"
+#include "clang/Levitation/Common/CreatableSingleton.h"
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/MD5.h"
 
+
 #include <algorithm>
+#include <utility>
 
 namespace clang { namespace levitation {
 
@@ -31,13 +35,24 @@ typedef std::pair<size_t, size_t> RangeTy;
 typedef llvm::SmallVector<RangeTy, 64> RangesVector;
 
 template<typename BuffT>
-static llvm::MD5::MD5Result calcMD5(BuffT Buff) {
+static inline llvm::MD5::MD5Result calcMD5(BuffT Buff) {
   llvm::MD5 Md5Builder;
   Md5Builder.update(Buff);
   llvm::MD5::MD5Result Result;
   Md5Builder.final(Result);
   return Result;
 }
+
+static inline bool calcMD5FromFile(
+    FileManager &FM, llvm::MD5::MD5Result &Res, llvm::StringRef FileName
+) {
+  if (auto Buffer = FM.getBufferForFile(FileName)) {
+    Res = calcMD5(Buffer.get()->getBuffer());
+    return true;
+  } else
+    return false;
+}
+
 
 template <typename ArrLeftT, typename ArrRightT>
 bool equal(const ArrLeftT &L, const ArrRightT &R) {
