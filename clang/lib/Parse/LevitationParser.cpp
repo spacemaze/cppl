@@ -24,6 +24,12 @@ void SkipFunctionBody(
     Preprocessor &PP,
     std::function<void()> &&SkipFunctionBody
 ) {
+  // Prevent PP + Lexer link destruction while we're doing our stuff.
+
+  bool oldIncPr = PP.isIncrementalProcessingEnabled();
+  PP.enableIncrementalProcessing(true);
+  auto _ = llvm::make_scope_exit([&] {PP.enableIncrementalProcessing(oldIncPr);});
+
   PP.setLevitationKeepComments(true);
 
   SkipFunctionBody();

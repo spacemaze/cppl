@@ -2284,6 +2284,10 @@ void Preprocessor::setLevitationKeepComments(bool value) {
       EnterCachingLexMode();
   });
 
+  // If we're in macro expansion that makes no sense.
+  if (CurLexerKind == CLK_TokenLexer)
+    return;
+
   assert(CurLexerKind == CLK_Lexer || CurLexerKind == CLK_CachingLexer);
   if (CurLexer->isKeepWhitespaceMode())
     return;

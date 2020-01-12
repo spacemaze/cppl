@@ -52,4 +52,7 @@ namespace Inputs {
 
   // CHECK: my_int_t
   typedef int my_int_t;
+
+#define DEF { return 0 };
+  void f() DEF
 }
