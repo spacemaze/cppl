@@ -6,6 +6,7 @@ set(LLVM_LINK_COMPONENTS
   )
 
 add_clang_library(clangParse
+  LevitationParser.cpp
   ParseAST.cpp
   ParseCXXInlineMethods.cpp
   ParseDecl.cpp

@@ -2273,6 +2273,17 @@ void Preprocessor::HandleIncludeNextDirective(SourceLocation HashLoc,
 // C++ Levitation
 
 void Preprocessor::setLevitationKeepComments(bool value) {
+
+  bool WasInCachingMode = InCachingLexMode();
+
+  if (WasInCachingMode)
+    ExitCachingLexMode();
+
+  auto _ = llvm::make_scope_exit([&] {
+    if (WasInCachingMode)
+      EnterCachingLexMode();
+  });
+
   assert(CurLexerKind == CLK_Lexer || CurLexerKind == CLK_CachingLexer);
   if (CurLexer->isKeepWhitespaceMode())
     return;

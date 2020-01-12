@@ -12,49 +12,12 @@
 
 #include "clang/Parse/Parser.h"
 #include "clang/AST/DeclTemplate.h"
+#include "clang/Parse/LevitationParser.h"
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/Scope.h"
 using namespace clang;
-
-template <
-    typename ConsumeTokenF,
-    typename ConsumeAndStoreFunctionPrologueF,
-    typename SkipMalformedDefF,
-    typename SkipUntil2F
->
-void levitationSkipFunctionBodyUntilComment(
-    const Token &Tok,
-    Preprocessor &PP,
-    ConsumeTokenF &&consumeToken,
-    ConsumeAndStoreFunctionPrologueF &&consumeAndStoreFunctionPrologue,
-    SkipMalformedDefF &&skipMalformedDecl,
-    SkipUntil2F &&skipUntil
-) {
-  PP.setLevitationKeepComments(true);
-  auto RestoreComments = llvm::make_scope_exit([&] {PP.setLevitationKeepComments(false);});
-
-  if (Tok.is(tok::equal)) {
-    skipUntil(tok::comment, tok::semi);
-    return;
-  }
-
-  bool IsFunctionTryBlock = Tok.is(tok::kw_try);
-  if (IsFunctionTryBlock)
-    consumeToken();
-
-  CachedTokens Skipped;
-  if (consumeAndStoreFunctionPrologue(Skipped))
-    skipMalformedDecl();
-  else {
-    skipUntil(tok::comment, tok::r_brace);
-    while (IsFunctionTryBlock && Tok.is(tok::kw_catch)) {
-      skipUntil(tok::comment, tok::l_brace);
-      skipUntil(tok::comment, tok::r_brace);
-    }
-  }
-}
 
 /// ParseCXXInlineMethodDef - We parsed and verified that the specified
 /// Declarator is a well formed C++ inline method definition. Now lex its body
@@ -174,14 +137,7 @@ NamedDecl *Parser::ParseCXXInlineMethodDef(
     // C++ Levitation: keep track of skipped source fragments, start
     SourceLocation LevitationStartSkip = Tok.getLocation();
 
-    levitationSkipFunctionBodyUntilComment(
-        Tok,
-        PP,
-        [&] { ConsumeToken(); },
-        [&](CachedTokens &Toks) { return ConsumeAndStoreFunctionPrologue(Toks); },
-        [&] { SkipMalformedDecl(); },
-        [&](tok::TokenKind Tok1, tok::TokenKind Tok2) { SkipUntil(Tok1, Tok2); }
-    );
+    levitation::SkipFunctionBody(PP, [&] { SkipFunctionBody(); });
 
     SourceLocation EndLoc = Tok.getLocation();
 

@@ -1,0 +1,13 @@
+// RUN:  %clang -cc1 -std=c++17 -xc++ -levitation-decl-ast-meta=%T/meta \
+// RUN:    -flevitation-build-decl %s -o %T/A.decl-ast -emit-pch \
+// RUN:    -flevitation-ast-print | FileCheck %s
+
+class A {
+public:
+  // CHECK: f1()
+  void f1() {
+    // some in body comment
+  }
+  // some out of body comment
+  void f2();
+};

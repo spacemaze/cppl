@@ -14,6 +14,7 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclTemplate.h"
+#include "clang/Parse/LevitationParser.h"
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
@@ -1351,16 +1352,23 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
     } else {
       SkipStart = Tok.getLocation();
     }
-    if (trySkippingFunctionBody()) {
-      Actions.levitationAddSkippedSourceFragment(
-          SkipStart,
-          Tok.getLocation(),
-          BurnWithSemicolon
-      );
-      BodyScope.Exit();
-      Actions.ActOnSkippedFunctionBody(Res);
-      return Actions.ActOnFinishFunctionBody(Res, nullptr, false);
-    }
+
+    levitation::SkipFunctionBody(PP, [&] { SkipFunctionBody(); });
+
+    SourceLocation EndLoc = Tok.getLocation();
+
+    if (Tok.is(tok::comment))
+      ConsumeToken();
+
+    Actions.levitationAddSkippedSourceFragment(
+        SkipStart,
+        EndLoc,
+        BurnWithSemicolon
+    );
+
+    BodyScope.Exit();
+    Actions.ActOnSkippedFunctionBody(Res);
+    return Actions.ActOnFinishFunctionBody(Res, nullptr, false);
   }
 #endif
   // end of C++ Levitation

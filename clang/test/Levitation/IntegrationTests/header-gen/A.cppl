@@ -1,3 +1,4 @@
+// RUN: rm -Rf %T/*
 // RUN: cppl -root=%S -buildRoot=%T -lit -c --verbose
 // RUN: FileCheck -input-file=%T/include/A.h %s
 
@@ -53,6 +54,10 @@ namespace Inputs {
 
   // CHECK-NOT: {{^\s*[^/]*}} return 11111;
   int thisSkipToo() { return 11111; }
+
+
+  // CHECK: {{^\s*[^/]*}} // Some comment 2
+  // Some comment 2
 
   // CHECK: {{^\s*[^/]*}} static int andThisInitKeepToo = 777777;
   static int andThisInitKeepToo = 777777;
