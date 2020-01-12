@@ -830,6 +830,9 @@ def err_pp_levitation_import_missed_dep_part_semi : Error<
 def err_pp_levitation_import_cant_be_after_include : Error<
   "#import directives should be placed before any #include directives'">;
 
+def err_pp_levitation_wrong_mode : Error<
+  "This directive not supported in %0'">;
+
 // end of C++ Levitation
 
 }

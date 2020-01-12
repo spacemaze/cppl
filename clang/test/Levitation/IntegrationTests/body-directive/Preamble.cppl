@@ -1,0 +1,10 @@
+// RUN:  not %clang -cc1 -std=c++17 -xc++ -levitation-build-preamble \
+// RUN:    -levitation-decl-ast-meta=%T/preamble.meta %s -o %T/preamble.pch \
+// RUN:    2>&1 | FileCheck %s
+
+void declFunction();
+
+// CHECK: error: This directive not supported in preamble files
+#body
+
+// something

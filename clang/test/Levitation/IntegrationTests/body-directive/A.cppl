@@ -1,0 +1,20 @@
+// RUN:  %clang -cc1 -std=c++17 -xc++ -levitation-decl-ast-meta=%T/A.decl-ast-meta \
+// RUN:    -flevitation-build-decl %S/A.cppl -emit-pch -o %T/A.decl-ast \
+// RUN:    -flevitation-ast-print | FileCheck %s
+
+// RUN:  %clang -cc1 -std=c++17 -xc++ -levitation-decl-ast-meta=%T/A.o-meta \
+// RUN:    -flevitation-build-object %S/A.cppl -o %T/A.decl-ast \
+// RUN:    -flevitation-ast-print | FileCheck %s --check-prefix=BODY-CHECK
+
+
+// CHECK: declFunction
+// BODY-CHECK: declFunction
+
+int declFunction();
+
+#body // some comment
+
+// CHECK-NOT: bodyFunction
+// BODY-CHECK: bodyFunction
+
+void bodyFunction();

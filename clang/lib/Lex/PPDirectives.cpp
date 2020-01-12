@@ -940,6 +940,7 @@ void Preprocessor::HandleDirective(Token &Result) {
       case tok::pp___include_macros:
       // C++ Levitation:
       case tok::pp_public:
+      case tok::pp_body:
       // end of C++ Levitation
       case tok::pp_pragma:
         Diag(Result, diag::err_embedded_directive) << II->getName();
@@ -1008,6 +1009,8 @@ void Preprocessor::HandleDirective(Token &Result) {
     // C++ Levitation:
     case tok::pp_public:
       return HandleLevitationPublicDirective(SavedHash.getLocation(), Result);
+    case tok::pp_body:
+      return HandleLevitationBodyDirective(SavedHash.getLocation(), Result);
     // end of C++ Levitation
 
     // C99 6.10.3 - Macro Replacement.
@@ -2331,12 +2334,74 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
 /// \param HashLoc location of '#' symbol
 /// \param Tok reference to 'import' token next to '#' symbol
 void Preprocessor::HandleLevitationPublicDirective(SourceLocation HashLoc, Token &Tok) {
+
+  if (!getLangOpts().LevitationMode) {
+    Diag(HashLoc, diag::err_pp_invalid_directive);
+    DiscardUntilEndOfDirective();
+    return;
+  }
+
   PPLevitationPublic = true;
 
   DiscardUntilEndOfDirective();
 
   levitationAddSkippedSourceFragment(HashLoc, CurLexer->getSourceLocation());
 }
+
+/// Handles C++ Levitation #body directive
+///
+/// This directive has no parameters.
+/// This directive is used whenever we want to indicate that
+/// contents following after #body shouldn't be part of declaration
+/// and belongs to definition only.
+///
+/// \param HashLoc location of '#' symbol
+/// \param Tok reference to 'import' token next to '#' symbol
+void Preprocessor::HandleLevitationBodyDirective(SourceLocation HashLoc, Token &Tok) {
+
+  if (!getLangOpts().LevitationMode) {
+    Diag(HashLoc, diag::err_pp_invalid_directive);
+    DiscardUntilEndOfDirective();
+    return;
+  }
+
+  if (getLangOpts().isLevitationMode(LangOptions::LBSK_BuildPreamble)) {
+    Diag(HashLoc, diag::err_pp_levitation_wrong_mode)
+    << "preamble files";
+    DiscardUntilEndOfDirective();
+    return;
+  }
+
+  // If we're building object file, we should parse whole file, so
+  // eat #body and continue work.
+
+  if (getLangOpts().isLevitationMode(LangOptions::LBSK_BuildObjectFile)) {
+    DiscardUntilEndOfDirective();
+    return;
+  }
+
+  // If we're building .decl-ast file, ignore contents below #body directive.
+
+  // Discard until end of file.
+
+  Token Tmp;
+
+  // By default incrementaProcessing is off.
+  // Meanwhile, if it's off, and if lexer met eof, it perfoms
+  // unrecoverable self-destruction actions, resets links between
+  // PP and Lexer and so on.
+  // Per comments for IncrementalProcessing field
+  // it should be used exactly when you want to prevent from such destructive
+  // actions for a while.
+  bool oldIncPr = isIncrementalProcessingEnabled();
+  enableIncrementalProcessing(true);
+  auto _ = llvm::make_scope_exit([&] {enableIncrementalProcessing(oldIncPr);});
+
+  LexUnexpandedToken(Tmp);
+  while (Tmp.isNot(tok::eof))
+    LexUnexpandedToken(Tmp);
+}
+
 
 bool Preprocessor::TryLexLevitationBodyDepAttr(const Token &FirstToken) {
   if (FirstToken.getKind() != tok::l_square)
