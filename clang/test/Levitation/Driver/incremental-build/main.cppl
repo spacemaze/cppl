@@ -1,0 +1,55 @@
+// Topology is:
+//            preamble
+//          /    |    \
+//         |     B     B
+//         |    /     /
+//         | [body]  /
+//         |  /     /
+//         v L     /
+//          A     /
+//          |    /
+//          v   L
+//          main
+//
+// 1. run initial build
+// 2.1. update preamble
+// 2.2. make sure we rebuild everything in this case
+// 3.1. update A.cppl, decl part
+// 3.2. make sure that we rebuild only following things:
+//    * A.decl-ast
+//    * A.o
+//    * main.o
+//    * a.out
+// 4.1. update A.cppl, body part
+// 4.2. make sure that we rebuild only following things:
+//    * A.o
+//    * a.out
+// 5.1. update B.cppl, decl part
+// 5.2. make sure that we rebuild only following things:
+//    * B.decl-ast
+//    * B.o
+//    * A.o
+//    * a.out
+
+
+// TODO Levitation
+// RUN: rm -Rf %T/*
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    --verbose | FileCheck %s --check-prefix=INITIAL
+// RUN: rm
+// RUN: %T/a.out
+
+// CHECK: BUILD DECL {{.*}}Root.cppl, deps: <empty> -> decl-ast: {{.*}}Root.decl-ast
+// CHECK: BUILD DECL {{.*}}MyClass.cppl, deps: ({{.*}}Root.decl-ast) -> decl-ast: {{.*}}MyClass.decl-ast
+// CHECK: BUILD DECL {{.*}}BodyDepClass.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast) -> decl-ast: {{.*}}BodyDepClass.decl-ast
+// CHECK: BUILD OBJ {{.*}}test.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast, {{.*}}BodyDepClass.decl-ast) -> object: {{.*}}test.o
+// CHECK: BUILD OBJ {{.*}}BodyDepClass.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast) -> object: {{.*}}BodyDepClass.o
+// CHECK: BUILD OBJ {{.*}}MyClass.cppl, deps: ({{.*}}Root.decl-ast) -> object: {{.*}}MyClass.o
+// CHECK: BUILD OBJ {{.*}}Root.cppl, deps: <empty> -> object: {{.*}}Root.o
+// CHECK: LINK objects: ({{.*}}test.o, {{.*}}Root.o, {{.*}}BodyDepClass.o, {{.*}}MyClass.o) -> {{.*}}
+
+#import Inputs::A
+
+int main() {
+  // TODO Levitation: do we need to check correctness of program?
+}

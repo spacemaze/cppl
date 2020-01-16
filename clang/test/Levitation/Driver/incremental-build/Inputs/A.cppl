@@ -1,0 +1,9 @@
+#import [bodydep] Inputs::B
+
+namespace Inputs {
+  // some contents
+}
+
+#body
+// some body contents
+
