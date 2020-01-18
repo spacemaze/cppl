@@ -1,0 +1,6 @@
+#import Inputs::MyClass
+
+namespace Inputs {
+  // some contents
+  // new decl
+}

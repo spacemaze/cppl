@@ -32,21 +32,76 @@
 //    * a.out
 
 
-// TODO Levitation
+// 1. run initial build
 // RUN: rm -Rf %T/*
+// RUN: cp %S/preamble.hpp.first %S/preamble.hpp
+// RUN: cp %S/Inputs/A.cppl.first %S/Inputs/A.cppl
+// RUN: cp %S/Inputs/B.cppl.first %S/Inputs/B.cppl
 // RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
-// RUN:    --verbose | FileCheck %s --check-prefix=INITIAL
-// RUN: rm
-// RUN: %T/a.out
+// RUN:    | FileCheck %s --check-prefix=CHECK_INITIAL
+//
+// CHECK_INITIAL-DAG: PREAMBLE {{.*}}preamble.pch
+// CHECK_INITIAL-DAG: BUILD DECL {{.*}}B.cppl,
+// CHECK_INITIAL-DAG: BUILD OBJ {{.*}}B.cppl,
+// CHECK_INITIAL-DAG: BUILD DECL {{.*}}A.cppl,
+// CHECK_INITIAL-DAG: BUILD OBJ {{.*}}A.cppl,
+// CHECK_INITIAL-DAG: BUILD OBJ {{.*}}main.cppl,
+// CHECK_INITIAL-DAG: LINK
 
-// CHECK: BUILD DECL {{.*}}Root.cppl, deps: <empty> -> decl-ast: {{.*}}Root.decl-ast
-// CHECK: BUILD DECL {{.*}}MyClass.cppl, deps: ({{.*}}Root.decl-ast) -> decl-ast: {{.*}}MyClass.decl-ast
-// CHECK: BUILD DECL {{.*}}BodyDepClass.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast) -> decl-ast: {{.*}}BodyDepClass.decl-ast
-// CHECK: BUILD OBJ {{.*}}test.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast, {{.*}}BodyDepClass.decl-ast) -> object: {{.*}}test.o
-// CHECK: BUILD OBJ {{.*}}BodyDepClass.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast) -> object: {{.*}}BodyDepClass.o
-// CHECK: BUILD OBJ {{.*}}MyClass.cppl, deps: ({{.*}}Root.decl-ast) -> object: {{.*}}MyClass.o
-// CHECK: BUILD OBJ {{.*}}Root.cppl, deps: <empty> -> object: {{.*}}Root.o
-// CHECK: LINK objects: ({{.*}}test.o, {{.*}}Root.o, {{.*}}BodyDepClass.o, {{.*}}MyClass.o) -> {{.*}}
+// 2.1. update preamble
+// RUN: cp %S/preamble.hpp.second %S/preamble.hpp
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    | FileCheck %s --check-prefix=CHECK_PREAMBLE
+// CHECK_PREAMBLE-DAG: PREAMBLE {{.*}}preamble.pch
+// CHECK_PREAMBLE-DAG: BUILD DECL {{.*}}B.cppl,
+// CHECK_PREAMBLE-DAG: BUILD OBJ {{.*}}B.cppl,
+// CHECK_PREAMBLE-DAG: BUILD DECL {{.*}}A.cppl,
+// CHECK_PREAMBLE-DAG: BUILD OBJ {{.*}}A.cppl,
+// CHECK_PREAMBLE-DAG: BUILD OBJ {{.*}}main.cppl,
+// CHECK_PREAMBLE-DAG: LINK
+
+// 3.1. update A.cppl, decl part
+// RUN: cp %S/Inputs/A.cppl.new-decl %S/Inputs/A.cppl
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    | FileCheck %s --check-prefix=CHECK_A_DECL
+//
+// CHECK_A_DECL-NOT: PREAMBLE {{.*}}preamble.pch
+// CHECK_A_DECL-NOT: BUILD DECL {{.*}}B.cppl,
+// CHECK_A_DECL-NOT: BUILD OBJ {{.*}}B.cppl,
+//
+// CHECK_A_DECL-DAG: BUILD DECL {{.*}}A.cppl,
+// CHECK_A_DECL-DAG: BUILD OBJ {{.*}}A.cppl,
+// CHECK_A_DECL-DAG: BUILD OBJ {{.*}}main.cppl,
+// CHECK_A_DECL-DAG: LINK
+
+
+// 4.1. update A.cppl, body part
+// RUN: cp %S/Inputs/A.cppl.new-body %S/Inputs/A.cppl
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    | FileCheck %s --check-prefix=CHECK_A_BODY
+//
+// CHECK_A_BODY-NOT: PREAMBLE {{.*}}preamble.pch
+// CHECK_A_BODY-NOT: BUILD DECL {{.*}}B.cppl,
+// CHECK_A_BODY-NOT: BUILD OBJ {{.*}}B.cppl,
+// CHECK_A_BODY-NOT: BUILD OBJ {{.*}}main.cppl,
+//
+// CHECK_A_BODY-DAG: BUILD DECL {{.*}}A.cppl,
+// CHECK_A_BODY-DAG: BUILD OBJ {{.*}}A.cppl,
+// CHECK_A_BODY-DAG: LINK
+
+// 5.1. update B.cppl, decl part
+// RUN: cp %S/Inputs/B.cppl.new-decl %S/Inputs/B.cppl
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    | FileCheck %s --check-prefix=CHECK_B
+//
+// CHECK_B-NOT: PREAMBLE {{.*}}preamble.pch
+// CHECK_B-NOT: BUILD DECL {{.*}}A.cppl,
+// CHECK_B-NOT: BUILD OBJ {{.*}}main.cppl,
+//
+// CHECK_B-DAG: BUILD DECL {{.*}}B.cppl,
+// CHECK_B-DAG: BUILD OBJ {{.*}}B.cppl,
+// CHECK_B-DAG: BUILD OBJ {{.*}}A.cppl,
+// CHECK_B-DAG: LINK
 
 #import Inputs::A
 
