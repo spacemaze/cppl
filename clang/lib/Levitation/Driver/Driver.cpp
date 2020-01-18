@@ -82,6 +82,7 @@ namespace {
 
     std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
 
+    bool PreambleUpdated = false;
     DependenciesGraph::NodesSet UpdatedNodes;
 
     RunContext(LevitationDriver &driver)
@@ -1171,6 +1172,8 @@ void LevitationDriverImpl::buildPreamble() {
   if (!Res)
     Status.setFailure()
     << "Preamble: phase failed";
+
+  Context.PreambleUpdated = true;
 }
 
 // TODO Levitation: deprecated
@@ -1568,6 +1571,9 @@ bool LevitationDriverImpl::isUpToDate(
     DeclASTMeta &Meta,
     const DependenciesGraph::Node &N
 ) {
+  if (Context.PreambleUpdated)
+    return false;
+
   for (auto D : N.Dependencies)
     if (Context.UpdatedNodes.count(D))
       return false;
