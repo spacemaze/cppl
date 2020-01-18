@@ -2408,6 +2408,18 @@ void Preprocessor::HandleLevitationBodyDirective(SourceLocation HashLoc, Token &
   // Per comments for IncrementalProcessing field
   // it should be used exactly when you want to prevent from such destructive
   // actions for a while.
+
+  auto &SM = getSourceManager();
+  auto &MainFileSLoc = SM.getSLocEntry(SM.getMainFileID());
+  auto BodyStart = getSourceManager().getDecomposedLoc(HashLoc).second;
+
+  // TODO Levitation: why -2?
+  //   this is how it's done in ASTWriter, and yet it doesn't
+  //   explain anything.
+  auto BodyEnd = MainFileSLoc.getOffset() - 2;
+
+  LevitationBodySize = BodyEnd - BodyStart;
+
   bool oldIncPr = isIncrementalProcessingEnabled();
   enableIncrementalProcessing(true);
   auto _ = llvm::make_scope_exit([&] {enableIncrementalProcessing(oldIncPr);});
@@ -2544,6 +2556,10 @@ const Preprocessor::PPLevitationDepsVector&
     Preprocessor::getLevitationBodyDeps() const
 {
   return PPLevitationBodyDeps;
+}
+
+unsigned Preprocessor::getLevitationBodySize() const {
+  return LevitationBodySize;
 }
 
 void Preprocessor::levitationAddSkippedSourceFragment(

@@ -1476,6 +1476,9 @@ void ASTWriter::WriteInputFiles(SourceManager &SourceMgr,
     // Emit size/modification time for this file.
     // And whether this file was overridden.
     {
+      // C++ Levitation
+#if 0
+      // Legacy
       RecordData::value_type Record[] = {
           INPUT_FILE,
           InputFileOffsets.size(),
@@ -1484,6 +1487,21 @@ void ASTWriter::WriteInputFiles(SourceManager &SourceMgr,
           Entry.BufferOverridden,
           Entry.IsTransient,
           Entry.IsTopLevelModuleMap};
+#else
+      // Altered code
+      uint64_t timestamp = !PP->getLangOpts().LevitationMode ?
+          (uint64_t)getTimestampForOutput(Entry.File) : 0;
+
+      RecordData::value_type Record[] = {
+          INPUT_FILE,
+          InputFileOffsets.size(),
+          (uint64_t)Entry.File->getSize(),
+          timestamp,
+          Entry.BufferOverridden,
+          Entry.IsTransient,
+          Entry.IsTopLevelModuleMap};
+#endif
+      // end of C++ Levitation
 
       // FIXME: The path should be taken from the FileEntryRef.
       EmitRecordWithPath(IFAbbrevCode, Record, Entry.File->getName());
@@ -1927,7 +1945,17 @@ void ASTWriter::WriteSourceManagerBlock(SourceManager &SourceMgr,
     Record.push_back(Code);
 
     // Starting offset of this entry within this module, so skip the dummy.
+    // C++ Levitation:
+#if 0
+    // Legacy
     Record.push_back(SLoc->getOffset() - 2);
+#else
+    // Altered
+    unsigned BuffOffset = SLoc->getOffset() - 2 - PP.getLevitationBodySize();
+    Record.push_back(BuffOffset);
+#endif
+    // end of C++ Levitation
+
     if (SLoc->isFile()) {
       const SrcMgr::FileInfo &File = SLoc->getFile();
       AddSourceLocation(File.getIncludeLoc(), Record);
@@ -2022,11 +2050,26 @@ void ASTWriter::WriteSourceManagerBlock(SourceManager &SourceMgr,
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Blob)); // offsets
   unsigned SLocOffsetsAbbrev = Stream.EmitAbbrev(std::move(Abbrev));
   {
+    // C++ Levitation
+#if 0 // Legacy
     RecordData::value_type Record[] = {
         SOURCE_LOCATION_OFFSETS, SLocEntryOffsets.size(),
         SourceMgr.getNextLocalOffset() - 1 /* skip dummy */};
     Stream.EmitRecordWithBlob(SLocOffsetsAbbrev, Record,
                               bytes(SLocEntryOffsets));
+#else // Altered
+    auto TotalSize = SourceMgr.getNextLocalOffset() - 1 /* skip dummy */;
+    if (PP.getLangOpts().LevitationMode)
+      TotalSize -= PP.getLevitationBodySize();
+
+    RecordData::value_type Record[] = {
+        SOURCE_LOCATION_OFFSETS, SLocEntryOffsets.size(),
+        TotalSize};
+    Stream.EmitRecordWithBlob(SLocOffsetsAbbrev, Record,
+                              bytes(SLocEntryOffsets));
+#endif
+    // end of C++ Levitation
+
   }
   // Write the source location entry preloads array, telling the AST
   // reader which source locations entries it should load eagerly.

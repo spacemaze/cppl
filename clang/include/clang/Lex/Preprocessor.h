@@ -2252,6 +2252,8 @@ private:
   levitation::DeclASTMeta::FragmentsVectorTy PPLevitationSkippedFragments;
   bool PPLevitationFirstIncludeMet = false;
 
+  unsigned LevitationBodySize = 0;
+
 
   bool TryLexLevitationBodyDepAttr(const Token &FirstToken);
   std::pair<SmallVector<StringRef, 16>, SourceRange> LexLevitationImportIdentifier(const Token &FirstTok);
@@ -2273,6 +2275,8 @@ public:
   levitation::DeclASTMeta::FragmentsVectorTy& getLevitationSkippedFragments() {
     return PPLevitationSkippedFragments;
   }
+
+  unsigned getLevitationBodySize() const;
 
   //
   // end of C++ Levitation Mode
