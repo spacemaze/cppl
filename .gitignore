@@ -66,4 +66,6 @@ autoconf/autom4te.cache
 .build
 *.pch
 *.bs
+a.out
+**/a.out
 
