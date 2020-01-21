@@ -969,8 +969,15 @@ Error BitcodeAnalyzer::parseBlock(unsigned BlockID, unsigned IndentLevel,
 
             if (BlobIsPrintable)
               O->OS << "'" << Blob << "'";
-            else
-              O->OS << "unprintable, " << Blob.size() << " bytes.";
+            else {
+              O->OS << "hex'";
+              for (unsigned i = 0, e = Blob.size(); i != e; ++i) {
+                O->OS.write_hex(Blob[i]);
+                if (i+1 != e)
+                  O->OS << " ";
+              }
+              O->OS << "'";
+            }
           }
         }
       }
