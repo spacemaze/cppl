@@ -1012,25 +1012,6 @@ ASTFileSignature ASTWriter::writeUnhashedControlBlock(Preprocessor &PP,
 
   // For implicit modules, write the hash of the PCM as its signature.
   ASTFileSignature Signature;
-
-  // C++ Levitation, also write signature for .decl-ast files.
-
-#if 1
-  // Levitation code:
-  bool NeedHash = (
-    WritingModule &&
-    PP.getHeaderSearchInfo().getHeaderSearchOpts().ModulesHashContent
-  ) ||
-  getLangOpts().isLevitationMode(LangOptions::LBSK_BuildDeclAST);
-
-  if (NeedHash) {
-    Signature = createSignature(StringRef(Buffer.begin(), StartOfUnhashedControl));
-    Record.append(Signature.begin(), Signature.end());
-    Stream.EmitRecord(SIGNATURE, Record);
-    Record.clear();
-  }
-#else
-  // Legacy code:
   if (WritingModule &&
       PP.getHeaderSearchInfo().getHeaderSearchOpts().ModulesHashContent) {
     Signature = createSignature(StringRef(Buffer.begin(), StartOfUnhashedControl));
@@ -1038,8 +1019,6 @@ ASTFileSignature ASTWriter::writeUnhashedControlBlock(Preprocessor &PP,
     Stream.EmitRecord(SIGNATURE, Record);
     Record.clear();
   }
-#endif
-  // end of C++ Levitation
 
   // Diagnostic options.
   const auto &Diags = Context.getDiagnostics();
@@ -1460,6 +1439,20 @@ void ASTWriter::WriteInputFiles(SourceManager &SourceMgr,
   unsigned UserFilesNum = 0;
   // Write out all of the input files.
   std::vector<uint64_t> InputFileOffsets;
+
+  // C++ Levitation
+
+  const FileEntry* MainFile = getLangOpts().LevitationMode ?
+      SourceMgr
+        .getSLocEntry(SourceMgr.getMainFileID())
+        .getFile()
+        .getContentCache()
+        ->OrigEntry
+      :
+      nullptr;
+
+  // end of C++ Levitation
+
   for (const auto &Entry : SortedFiles) {
     uint32_t &InputFileID = InputFileIDs[Entry.File];
     if (InputFileID != 0)
@@ -1489,14 +1482,21 @@ void ASTWriter::WriteInputFiles(SourceManager &SourceMgr,
           Entry.IsTopLevelModuleMap};
 #else
       // Altered code
-      uint64_t timestamp = !PP->getLangOpts().LevitationMode ?
+      // Don't emit timestamp for levitation files.
+      // We use hash instead.
+      uint64_t Timestamp = !PP->getLangOpts().LevitationMode ?
           (uint64_t)getTimestampForOutput(Entry.File) : 0;
+
+      uint64_t Size = getLangOpts().LevitationMode && Entry.File == MainFile ?
+          PP->getLevitationMainFileSize() :
+          (uint64_t)Entry.File->getSize();
 
       RecordData::value_type Record[] = {
           INPUT_FILE,
           InputFileOffsets.size(),
-          (uint64_t)Entry.File->getSize(),
-          timestamp,
+          // TODO Levitation: should also be truncated
+          Size,
+          Timestamp,
           Entry.BufferOverridden,
           Entry.IsTransient,
           Entry.IsTopLevelModuleMap};
@@ -1825,9 +1825,32 @@ void ASTWriter::WriteHeaderSearch(const HeaderSearch &HS) {
       SavedStrings.push_back(Filename.data());
     }
 
+    // C++ Levitation
+#if 0
     HeaderFileInfoTrait::key_type Key = {
       Filename, File->getSize(), getTimestampForOutput(File)
     };
+#else
+
+    off_t Size;
+    time_t TimeStamp;
+
+    if (PP->getLangOpts().LevitationMode) {
+      Size = 0;
+      TimeStamp = 0;
+    } else {
+      Size = File->getSize();
+      TimeStamp =  getTimestampForOutput(File);
+    }
+
+    HeaderFileInfoTrait::key_type Key = {
+      Filename, Size, TimeStamp
+    };
+
+#endif
+
+    // end of C++ Levitation
+
     HeaderFileInfoTrait::data_type Data = {
       *HFI, HS.getModuleMap().findAllModulesForHeader(File), {}
     };
@@ -1951,7 +1974,7 @@ void ASTWriter::WriteSourceManagerBlock(SourceManager &SourceMgr,
     Record.push_back(SLoc->getOffset() - 2);
 #else
     // Altered
-    unsigned BuffOffset = SLoc->getOffset() - 2 - PP.getLevitationBodySize();
+    unsigned BuffOffset = PP.getLevitationSLocFinalOffset(FID);
     Record.push_back(BuffOffset);
 #endif
     // end of C++ Levitation

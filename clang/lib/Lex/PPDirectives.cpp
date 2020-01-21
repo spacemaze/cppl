@@ -2410,15 +2410,8 @@ void Preprocessor::HandleLevitationBodyDirective(SourceLocation HashLoc, Token &
   // actions for a while.
 
   auto &SM = getSourceManager();
-  auto &MainFileSLoc = SM.getSLocEntry(SM.getMainFileID());
   auto BodyStart = getSourceManager().getDecomposedLoc(HashLoc).second;
-
-  // TODO Levitation: why -2?
-  //   this is how it's done in ASTWriter, and yet it doesn't
-  //   explain anything.
-  auto BodyEnd = MainFileSLoc.getOffset() - 2;
-
-  LevitationBodySize = BodyEnd - BodyStart;
+  LevitationBodySize = SM.getFileIDSize(SM.getMainFileID()) - BodyStart;
 
   bool oldIncPr = isIncrementalProcessingEnabled();
   enableIncrementalProcessing(true);
@@ -2558,10 +2551,6 @@ const Preprocessor::PPLevitationDepsVector&
   return PPLevitationBodyDeps;
 }
 
-unsigned Preprocessor::getLevitationBodySize() const {
-  return LevitationBodySize;
-}
-
 void Preprocessor::levitationAddSkippedSourceFragment(
     const clang::SourceLocation &Start,
     const clang::SourceLocation &End
@@ -2597,6 +2586,27 @@ void Preprocessor::levitationAddSkippedSourceFragment(
 
   llvm::errs() << "\n";
 #endif
+}
+
+uint64_t Preprocessor::getLevitationBodySize() const {
+  return LevitationBodySize;
+}
+
+uint64_t Preprocessor::getLevitationMainFileSize() const {
+  auto &SM = getSourceManager();
+  return SM.getFileIDSize(SM.getMainFileID()) - LevitationBodySize;
+}
+
+uint64_t Preprocessor::getLevitationSLocFinalOffset(clang::FileID FID) const {
+  auto &SM = getSourceManager();
+  FileID MainFileID = SM.getMainFileID();
+
+  auto &Entry = SM.getSLocEntry(FID);
+
+  if (FID <= MainFileID)
+    return Entry.getOffset();
+
+  return Entry.getOffset() - LevitationBodySize;
 }
 
 // end of C++ Levitation

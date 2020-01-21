@@ -2360,6 +2360,23 @@ InputFile ASTReader::getInputFile(ModuleFile &F, unsigned ID, bool Complain) {
     None,
   };
   auto HasInputFileChanged = [&]() {
+
+    // C++ Levitation
+
+    if (PP.getLangOpts().LevitationMode) {
+
+      // Don't use that type of validation,
+      // we have own build system (Levitation Driver)
+      // which should deal with that problem.
+      //
+      // Also note, that in Levitation mode, it is allowed
+      // to modify definition part of file and it doesn't
+      // affect .decl-ast files.
+      return ModificationType::None;
+    }
+
+    // end of C++ Levitation
+
     if (StoredSize != File->getSize())
       return ModificationType::Size;
     if (!DisableValidation && StoredTime &&

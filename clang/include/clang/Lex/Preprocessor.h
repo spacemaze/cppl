@@ -2246,14 +2246,17 @@ public:
 private:
   typedef SmallString<32> PPLevitationPartBuff;
   SmallVector<PPLevitationPartBuff, 64> PPLevitationDepIdBuffs;
+
   PPLevitationDepsVector PPLevitationDeclDeps;
   PPLevitationDepsVector PPLevitationBodyDeps;
+
   bool PPLevitationPublic = false;
+
   levitation::DeclASTMeta::FragmentsVectorTy PPLevitationSkippedFragments;
+
   bool PPLevitationFirstIncludeMet = false;
 
   unsigned LevitationBodySize = 0;
-
 
   bool TryLexLevitationBodyDepAttr(const Token &FirstToken);
   std::pair<SmallVector<StringRef, 16>, SourceRange> LexLevitationImportIdentifier(const Token &FirstTok);
@@ -2276,7 +2279,9 @@ public:
     return PPLevitationSkippedFragments;
   }
 
-  unsigned getLevitationBodySize() const;
+  uint64_t getLevitationMainFileSize() const;
+  uint64_t getLevitationBodySize() const;
+  uint64_t getLevitationSLocFinalOffset(FileID FID) const;
 
   //
   // end of C++ Levitation Mode
