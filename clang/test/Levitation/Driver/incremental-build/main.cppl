@@ -14,6 +14,9 @@
 // 1. run initial build
 // 2.1. update preamble
 // 2.2. make sure we rebuild everything in this case
+// 2.3. Remove preamble.pch
+// 2.4. Make sure it will be recompiled, and rest will be recompiled too.
+//
 // 3.1. update A.cppl, decl part
 // 3.2. make sure that we rebuild only following things:
 //    * parse only import for A.cppl
@@ -33,6 +36,21 @@
 //    * B.o
 //    * A.o
 //    * a.out
+// 6.1. Remove B.decl-ast
+// 6.2. Make sure we got recompiled:
+//    * B.decl-ast
+//    * B.o
+//    * A.o
+//    * a.out
+// 6.3. Remove B.o
+// 6.4. Make sure we got recompiled:
+//    * B.o
+//    * a.out
+// 7.1. Remove a.out
+// 7.2. Make sure only LINK stage will be ran.
+//
+// 8.1. Do nothing against previous state.
+// 8.2. Make sure "Nothing to build." warning will be emitted.
 
 
 // 1. run initial build
@@ -67,6 +85,24 @@
 // CHECK_PREAMBLE-DAG: BUILD OBJ {{.*}}A.cppl,
 // CHECK_PREAMBLE-DAG: BUILD OBJ {{.*}}main.cppl,
 // CHECK_PREAMBLE-DAG: LINK
+//
+
+// 2.3. remove preamble.pch
+// RUN: rm %T/preamble.pch
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    | FileCheck %s --check-prefix=CHECK_PREAMBLE_RM
+// CHECK_PREAMBLE_RM-NOT: PARSE IMP {{.*}}A.cppl
+// CHECK_PREAMBLE_RM-NOT: PARSE IMP {{.*}}B.cppl
+//
+// CHECK_PREAMBLE_RM-DAG: PREAMBLE {{.*}}preamble.pch
+// CHECK_PREAMBLE_RM-DAG: BUILD DECL {{.*}}B.cppl,
+// CHECK_PREAMBLE_RM-DAG: BUILD OBJ {{.*}}B.cppl,
+// CHECK_PREAMBLE_RM-DAG: BUILD DECL {{.*}}A.cppl,
+// CHECK_PREAMBLE_RM-DAG: BUILD OBJ {{.*}}A.cppl,
+// CHECK_PREAMBLE_RM-DAG: BUILD OBJ {{.*}}main.cppl,
+// CHECK_PREAMBLE_RM-DAG: LINK
+//
+
 
 // 3.1. update A.cppl, decl part
 // RUN: cp %S/Inputs/A.cppl.new-decl %S/Inputs/A.cppl
@@ -116,6 +152,50 @@
 // CHECK_B-DAG: BUILD OBJ {{.*}}B.cppl,
 // CHECK_B-DAG: BUILD OBJ {{.*}}A.cppl,
 // CHECK_B-DAG: LINK
+
+// 6.1. Remove B.decl-ast
+// RUN: rm %T/Inputs/B.decl-ast
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    | FileCheck %s --check-prefix=CHECK_DECL_AST_RM
+//
+// CHECK_DECL_AST_RM-NOT: PREAMBLE {{.*}}preamble.pch
+// CHECK_DECL_AST_RM-NOT: PARSE IMP {{.*}}A.cppl
+// CHECK_DECL_AST_RM-NOT: PARSE IMP {{.*}}B.cppl
+// CHECK_DECL_AST_RM-NOT: BUILD DECL {{.*}}A.cppl,
+// CHECK_DECL_AST_RM-NOT: BUILD OBJ {{.*}}B.cppl,
+// CHECK_DECL_AST_RM-NOT: BUILD OBJ {{.*}}main.cppl,
+//
+// CHECK_DECL_AST_RM-DAG: BUILD DECL {{.*}}B.cppl,
+// CHECK_DECL_AST_RM-DAG: BUILD OBJ {{.*}}A.cppl,
+// CHECK_DECL_AST_RM-DAG: LINK
+
+// 6.3. Remove B.o
+// RUN: rm %T/Inputs/B.o
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    | FileCheck %s --check-prefix=CHECK_OBJ_RM
+//
+// CHECK_OBJ_RM-NOT: PREAMBLE {{.*}}preamble.pch
+// CHECK_OBJ_RM-NOT: PARSE IMP {{.*}}A.cppl
+// CHECK_OBJ_RM-NOT: PARSE IMP {{.*}}B.cppl
+// CHECK_OBJ_RM-NOT: BUILD DECL {{.*}}A.cppl,
+// CHECK_OBJ_RM-NOT: BUILD DECL {{.*}}B.cppl,
+// CHECK_OBJ_RM-NOT: BUILD OBJ {{.*}}A.cppl,
+// CHECK_OBJ_RM-NOT: BUILD OBJ {{.*}}main.cppl,
+//
+// CHECK_OBJ_RM-DAG: BUILD OBJ {{.*}}B.cppl,
+// CHECK_OBJ_RM-DAG: LINK
+
+// 7. Remove a.out
+// RUN: rm %T/a.out
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    | FileCheck %s --check-prefix=CHECK_RM_A
+//
+// CHECK_RM_A: LINK
+
+// 8. Do nothing.
+// RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
+// RUN:    | FileCheck %s --check-prefix=CHECK_EMPTY_BUILD
+// CHECK_EMPTY_BUILD: Nothing to build.
 
 #import Inputs::A
 

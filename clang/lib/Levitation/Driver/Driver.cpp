@@ -84,6 +84,7 @@ namespace {
     std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
 
     bool PreambleUpdated = false;
+    bool ObjectsUpdated = false;
     DependenciesGraph::NodesSet UpdatedNodes;
 
     RunContext(LevitationDriver &driver)
@@ -146,10 +147,15 @@ private:
 
   bool isUpToDate(
     DeclASTMeta &Meta,
+    StringRef ProductFile,
     StringRef MetaFile,
     StringRef SourceFile,
     StringRef ItemDescr
   );
+
+  void setPreambleUpdated();
+  void setNodeUpdated(DependenciesGraph::NodeID::Type NID);
+  void setObjectsUpdated();
 
   const FilesInfo& getFilesInfoFor(
       const DependenciesGraph::Node &N
@@ -1155,6 +1161,7 @@ void LevitationDriverImpl::buildPreamble() {
   DeclASTMeta Meta;
   if (isUpToDate(
       Meta,
+      Context.Driver.PreambleOutput,
       Context.Driver.PreambleOutputMeta,
       Context.Driver.PreambleSource,
       Context.Driver.PreambleSource
@@ -1176,7 +1183,7 @@ void LevitationDriverImpl::buildPreamble() {
     Status.setFailure()
     << "Preamble: phase failed";
 
-  Context.PreambleUpdated = true;
+  setPreambleUpdated();
 }
 
 // TODO Levitation: deprecated
@@ -1220,6 +1227,7 @@ void LevitationDriverImpl::runParseImport() {
 
     if (isUpToDate(
         ldepsMeta,
+        Files.LDeps,
         Files.LDepsMeta,
         Files.Source,
         Files.LDeps /* item description */
@@ -1304,6 +1312,11 @@ void LevitationDriverImpl::codeGen() {
 void LevitationDriverImpl::runLinker() {
   if (!Status.isValid())
     return;
+
+  if (llvm::sys::fs::exists(Context.Driver.Output) && !Context.ObjectsUpdated) {
+    Status.setWarning("Nothing to build.\n");
+    return;
+  }
 
   assert(Context.Driver.isLinkPhaseEnabled() && "Link phase must be enabled.");
 
@@ -1495,6 +1508,8 @@ bool LevitationDriverImpl::processDefinition(
 
   Paths fullDependencies = getFullDependencies(N, Graph);
 
+  setObjectsUpdated();
+
   return Commands::buildObject(
     Context.Driver.BinDir,
     Context.Driver.PreambleOutput,
@@ -1576,7 +1591,7 @@ bool LevitationDriverImpl::processDeclaration(
   // Mark that node was updated, if it was updated
 
   if (!equal(OldDeclASTHash, Meta.getDeclASTHash()))
-    Context.UpdatedNodes.insert(N.ID);
+    setNodeUpdated(N.ID);
   else {
     auto &Verbose = Log.info();
     Verbose << "Node ";
@@ -1601,13 +1616,16 @@ bool LevitationDriverImpl::isUpToDate(
   const auto &Files = getFilesInfoFor(N);
 
   StringRef MetaFile;
+  StringRef ProductFile;
 
   switch (N.Kind) {
     case DependenciesGraph::NodeKind::Declaration:
       MetaFile = Files.DeclASTMetaFile;
+      ProductFile = Files.DeclAST;
       break;
     case DependenciesGraph::NodeKind::Definition:
       MetaFile = Files.ObjMetaFile;
+      ProductFile = Files.Object;
       break;
     default:
       return false;
@@ -1616,16 +1634,20 @@ bool LevitationDriverImpl::isUpToDate(
   auto NodeDescr = Context.DependenciesInfo->getDependenciesGraph()
       .nodeDescrShort(N.ID, Strings);
 
-  return isUpToDate(Meta, MetaFile, Files.Source, NodeDescr);
+  return isUpToDate(Meta, ProductFile, MetaFile, Files.Source, NodeDescr);
 }
 
 bool LevitationDriverImpl::isUpToDate(
     DeclASTMeta &Meta,
+    llvm::StringRef ProductFile,
     llvm::StringRef MetaFile,
     llvm::StringRef SourceFile,
     llvm::StringRef ItemDescr
 ) {
   if (!llvm::sys::fs::exists(MetaFile))
+    return false;
+
+  if (!llvm::sys::fs::exists(ProductFile))
     return false;
 
   if (!DeclASTMetaLoader::fromFile(
@@ -1683,6 +1705,19 @@ bool LevitationDriverImpl::isUpToDate(
     << SourceFile << "' during up-to-date checks.\n"
     << "  Must rebuild dependent chains. But I think I'll fail, dude...";
     return false;
+}
+
+void LevitationDriverImpl::setPreambleUpdated() {
+  Context.PreambleUpdated = true;
+}
+
+void LevitationDriverImpl::setNodeUpdated(DependenciesGraph::NodeID::Type NID) {
+  Context.UpdatedNodes.insert(NID);
+}
+
+
+void LevitationDriverImpl::setObjectsUpdated() {
+  Context.ObjectsUpdated = true;
 }
 
 // TODO Levitation: Deprecated
