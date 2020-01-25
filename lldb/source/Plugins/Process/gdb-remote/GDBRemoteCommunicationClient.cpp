@@ -1,4 +1,4 @@
-//===-- GDBRemoteCommunicationClient.cpp ------------------------*- C++ -*-===//
+//===-- GDBRemoteCommunicationClient.cpp ----------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -3740,7 +3740,7 @@ bool GDBRemoteCommunicationClient::ReadExtFeature(
     case ('m'):
       if (str.length() > 1)
         output << &str[1];
-      offset += size;
+      offset += str.length() - 1;
       break;
 
     // unknown chunk

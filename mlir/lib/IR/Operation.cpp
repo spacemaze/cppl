@@ -64,17 +64,6 @@ OperationName OperationName::getFromOpaquePointer(void *pointer) {
 }
 
 //===----------------------------------------------------------------------===//
-// OpResult
-//===----------------------------------------------------------------------===//
-
-/// Return the result number of this result.
-unsigned OpResult::getResultNumber() const {
-  // Results are not stored in place, so we have to find it within the list.
-  auto resList = getOwner()->getOpResults();
-  return std::distance(resList.begin(), llvm::find(resList, *this));
-}
-
-//===----------------------------------------------------------------------===//
 // Operation
 //===----------------------------------------------------------------------===//
 
@@ -124,26 +113,40 @@ Operation *Operation::create(Location location, OperationName name,
                              bool resizableOperandList) {
   unsigned numSuccessors = successors.size();
 
+  // We only need to allocate additional memory for a subset of results.
+  unsigned numTrailingResults = OpResult::getNumTrailing(resultTypes.size());
+
   // Input operands are nullptr-separated for each successor, the null operands
   // aren't actually stored.
   unsigned numOperands = operands.size() - numSuccessors;
 
   // Compute the byte size for the operation and the operand storage.
-  auto byteSize =
-      totalSizeToAlloc<OpResult, BlockOperand, Region, detail::OperandStorage>(
-          resultTypes.size(), numSuccessors, numRegions,
-          /*detail::OperandStorage*/ 1);
+  auto byteSize = totalSizeToAlloc<detail::TrailingOpResult, BlockOperand,
+                                   Region, detail::OperandStorage>(
+      numTrailingResults, numSuccessors, numRegions,
+      /*detail::OperandStorage*/ 1);
   byteSize += llvm::alignTo(detail::OperandStorage::additionalAllocSize(
                                 numOperands, resizableOperandList),
                             alignof(Operation));
   void *rawMem = malloc(byteSize);
 
   // Create the new Operation.
-  auto op = ::new (rawMem) Operation(location, name, resultTypes.size(),
-                                     numSuccessors, numRegions, attributes);
+  auto op = ::new (rawMem) Operation(location, name, resultTypes, numSuccessors,
+                                     numRegions, attributes);
 
   assert((numSuccessors == 0 || !op->isKnownNonTerminator()) &&
          "unexpected successors in a non-terminator operation");
+
+  // Initialize the trailing results.
+  if (LLVM_UNLIKELY(numTrailingResults > 0)) {
+    // We initialize the trailing results with their result number. This makes
+    // 'getResultNumber' checks much more efficient. The main purpose for these
+    // results is to give an anchor to the main operation anyways, so this is
+    // purely an optimization.
+    auto *trailingResultIt = op->getTrailingObjects<detail::TrailingOpResult>();
+    for (unsigned i = 0; i != numTrailingResults; ++i, ++trailingResultIt)
+      trailingResultIt->trailingResultNumber = i;
+  }
 
   // Initialize the regions.
   for (unsigned i = 0; i != numRegions; ++i)
@@ -152,11 +155,6 @@ Operation *Operation::create(Location location, OperationName name,
   // Initialize the results and operands.
   new (&op->getOperandStorage())
       detail::OperandStorage(numOperands, resizableOperandList);
-
-  auto instResults = op->getOpResults();
-  for (unsigned i = 0, e = resultTypes.size(); i != e; ++i)
-    new (&instResults[i]) OpResult(OpResult::create(resultTypes[i], op));
-
   auto opOperands = op->getOpOperands();
 
   // Initialize normal operands.
@@ -208,11 +206,20 @@ Operation *Operation::create(Location location, OperationName name,
   return op;
 }
 
-Operation::Operation(Location location, OperationName name, unsigned numResults,
-                     unsigned numSuccessors, unsigned numRegions,
-                     const NamedAttributeList &attributes)
-    : location(location), numResults(numResults), numSuccs(numSuccessors),
-      numRegions(numRegions), name(name), attrs(attributes) {}
+Operation::Operation(Location location, OperationName name,
+                     ArrayRef<Type> resultTypes, unsigned numSuccessors,
+                     unsigned numRegions, const NamedAttributeList &attributes)
+    : location(location), numSuccs(numSuccessors), numRegions(numRegions),
+      hasSingleResult(false), name(name), attrs(attributes) {
+  if (!resultTypes.empty()) {
+    // If there is a single result it is stored in-place, otherwise use a tuple.
+    hasSingleResult = resultTypes.size() == 1;
+    if (hasSingleResult)
+      resultType = resultTypes.front();
+    else
+      resultType = TupleType::get(resultTypes, location->getContext());
+  }
+}
 
 // Operations are deleted through the destroy() member because they are
 // allocated via malloc.
@@ -221,9 +228,6 @@ Operation::~Operation() {
 
   // Explicitly run the destructors for the operands and results.
   getOperandStorage().~OperandStorage();
-
-  for (auto &result : getOpResults())
-    result.destroy();
 
   // Explicitly run the destructors for the successors.
   for (auto &successor : getBlockOperands())
@@ -540,6 +544,13 @@ void Operation::dropAllDefinedValueUses() {
       block.dropAllDefinedValueUses();
 }
 
+/// Return the number of results held by this operation.
+unsigned Operation::getNumResults() {
+  if (!resultType)
+    return 0;
+  return hasSingleResult ? 1 : resultType.cast<TupleType>().size();
+}
+
 void Operation::setSuccessor(Block *block, unsigned index) {
   assert(index < getNumSuccessors());
   getBlockOperands()[index].set(block);
@@ -798,7 +809,7 @@ LogicalResult OpTrait::impl::verifySameTypeOperands(Operation *op) {
   if (nOperands < 2)
     return success();
 
-  auto type = op->getOperand(0)->getType();
+  auto type = op->getOperand(0).getType();
   for (auto opType : llvm::drop_begin(op->getOperandTypes(), 1))
     if (opType != type)
       return op->emitOpError() << "requires all operands to have the same type";
@@ -836,7 +847,7 @@ LogicalResult OpTrait::impl::verifySameOperandsShape(Operation *op) {
   if (failed(verifyAtLeastNOperands(op, 1)))
     return failure();
 
-  auto type = op->getOperand(0)->getType();
+  auto type = op->getOperand(0).getType();
   for (auto opType : llvm::drop_begin(op->getOperandTypes(), 1)) {
     if (failed(verifyCompatibleShape(opType, type)))
       return op->emitOpError() << "requires the same shape for all operands";
@@ -849,7 +860,7 @@ LogicalResult OpTrait::impl::verifySameOperandsAndResultShape(Operation *op) {
       failed(verifyAtLeastNResults(op, 1)))
     return failure();
 
-  auto type = op->getOperand(0)->getType();
+  auto type = op->getOperand(0).getType();
   for (auto resultType : op->getResultTypes()) {
     if (failed(verifyCompatibleShape(resultType, type)))
       return op->emitOpError()
@@ -906,7 +917,7 @@ LogicalResult OpTrait::impl::verifySameOperandsAndResultType(Operation *op) {
       failed(verifyAtLeastNResults(op, 1)))
     return failure();
 
-  auto type = op->getResult(0)->getType();
+  auto type = op->getResult(0).getType();
   auto elementType = getElementTypeOrSelf(type);
   for (auto resultType : llvm::drop_begin(op->getResultTypes(), 1)) {
     if (getElementTypeOrSelf(resultType) != elementType ||
@@ -935,7 +946,7 @@ static LogicalResult verifySuccessor(Operation *op, unsigned succNo) {
 
   auto operandIt = operands.begin();
   for (unsigned i = 0, e = operandCount; i != e; ++i, ++operandIt) {
-    if ((*operandIt)->getType() != destBB->getArgument(i)->getType())
+    if ((*operandIt).getType() != destBB->getArgument(i).getType())
       return op->emitError() << "type mismatch for bb argument #" << i
                              << " of successor #" << succNo;
   }
@@ -1045,9 +1056,9 @@ LogicalResult OpTrait::impl::verifyResultSizeAttr(Operation *op,
 
 void impl::buildBinaryOp(Builder *builder, OperationState &result, Value lhs,
                          Value rhs) {
-  assert(lhs->getType() == rhs->getType());
+  assert(lhs.getType() == rhs.getType());
   result.addOperands({lhs, rhs});
-  result.types.push_back(lhs->getType());
+  result.types.push_back(lhs.getType());
 }
 
 ParseResult impl::parseOneResultSameOperandTypeOp(OpAsmParser &parser,
@@ -1066,7 +1077,7 @@ void impl::printOneResultOp(Operation *op, OpAsmPrinter &p) {
 
   // If not all the operand and result types are the same, just use the
   // generic assembly form to avoid omitting information in printing.
-  auto resultType = op->getResult(0)->getType();
+  auto resultType = op->getResult(0).getType();
   if (llvm::any_of(op->getOperandTypes(),
                    [&](Type type) { return type != resultType; })) {
     p.printGenericOp(op);
@@ -1102,15 +1113,15 @@ ParseResult impl::parseCastOp(OpAsmParser &parser, OperationState &result) {
 }
 
 void impl::printCastOp(Operation *op, OpAsmPrinter &p) {
-  p << op->getName() << ' ' << *op->getOperand(0);
+  p << op->getName() << ' ' << op->getOperand(0);
   p.printOptionalAttrDict(op->getAttrs());
-  p << " : " << op->getOperand(0)->getType() << " to "
-    << op->getResult(0)->getType();
+  p << " : " << op->getOperand(0).getType() << " to "
+    << op->getResult(0).getType();
 }
 
 Value impl::foldCastOp(Operation *op) {
   // Identity cast
-  if (op->getOperand(0)->getType() == op->getResult(0)->getType())
+  if (op->getOperand(0).getType() == op->getResult(0).getType())
     return op->getOperand(0);
   return nullptr;
 }

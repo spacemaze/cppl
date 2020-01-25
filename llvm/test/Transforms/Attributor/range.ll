@@ -186,7 +186,7 @@ define i1 @test1-check(i32* %p) {
 ; CHECK-LABEL: define {{[^@]+}}@test1-check
 ; CHECK-SAME: (i32* nocapture nofree readonly [[P:%.*]])
 ; CHECK-NEXT:    [[RES:%.*]] = tail call i32 @test1(i32* nocapture nofree readonly [[P]])
-; CHECK-SAME: !range !2
+; CHECK-SANME: !range !2
 ; CHECK-NEXT:    [[CMP:%.*]] = icmp eq i32 [[RES]], 500
 ; CHECK-NEXT:    ret i1 [[CMP]]
 ;
@@ -438,9 +438,67 @@ entry:
   ret i32 %call
 }
 
+define dso_local i32 @test-5() {
+; CHECK-LABEL: define {{[^@]+}}@test-5()
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    [[CALL:%.*]] = call i32 @rec(i32 0), !range !3
+; CHECK-NEXT:    ret i32 [[CALL]]
+;
+entry:
+  %call = call i32 @rec(i32 0)
+  ret i32 %call
+}
+define internal i32 @rec(i32 %depth) {
+; CHECK-LABEL: define {{[^@]+}}@rec
+; CHECK-SAME: (i32 [[DEPTH:%.*]])
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    [[CALL:%.*]] = call i32 @foo(i32 [[DEPTH]])
+; CHECK-NEXT:    [[TOBOOL:%.*]] = icmp ne i32 [[CALL]], 0
+; CHECK-NEXT:    br i1 [[TOBOOL]], label [[IF_THEN:%.*]], label [[IF_END:%.*]]
+; CHECK:       if.then:
+; CHECK-NEXT:    br label [[RETURN:%.*]]
+; CHECK:       if.end:
+; CHECK-NEXT:    [[CMP:%.*]] = icmp slt i32 [[DEPTH]], 10
+; CHECK-NEXT:    br i1 [[CMP]], label [[IF_THEN1:%.*]], label [[IF_END3:%.*]]
+; CHECK:       if.then1:
+; CHECK-NEXT:    [[ADD:%.*]] = add nsw i32 [[DEPTH]], 1
+; CHECK-NEXT:    [[CALL2:%.*]] = call i32 @rec(i32 [[ADD]])
+; CHECK-NEXT:    br label [[IF_END3]]
+; CHECK:       if.end3:
+; CHECK-NEXT:    br label [[RETURN]]
+; CHECK:       return:
+; CHECK-NEXT:    [[RETVAL_0:%.*]] = phi i32 [ 0, [[IF_THEN]] ], [ 1, [[IF_END3]] ]
+; CHECK-NEXT:    ret i32 [[RETVAL_0]]
+;
+entry:
+  %call = call i32 @foo(i32 %depth)
+  %tobool = icmp ne i32 %call, 0
+  br i1 %tobool, label %if.then, label %if.end
+
+if.then:                                          ; preds = %entry
+  br label %return
+
+if.end:                                           ; preds = %entry
+  %cmp = icmp slt i32 %depth, 10
+  br i1 %cmp, label %if.then1, label %if.end3
+
+if.then1:                                         ; preds = %if.end
+  %add = add nsw i32 %depth, 1
+  %call2 = call i32 @rec(i32 %add)
+  br label %if.end3
+
+if.end3:                                          ; preds = %if.then1, %if.end
+  br label %return
+
+return:                                           ; preds = %if.end3, %if.then
+  %retval.0 = phi i32 [ 0, %if.then ], [ 1, %if.end3 ]
+  ret i32 %retval.0
+}
+declare dso_local i32 @foo(i32)
 
 !0 = !{i32 0, i32 10}
 !1 = !{i32 10, i32 100}
 ;CHECK: !0 = !{i32 0, i32 10}
 ;CHECK-NEXT: !1 = !{i32 10, i32 100}
 ;CHECK-NEXT: !2 = !{i32 200, i32 1091}
+

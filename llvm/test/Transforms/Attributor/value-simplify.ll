@@ -194,14 +194,14 @@ define i32 @ipccp3() {
 %struct.X = type { i8* }
 define internal i32* @test_inalloca(i32* inalloca %a) {
 ; CHECK-LABEL: define {{[^@]+}}@test_inalloca
-; CHECK-SAME: (i32* inalloca noalias nofree returned writeonly [[A:%.*]])
+; CHECK-SAME: (i32* inalloca noalias nofree returned writeonly align 536870912 [[A:%.*]])
 ; CHECK-NEXT:    ret i32* [[A]]
 ;
   ret i32* %a
 }
 define i32* @complicated_args_inalloca() {
 ; CHECK-LABEL: define {{[^@]+}}@complicated_args_inalloca()
-; CHECK-NEXT:    [[CALL:%.*]] = call i32* @test_inalloca(i32* noalias nofree writeonly null)
+; CHECK-NEXT:    [[CALL:%.*]] = call i32* @test_inalloca(i32* noalias nofree writeonly align 536870912 null)
 ; CHECK-NEXT:    ret i32* [[CALL]]
 ;
   %call = call i32* @test_inalloca(i32* null)
@@ -210,7 +210,7 @@ define i32* @complicated_args_inalloca() {
 
 define internal void @test_sret(%struct.X* sret %a, %struct.X** %b) {
 ; CHECK-LABEL: define {{[^@]+}}@test_sret
-; CHECK-SAME: (%struct.X* nofree sret writeonly [[A:%.*]], %struct.X** nocapture nofree nonnull writeonly dereferenceable(8) [[B:%.*]])
+; CHECK-SAME: (%struct.X* nofree sret writeonly align 536870912 [[A:%.*]], %struct.X** nocapture nofree nonnull writeonly dereferenceable(8) [[B:%.*]])
 ; CHECK-NEXT:    store %struct.X* [[A]], %struct.X** [[B]]
 ; CHECK-NEXT:    ret void
 ;
@@ -220,7 +220,7 @@ define internal void @test_sret(%struct.X* sret %a, %struct.X** %b) {
 define void @complicated_args_sret(%struct.X** %b) {
 ; CHECK-LABEL: define {{[^@]+}}@complicated_args_sret
 ; CHECK-SAME: (%struct.X** nocapture nofree writeonly [[B:%.*]])
-; CHECK-NEXT:    call void @test_sret(%struct.X* nofree writeonly null, %struct.X** nocapture nofree writeonly [[B]])
+; CHECK-NEXT:    call void @test_sret(%struct.X* nofree writeonly align 536870912 null, %struct.X** nocapture nofree writeonly [[B]])
 ; CHECK-NEXT:    ret void
 ;
   call void @test_sret(%struct.X* null, %struct.X** %b)
@@ -229,14 +229,14 @@ define void @complicated_args_sret(%struct.X** %b) {
 
 define internal %struct.X* @test_nest(%struct.X* nest %a) {
 ; CHECK-LABEL: define {{[^@]+}}@test_nest
-; CHECK-SAME: (%struct.X* nest noalias nofree readnone returned [[A:%.*]])
+; CHECK-SAME: (%struct.X* nest noalias nofree readnone returned align 536870912 [[A:%.*]])
 ; CHECK-NEXT:    ret %struct.X* [[A]]
 ;
   ret %struct.X* %a
 }
 define %struct.X* @complicated_args_nest() {
 ; CHECK-LABEL: define {{[^@]+}}@complicated_args_nest()
-; CHECK-NEXT:    [[CALL:%.*]] = call %struct.X* @test_nest(%struct.X* noalias nofree readnone null)
+; CHECK-NEXT:    [[CALL:%.*]] = call %struct.X* @test_nest(%struct.X* noalias nofree readnone align 536870912 null)
 ; CHECK-NEXT:    ret %struct.X* [[CALL]]
 ;
   %call = call %struct.X* @test_nest(%struct.X* null)
@@ -246,7 +246,7 @@ define %struct.X* @complicated_args_nest() {
 @S = external global %struct.X
 define internal void @test_byval(%struct.X* byval %a) {
 ; CHECK-LABEL: define {{[^@]+}}@test_byval
-; CHECK-SAME: (%struct.X* nocapture nofree nonnull writeonly byval align 8 dereferenceable(8) [[A:%.*]])
+; CHECK-SAME: (%struct.X* noalias nocapture nofree nonnull writeonly byval align 8 dereferenceable(8) [[A:%.*]])
 ; CHECK-NEXT:    [[G0:%.*]] = getelementptr [[STRUCT_X:%.*]], %struct.X* [[A]], i32 0, i32 0
 ; CHECK-NEXT:    store i8* null, i8** [[G0]], align 8
 ; CHECK-NEXT:    ret void
@@ -261,6 +261,55 @@ define void @complicated_args_byval() {
 ; CHECK-NEXT:    ret void
 ;
   call void @test_byval(%struct.X* @S)
+  ret void
+}
+
+define void @fixpoint_changed(i32* %p) {
+; CHECK-LABEL: define {{[^@]+}}@fixpoint_changed
+; CHECK-SAME: (i32* nocapture nofree writeonly [[P:%.*]])
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    br label [[FOR_COND:%.*]]
+; CHECK:       for.cond:
+; CHECK-NEXT:    [[J_0:%.*]] = phi i32 [ 0, [[ENTRY:%.*]] ], [ [[INC:%.*]], [[SW_EPILOG:%.*]] ]
+; CHECK-NEXT:    [[CMP:%.*]] = icmp slt i32 [[J_0]], 30
+; CHECK-NEXT:    br i1 [[CMP]], label [[FOR_BODY:%.*]], label [[FOR_END:%.*]]
+; CHECK:       for.body:
+; CHECK-NEXT:    switch i32 [[J_0]], label [[SW_EPILOG]] [
+; CHECK-NEXT:    i32 1, label [[SW_BB:%.*]]
+; CHECK-NEXT:    ]
+; CHECK:       sw.bb:
+; CHECK-NEXT:    br label [[SW_EPILOG]]
+; CHECK:       sw.epilog:
+; CHECK-NEXT:    [[X_0:%.*]] = phi i32 [ 255, [[FOR_BODY]] ], [ 253, [[SW_BB]] ]
+; CHECK-NEXT:    store i32 [[X_0]], i32* [[P]]
+; CHECK-NEXT:    [[INC]] = add nsw i32 [[J_0]], 1
+; CHECK-NEXT:    br label [[FOR_COND]]
+; CHECK:       for.end:
+; CHECK-NEXT:    ret void
+;
+entry:
+  br label %for.cond
+
+for.cond:
+  %j.0 = phi i32 [ 0, %entry ], [ %inc, %sw.epilog ]
+  %cmp = icmp slt i32 %j.0, 30
+  br i1 %cmp, label %for.body, label %for.end
+
+for.body:
+  switch i32 %j.0, label %sw.epilog [
+  i32 1, label %sw.bb
+  ]
+
+sw.bb:
+  br label %sw.epilog
+
+sw.epilog:
+  %x.0 = phi i32 [ 255, %for.body ], [ 253, %sw.bb ]
+  store i32 %x.0, i32* %p
+  %inc = add nsw i32 %j.0, 1
+  br label %for.cond
+
+for.end:
   ret void
 }
 

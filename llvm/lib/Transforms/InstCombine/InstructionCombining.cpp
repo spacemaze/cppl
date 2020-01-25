@@ -856,6 +856,23 @@ Value *InstCombiner::dyn_castNegVal(Value *V) const {
   return nullptr;
 }
 
+/// Get negated V (that is 0-V) without increasing instruction count,
+/// assuming that the original V will become unused.
+Value *InstCombiner::freelyNegateValue(Value *V) {
+  if (Value *NegV = dyn_castNegVal(V))
+    return NegV;
+
+  if (!V->hasOneUse())
+    return nullptr;
+
+  Value *A, *B;
+  // 0-(A-B)  =>  B-A
+  if (match(V, m_Sub(m_Value(A), m_Value(B))))
+    return Builder.CreateSub(B, A);
+
+  return nullptr;
+}
+
 static Value *foldOperationIntoSelectOperand(Instruction &I, Value *SO,
                                              InstCombiner::BuilderTy &Builder) {
   if (auto *Cast = dyn_cast<CastInst>(&I))
@@ -1649,7 +1666,7 @@ Instruction *InstCombiner::narrowMathIfNoOverflow(BinaryOperator &BO) {
   return CastInst::Create(CastOpc, NarrowBO, BO.getType());
 }
 
-bool isMergedGEPInBounds(GEPOperator &GEP1, GEPOperator &GEP2) {
+static bool isMergedGEPInBounds(GEPOperator &GEP1, GEPOperator &GEP2) {
   // At least one GEP must be inbounds.
   if (!GEP1.isInBounds() && !GEP2.isInBounds())
     return false;
@@ -2450,12 +2467,13 @@ Instruction *InstCombiner::visitAllocSite(Instruction &MI) {
         replaceInstUsesWith(*C,
                             ConstantInt::get(Type::getInt1Ty(C->getContext()),
                                              C->isFalseWhenEqual()));
-      } else if (isa<BitCastInst>(I) || isa<GetElementPtrInst>(I) ||
-                 isa<AddrSpaceCastInst>(I)) {
-        replaceInstUsesWith(*I, UndefValue::get(I->getType()));
       } else if (auto *SI = dyn_cast<StoreInst>(I)) {
         for (auto *DII : DIIs)
           ConvertDebugDeclareToDebugValue(DII, SI, *DIB);
+      } else {
+        // Casts, GEP, or anything else: we're about to delete this instruction,
+        // so it can not have any valid uses.
+        replaceInstUsesWith(*I, UndefValue::get(I->getType()));
       }
       eraseInstFromFunction(*I);
     }
@@ -2591,14 +2609,17 @@ Instruction *InstCombiner::visitReturnInst(ReturnInst &RI) {
 
   Value *ResultOp = RI.getOperand(0);
   Type *VTy = ResultOp->getType();
-  if (!VTy->isIntegerTy())
+  if (!VTy->isIntegerTy() || isa<Constant>(ResultOp))
     return nullptr;
 
   // There might be assume intrinsics dominating this return that completely
   // determine the value. If so, constant fold it.
   KnownBits Known = computeKnownBits(ResultOp, 0, &RI);
-  if (Known.isConstant())
+  if (Known.isConstant()) {
+    Worklist.AddValue(ResultOp);
     RI.setOperand(0, Constant::getIntegerValue(VTy, Known.getConstant()));
+    return &RI;
+  }
 
   return nullptr;
 }
@@ -3567,7 +3588,8 @@ static bool combineInstructionsOverFunction(
     ProfileSummaryInfo *PSI, bool ExpensiveCombines, unsigned MaxIterations,
     LoopInfo *LI) {
   auto &DL = F.getParent()->getDataLayout();
-  ExpensiveCombines |= EnableExpensiveCombines;
+  if (EnableExpensiveCombines.getNumOccurrences())
+    ExpensiveCombines = EnableExpensiveCombines;
   MaxIterations = std::min(MaxIterations, LimitMaxIterations.getValue());
 
   /// Builder - This is an IRBuilder that automatically inserts new

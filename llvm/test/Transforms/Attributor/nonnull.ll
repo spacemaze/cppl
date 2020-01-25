@@ -23,7 +23,7 @@ define i8* @test2(i8* nonnull %p) {
 ; Given an SCC where one of the functions can not be marked nonnull,
 ; can we still mark the other one which is trivially nonnull
 define i8* @scc_binder(i1 %c) {
-; ATTRIBUTOR: define noalias i8* @scc_binder
+; ATTRIBUTOR: define noalias align 536870912 i8* @scc_binder
   br i1 %c, label %rec, label %end
 rec:
   call i8* @test3(i1 %c)
@@ -57,7 +57,7 @@ define i8* @test4() {
 ; Given a mutual recursive set of functions which *can* return null
 ; make sure we haven't marked them as nonnull.
 define i8* @test5_helper(i1 %c) {
-; ATTRIBUTOR: define noalias i8* @test5_helper
+; ATTRIBUTOR: define noalias align 536870912 i8* @test5_helper
   br i1 %c, label %rec, label %end
 rec:
   %ret = call i8* @test5(i1 %c)
@@ -67,7 +67,7 @@ end:
 }
 
 define i8* @test5(i1 %c) {
-; ATTRIBUTOR: define noalias i8* @test5
+; ATTRIBUTOR: define noalias align 536870912 i8* @test5
   %ret = call i8* @test5_helper(i1 %c)
   ret i8* %ret
 }
@@ -525,7 +525,7 @@ define i32 addrspace(3)* @as(i32 addrspace(3)* dereferenceable(4) %p) {
   ret i32 addrspace(3)* %p
 }
 
-; ATTRIBUTOR: define internal nonnull i32* @g2()
+; ATTRIBUTOR: define internal nonnull align 4 i32* @g2()
 define internal i32* @g2() {
   ret i32* inttoptr (i64 4 to i32*)
 }
@@ -815,6 +815,25 @@ define void @PR43833_simple(i32* %0, i32 %1) {
   %10 = add nuw nsw i32 %9, 1
   %11 = icmp eq i32 %10, %1
   br i1 %11, label %7, label %8
+}
+
+declare i8* @strrchr(i8* %0, i32 %1) nofree nounwind readonly
+
+; We should not mark the return of @strrchr as `nonnull`, it may well be NULL!
+define i8* @mybasename(i8* nofree readonly %str) {
+; ATTRIBUTOR-LABEL: define {{[^@]+}}@mybasename
+; ATTRIBUTOR-SAME: (i8* nofree readonly [[STR:%.*]])
+; ATTRIBUTOR-NEXT:    [[CALL:%.*]] = call i8* @strrchr(i8* nofree readonly [[STR]], i32 47)
+; ATTRIBUTOR-NEXT:    [[TOBOOL:%.*]] = icmp ne i8* [[CALL]], null
+; ATTRIBUTOR-NEXT:    [[ADD_PTR:%.*]] = getelementptr inbounds i8, i8* [[CALL]], i64 1
+; ATTRIBUTOR-NEXT:    [[COND:%.*]] = select i1 [[TOBOOL]], i8* [[ADD_PTR]], i8* [[STR]]
+; ATTRIBUTOR-NEXT:    ret i8* [[COND]]
+;
+  %call = call i8* @strrchr(i8* %str, i32 47)
+  %tobool = icmp ne i8* %call, null
+  %add.ptr = getelementptr inbounds i8, i8* %call, i64 1
+  %cond = select i1 %tobool, i8* %add.ptr, i8* %str
+  ret i8* %cond
 }
 
 attributes #0 = { "null-pointer-is-valid"="true" }

@@ -64,8 +64,8 @@ public:
 
   // Returns the template that can be used to produce an instance of the
   // attribute.
-  // Syntax: {0} should be replaced with a builder, {1} should be replaced with
-  // the constant value.
+  // Syntax: `$builder` should be replaced with a builder, `$0` should be
+  // replaced with the constant value.
   StringRef getConstBuilderTemplate() const;
 
   // Returns the base-level attribute that this attribute constraint is
@@ -125,6 +125,7 @@ private:
 // StringAttr and IntegerAttr.
 class EnumAttrCase : public Attribute {
 public:
+  explicit EnumAttrCase(const llvm::Record *record);
   explicit EnumAttrCase(const llvm::DefInit *init);
 
   // Returns true if this EnumAttrCase is backed by a StringAttr.
@@ -135,6 +136,9 @@ public:
 
   // Returns the value of this enum attribute case.
   int64_t getValue() const;
+
+  // Returns the TableGen definition this EnumAttrCase was constructed from.
+  const llvm::Record &getDef() const;
 };
 
 // Wrapper class providing helper methods for accessing enum attributes defined
@@ -145,6 +149,8 @@ public:
   explicit EnumAttr(const llvm::Record *record);
   explicit EnumAttr(const llvm::Record &record);
   explicit EnumAttr(const llvm::DefInit *init);
+
+  static bool classof(const Attribute *attr);
 
   // Returns true if this is a bit enum attribute.
   bool isBitEnum() const;

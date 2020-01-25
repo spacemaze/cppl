@@ -421,7 +421,7 @@ void InputSection::copyRelocations(uint8_t *buf, ArrayRef<RelTy> rels) {
       p->r_addend = getAddend<ELFT>(rel);
 
     // Output section VA is zero for -r, so r_offset is an offset within the
-    // section, but for --emit-relocs it is an virtual address.
+    // section, but for --emit-relocs it is a virtual address.
     p->r_offset = sec->getVA(rel.r_offset);
     p->setSymbolAndType(in.symTab->getSymbolIndex(&sym), type,
                         config->isMips64EL);
@@ -636,6 +636,7 @@ static int64_t getTlsTpOffset(const Symbol &s) {
     return s.getVA(0) + (tls->p_vaddr & (tls->p_align - 1));
 
     // Variant 2.
+  case EM_HEXAGON:
   case EM_386:
   case EM_X86_64:
     return s.getVA(0) - tls->p_memsz -
@@ -938,29 +939,29 @@ void InputSectionBase::relocateAlloc(uint8_t *buf, uint8_t *bufEnd) {
     switch (expr) {
     case R_RELAX_GOT_PC:
     case R_RELAX_GOT_PC_NOPIC:
-      target->relaxGot(bufLoc, type, targetVA);
+      target->relaxGot(bufLoc, rel, targetVA);
       break;
     case R_PPC64_RELAX_TOC:
-      if (!tryRelaxPPC64TocIndirection(type, rel, bufLoc))
+      if (!tryRelaxPPC64TocIndirection(rel, bufLoc))
         target->relocateOne(bufLoc, type, targetVA);
       break;
     case R_RELAX_TLS_IE_TO_LE:
-      target->relaxTlsIeToLe(bufLoc, type, targetVA);
+      target->relaxTlsIeToLe(bufLoc, rel, targetVA);
       break;
     case R_RELAX_TLS_LD_TO_LE:
     case R_RELAX_TLS_LD_TO_LE_ABS:
-      target->relaxTlsLdToLe(bufLoc, type, targetVA);
+      target->relaxTlsLdToLe(bufLoc, rel, targetVA);
       break;
     case R_RELAX_TLS_GD_TO_LE:
     case R_RELAX_TLS_GD_TO_LE_NEG:
-      target->relaxTlsGdToLe(bufLoc, type, targetVA);
+      target->relaxTlsGdToLe(bufLoc, rel, targetVA);
       break;
     case R_AARCH64_RELAX_TLS_GD_TO_IE_PAGE_PC:
     case R_RELAX_TLS_GD_TO_IE:
     case R_RELAX_TLS_GD_TO_IE_ABS:
     case R_RELAX_TLS_GD_TO_IE_GOT_OFF:
     case R_RELAX_TLS_GD_TO_IE_GOTPLT:
-      target->relaxTlsGdToIe(bufLoc, type, targetVA);
+      target->relaxTlsGdToIe(bufLoc, rel, targetVA);
       break;
     case R_PPC64_CALL:
       // If this is a call to __tls_get_addr, it may be part of a TLS

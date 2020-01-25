@@ -284,7 +284,7 @@ struct IRPosition {
   Argument *getAssociatedArgument() const;
 
   /// Return true if the position refers to a function interface, that is the
-  /// function scope, the function return, or an argumnt.
+  /// function scope, the function return, or an argument.
   bool isFnInterfaceKind() const {
     switch (getPositionKind()) {
     case IRPosition::IRP_FUNCTION:
@@ -511,7 +511,7 @@ template <> struct DenseMapInfo<IRPosition> {
 ///   - the argument of the callee (IRP_ARGUMENT), if known
 ///   - the callee (IRP_FUNCTION), if known
 ///   - the position the call site argument is associated with if it is not
-///     anchored to the call site, e.g., if it is an arugment then the argument
+///     anchored to the call site, e.g., if it is an argument then the argument
 ///     (IRP_ARGUMENT)
 class SubsumingPositionIterator {
   SmallVector<IRPosition, 4> IRPositions;
@@ -866,6 +866,13 @@ struct Attributor {
     ToBeChangedToUnreachableInsts.insert(I);
   }
 
+  /// Record that \p II has at least one dead successor block. This information
+  /// is used, e.g., to replace \p II with a call, after information was
+  /// manifested.
+  void registerInvokeWithDeadSuccessor(InvokeInst &II) {
+    InvokeWithDeadSuccessor.push_back(&II);
+  }
+
   /// Record that \p I is deleted after information was manifested. This also
   /// triggers deletion of trivially dead istructions.
   void deleteAfterManifest(Instruction &I) { ToBeDeletedInsts.insert(&I); }
@@ -1175,14 +1182,17 @@ private:
   DenseMap<Use *, Value *> ToBeChangedUses;
 
   /// Instructions we replace with `unreachable` insts after manifest is done.
-  SmallPtrSet<Instruction *, 8> ToBeChangedToUnreachableInsts;
+  SmallDenseSet<WeakVH, 16> ToBeChangedToUnreachableInsts;
+
+  /// Invoke instructions with at least a single dead successor block.
+  SmallVector<WeakVH, 16> InvokeWithDeadSuccessor;
 
   /// Functions, blocks, and instructions we delete after manifest is done.
   ///
   ///{
   SmallPtrSet<Function *, 8> ToBeDeletedFunctions;
   SmallPtrSet<BasicBlock *, 8> ToBeDeletedBlocks;
-  SmallPtrSet<Instruction *, 8> ToBeDeletedInsts;
+  SmallDenseSet<WeakVH, 8> ToBeDeletedInsts;
   ///}
 };
 
@@ -2282,7 +2292,7 @@ struct AAAlign : public IRAttribute<
   /// Return assumed alignment.
   unsigned getAssumedAlign() const { return getAssumed(); }
 
-  /// Return known alignemnt.
+  /// Return known alignment.
   unsigned getKnownAlign() const { return getKnown(); }
 
   /// Create an abstract attribute view for the position \p IRP.

@@ -137,11 +137,14 @@ StringRef tblgen::ConstantAttr::getConstantValue() const {
   return def->getValueAsString("value");
 }
 
-tblgen::EnumAttrCase::EnumAttrCase(const llvm::DefInit *init)
-    : Attribute(init) {
+tblgen::EnumAttrCase::EnumAttrCase(const llvm::Record *record)
+    : Attribute(record) {
   assert(isSubClassOf("EnumAttrCaseInfo") &&
          "must be subclass of TableGen 'EnumAttrInfo' class");
 }
+
+tblgen::EnumAttrCase::EnumAttrCase(const llvm::DefInit *init)
+    : EnumAttrCase(init->getDef()) {}
 
 bool tblgen::EnumAttrCase::isStrCase() const {
   return isSubClassOf("StrEnumAttrCase");
@@ -155,6 +158,8 @@ int64_t tblgen::EnumAttrCase::getValue() const {
   return def->getValueAsInt("value");
 }
 
+const llvm::Record &tblgen::EnumAttrCase::getDef() const { return *def; }
+
 tblgen::EnumAttr::EnumAttr(const llvm::Record *record) : Attribute(record) {
   assert(isSubClassOf("EnumAttrInfo") &&
          "must be subclass of TableGen 'EnumAttr' class");
@@ -164,6 +169,10 @@ tblgen::EnumAttr::EnumAttr(const llvm::Record &record) : Attribute(&record) {}
 
 tblgen::EnumAttr::EnumAttr(const llvm::DefInit *init)
     : EnumAttr(init->getDef()) {}
+
+bool tblgen::EnumAttr::classof(const Attribute *attr) {
+  return attr->isSubClassOf("EnumAttrInfo");
+}
 
 bool tblgen::EnumAttr::isBitEnum() const { return isSubClassOf("BitEnumAttr"); }
 

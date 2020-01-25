@@ -277,13 +277,14 @@ bool Symbol::includeInDynsym() const {
     return false;
   if (computeBinding() == STB_LOCAL)
     return false;
+  if (!isDefined() && !isCommon())
+    // This should unconditionally return true, unfortunately glibc -static-pie
+    // expects undefined weak symbols not to exist in .dynsym, e.g.
+    // __pthread_mutex_lock reference in _dl_add_to_namespace_list,
+    // __pthread_initialize_minimal reference in csu/libc-start.c.
+    return !(config->noDynamicLinker && isUndefWeak());
 
-  // If a PIE binary was not linked against any shared libraries, then we can
-  // safely drop weak undef symbols from .dynsym.
-  if (isUndefWeak() && config->pie && sharedFiles.empty())
-    return false;
-
-  return isUndefined() || isShared() || exportDynamic || inDynamicList;
+  return exportDynamic || inDynamicList;
 }
 
 // Print out a log message for --trace-symbol.
