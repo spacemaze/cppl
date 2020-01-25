@@ -1974,7 +1974,7 @@ void ASTWriter::WriteSourceManagerBlock(SourceManager &SourceMgr,
     Record.push_back(SLoc->getOffset() - 2);
 #else
     // Altered
-    unsigned BuffOffset = PP.getLevitationSLocFinalOffset(FID);
+    unsigned BuffOffset = PP.getLevitationSLocFinalOffset(FID) - 2;
     Record.push_back(BuffOffset);
 #endif
     // end of C++ Levitation
