@@ -23,6 +23,7 @@ namespace levitation {
   constexpr char FileExtensions::Object[];
   constexpr char FileExtensions::DeclarationAST[];
   constexpr char FileExtensions::ParsedDependencies[];
+  constexpr char FileExtensions::ParsedDependenciesMeta[];
   constexpr char FileExtensions::DirectDependencies[];
   constexpr char FileExtensions::FullDependencies[];
 

@@ -615,6 +615,7 @@ function parseImport {
 
     SRCFILE="$(getSrcFileName $MODULE)"
     DEPSFILE="$(getBuildedFileName $MODULE.ldeps)"
+    DEPSMETAFILE="$(getBuildedFileName $MODULE.ldeps.meta)"
 
     if [ "$BUILD_MODE" == "$BUILD_MODE_EXECUTE" ]; then
       createDirFor $DEPSFILE
@@ -626,7 +627,11 @@ function parseImport {
         echo "// Parsing #import directives in '$MODULE'..." >> $GENERATED_OUTPUT_COMMANDS
     fi
 
-    runCommand $CXX $FLAGS "-levitation-deps-output-file=$DEPSFILE" $SRCFILE
+    runCommand $CXX $FLAGS \
+      "-levitation-deps-output-file=$DEPSFILE " \
+      "-levitation-decl-ast-meta=$DEPSMETAFILE" \
+      $SRCFILE
+
     echoIfDebug
 }
 

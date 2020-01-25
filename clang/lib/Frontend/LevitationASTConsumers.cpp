@@ -216,6 +216,11 @@ namespace {
         buffer_ostream buffer(OpenedFile.getOutputStream());
         auto Writer = CreateBitstreamWriter(buffer);
         Writer->writeAndFinalize(Dependencies);
+
+        writeMeta(
+            CI.getFrontendOpts().LevitationDeclASTMeta,
+            buffer.str()
+        );
       }
 
       if (F.hasErrors()) {
@@ -225,6 +230,40 @@ namespace {
   private:
     File createFile() {
       return File(CI.getFrontendOpts().LevitationDependenciesOutputFile);
+    }
+
+    void writeMeta(StringRef MetaOut, StringRef LDepsBuffer) {
+      // Remember everything we need for pos-processing.
+      // After FrontendAction::EndSourceFile()
+      // Compiler invocation and Sema will be destroyed.
+      // Only SourceManager and FileManager remain.
+
+      auto &SM = CI.getSourceManager();
+      auto SrcBuffer = SM.getBufferData(SM.getMainFileID());
+
+      auto SourceMD5 = levitation::calcMD5(SrcBuffer);
+      auto OutputMD5 = levitation::calcMD5(LDepsBuffer);
+
+      levitation::DeclASTMeta Meta(
+        SourceMD5.Bytes,
+        OutputMD5.Bytes,
+        DeclASTMeta::FragmentsVectorTy()
+      );
+
+      assert(MetaOut.size());
+      levitation::File F(MetaOut);
+
+      if (auto OpenedFile = F.open()) {
+        auto Writer = levitation::CreateMetaBitstreamWriter(OpenedFile.getOutputStream());
+        Writer->writeAndFinalize(Meta);
+      }
+
+      if (F.hasErrors()) {
+        CI.getDiagnostics().Report(
+            diag::err_fe_levitation_dependency_file_failed_to_create_meta
+        );
+        return;
+      }
     }
 
     void diagDependencyFileIOIssues(File::StatusEnum status) {

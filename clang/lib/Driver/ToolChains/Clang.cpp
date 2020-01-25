@@ -4120,6 +4120,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
             Args.MakeArgString(Twine("-levitation-preamble=") + IncludePreamble));
       }
 
+      levitationSetMeta(D, CmdArgs, Args);
+
     } else if (Args.hasArg(options::OPT_cppl_decl)) {
 
       // assert(JA.getType() == types::TY_AST && "Type must be AST");

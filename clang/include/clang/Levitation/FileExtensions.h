@@ -28,6 +28,7 @@ struct FileExtensions {
   static constexpr char Object [] = "o";
   static constexpr char DeclarationAST [] = "decl-ast";
   static constexpr char ParsedDependencies [] = "ldeps";
+  static constexpr char ParsedDependenciesMeta [] = "ldeps.meta";
   static constexpr char DirectDependencies [] = "d";
   static constexpr char FullDependencies [] = "fulld";
 };

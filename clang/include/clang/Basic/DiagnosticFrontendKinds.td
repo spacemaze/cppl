@@ -297,6 +297,9 @@ def err_fe_levitation_dependency_file_io_troubles : Error<
 def err_fe_levitation_dependency_file_failed_to_create : Error<
   "Failed to create C++ Levitation dependencies file">;
 
+def err_fe_levitation_dependency_file_failed_to_create_meta : Error<
+  "Failed to create C++ Levitation failed to create meta file ofr dependencies file">;
+
 def err_fe_levitation_decl_ast_meta_file_io_troubles : Error<
   "Failed to create C++ Levitation Decl AST Meta file due to IO errors.">;
 

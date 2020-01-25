@@ -58,6 +58,7 @@ namespace {
     SinglePath Source;
     SinglePath Header;
     SinglePath LDeps;
+    SinglePath LDepsMeta;
     SinglePath DeclASTMetaFile;
     SinglePath ObjMetaFile;
 
@@ -745,6 +746,7 @@ public:
       StringRef BinDir,
       StringRef PrecompiledPreamble,
       StringRef OutLDepsFile,
+      StringRef OutLDepsMetaFile,
       StringRef SourceFile,
       StringRef SourcesRoot,
       const LevitationDriver::Args &ExtraArgs,
@@ -761,6 +763,7 @@ public:
     )
     .addKVArgEq("-cppl-src-root", SourcesRoot)
     .addKVArgEq("-cppl-deps-out", OutLDepsFile)
+    .addKVArgEq("-cppl-meta", OutLDepsMetaFile)
     .addArgs(ExtraArgs)
     .addArg(SourceFile)
     .execute();
@@ -1213,11 +1216,22 @@ void LevitationDriverImpl::runParseImport() {
 
     auto Files = Context.Files[PackagePath];
 
+    DeclASTMeta ldepsMeta;
+
+    if (isUpToDate(
+        ldepsMeta,
+        Files.LDepsMeta,
+        Files.Source,
+        Files.LDeps /* item description */
+    ))
+      continue;
+
     TM.addTask([=] (TasksManager::TaskContext &TC) {
       TC.Successful = Commands::parseImport(
           Context.Driver.BinDir,
           Context.Driver.PreambleOutput,
           Files.LDeps,
+          Files.LDepsMeta,
           Files.Source,
           Context.Driver.SourcesRoot,
           Context.Driver.ExtraParseImportArgs,
@@ -1367,6 +1381,12 @@ void LevitationDriverImpl::collectSources() {
         Context.Driver.BuildRoot,
         PackagePath,
         FileExtensions::ParsedDependencies
+    );
+
+    Files.LDepsMeta = Path::getPath<SinglePath>(
+        Context.Driver.BuildRoot,
+        PackagePath,
+        FileExtensions::ParsedDependenciesMeta
     );
 
     Files.DeclAST = Path::getPath<SinglePath>(

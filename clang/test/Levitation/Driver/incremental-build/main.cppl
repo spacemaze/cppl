@@ -16,16 +16,19 @@
 // 2.2. make sure we rebuild everything in this case
 // 3.1. update A.cppl, decl part
 // 3.2. make sure that we rebuild only following things:
+//    * parse only import for A.cppl
 //    * A.decl-ast
 //    * A.o
 //    * main.o
 //    * a.out
 // 4.1. update A.cppl, body part
 // 4.2. make sure that we rebuild only following things:
+//    * parse only import for A.cppl (alas we can't avoid it so far)
 //    * A.o
 //    * a.out
 // 5.1. update B.cppl, decl part
 // 5.2. make sure that we rebuild only following things:
+//    * parse only import for B.cppl (alas we can't avoid it so far)
 //    * B.decl-ast
 //    * B.o
 //    * A.o
@@ -40,6 +43,8 @@
 // RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
 // RUN:    | FileCheck %s --check-prefix=CHECK_INITIAL
 //
+// CHECK_INITIAL-DAG: PARSE IMP {{.*}}A.cppl
+// CHECK_INITIAL-DAG: PARSE IMP {{.*}}B.cppl
 // CHECK_INITIAL-DAG: PREAMBLE {{.*}}preamble.pch
 // CHECK_INITIAL-DAG: BUILD DECL {{.*}}B.cppl,
 // CHECK_INITIAL-DAG: BUILD OBJ {{.*}}B.cppl,
@@ -52,6 +57,9 @@
 // RUN: cp %S/preamble.hpp.second %S/preamble.hpp
 // RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
 // RUN:    | FileCheck %s --check-prefix=CHECK_PREAMBLE
+// CHECK_PREAMBLE-NOT: PARSE IMP {{.*}}A.cppl
+// CHECK_PREAMBLE-NOT: PARSE IMP {{.*}}B.cppl
+//
 // CHECK_PREAMBLE-DAG: PREAMBLE {{.*}}preamble.pch
 // CHECK_PREAMBLE-DAG: BUILD DECL {{.*}}B.cppl,
 // CHECK_PREAMBLE-DAG: BUILD OBJ {{.*}}B.cppl,
@@ -65,10 +73,12 @@
 // RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
 // RUN:    | FileCheck %s --check-prefix=CHECK_A_DECL
 //
+// CHECK_A_DECL-NOT: PARSE IMP {{.*}}B.cppl
 // CHECK_A_DECL-NOT: PREAMBLE {{.*}}preamble.pch
 // CHECK_A_DECL-NOT: BUILD DECL {{.*}}B.cppl,
 // CHECK_A_DECL-NOT: BUILD OBJ {{.*}}B.cppl,
 //
+// CHECK_A_DECL: PARSE IMP {{.*}}A.cppl
 // CHECK_A_DECL-DAG: BUILD DECL {{.*}}A.cppl,
 // CHECK_A_DECL-DAG: BUILD OBJ {{.*}}A.cppl,
 // CHECK_A_DECL-DAG: BUILD OBJ {{.*}}main.cppl,
@@ -81,10 +91,12 @@
 // RUN:    | FileCheck %s --check-prefix=CHECK_A_BODY
 //
 // CHECK_A_BODY-NOT: PREAMBLE {{.*}}preamble.pch
+// CHECK_A_BODY-NOT: PARSE IMP {{.*}}B.cppl
 // CHECK_A_BODY-NOT: BUILD DECL {{.*}}B.cppl,
 // CHECK_A_BODY-NOT: BUILD OBJ {{.*}}B.cppl,
 // CHECK_A_BODY-NOT: BUILD OBJ {{.*}}main.cppl,
 //
+// CHECK_A_BODY: PARSE IMP {{.*}}A.cppl
 // CHECK_A_BODY-DAG: BUILD DECL {{.*}}A.cppl,
 // CHECK_A_BODY-DAG: BUILD OBJ {{.*}}A.cppl,
 // CHECK_A_BODY-DAG: LINK
@@ -95,9 +107,11 @@
 // RUN:    | FileCheck %s --check-prefix=CHECK_B
 //
 // CHECK_B-NOT: PREAMBLE {{.*}}preamble.pch
+// CHECK_B-NOT: PARSE IMP {{.*}}A.cppl
 // CHECK_B-NOT: BUILD DECL {{.*}}A.cppl,
 // CHECK_B-NOT: BUILD OBJ {{.*}}main.cppl,
 //
+// CHECK_B: PARSE IMP {{.*}}B.cppl
 // CHECK_B-DAG: BUILD DECL {{.*}}B.cppl,
 // CHECK_B-DAG: BUILD OBJ {{.*}}B.cppl,
 // CHECK_B-DAG: BUILD OBJ {{.*}}A.cppl,
