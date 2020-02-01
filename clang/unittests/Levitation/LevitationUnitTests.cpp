@@ -56,7 +56,7 @@ TEST_F(LevitationUnitTests, InnerTask) {
   bool End = false;
 
   {
-    tasks::TasksManager TM(3);
+    tasks::TasksManager TM(2);
 
     TM.addTask([&](tasks::TasksManager::TaskContext &Context) {
 
