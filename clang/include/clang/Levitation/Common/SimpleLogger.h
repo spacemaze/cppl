@@ -17,7 +17,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
-
+#include <mutex>
 namespace clang { namespace levitation { namespace log {
 
 enum class Level {
@@ -46,6 +46,7 @@ enum class Level {
 class Logger {
   Level LogLevel;
   llvm::raw_ostream &Out;
+  std::mutex Locker;
 
   Logger(Level LogLevel, llvm::raw_ostream &Out)
   : LogLevel(LogLevel), Out(Out)
@@ -93,6 +94,10 @@ public:
 
   llvm::raw_ostream &verbose() {
     return getStream(Level::Verbose);
+  }
+
+  std::unique_lock<std::mutex> lock() {
+    return std::unique_lock<std::mutex>(Locker);
   }
 
 protected:

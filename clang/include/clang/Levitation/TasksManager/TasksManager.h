@@ -29,6 +29,9 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+
+// #define LEVITATION_ENABLE_TASK_MANAGER_LOGS
 
 namespace clang { namespace levitation { namespace tasks {
 
@@ -60,7 +63,7 @@ private:
 
     TaskID ID;
     ActionFn Action;
-    TaskStatus Status;
+    TaskStatus Status = TaskStatus::Pending;
 
     bool isPending() {
       return Status == TaskStatus::Pending;
@@ -88,7 +91,7 @@ private:
   bool TerminationRequested = false;
   std::unordered_set<std::unique_ptr<std::thread>> Workers;
 
-protected:
+public:
 
   TasksManager(int jobsNumber)
   : Log(log::Logger::get()),
@@ -97,14 +100,17 @@ protected:
     runWorkers();
   }
 
-  friend CreatableSingleton<TasksManager>;
-
-public:
-
   ~TasksManager() {
-    TerminationRequested = true;
+    {
+      auto locker = lockTasks();
+      TerminationRequested = true;
+    }
+    QueueNotifier.notify_all();
+
     for (auto &w : Workers) {
+      log("Joining worker...");
       w->join();
+      log("Joining successfull.");
     }
   }
 
@@ -115,6 +121,9 @@ public:
   }
 
   bool waitForTasks(const TasksSet &tasksSet) {
+
+    log("Waiting for some tasks to be completed.");
+
     auto locker = lockStatus();
     TaskFinishedNotifier.wait(locker, [&] {
       for (auto TID : tasksSet) {
@@ -129,19 +138,52 @@ public:
   }
 
   bool waitForTasks() {
+
+    log("Waiting for all tasks to be completed.");
+
     auto locker = lockStatus();
     TaskFinishedNotifier.wait(locker, [&] {
+      log("Checking...");
       for (auto &kv : Tasks) {
-        if (kv.second->isPending())
+        if (kv.second->isPending()) {
+          log("Task ", kv.first, " is pending");
           return false;
+        }
       }
+      log("Checking: All tasks complete!");
       return true;
     });
+
+    log("Waiting task complete.");
 
     return true;
   }
 
 protected:
+
+  template <typename ...ArgsT>
+  void log(ArgsT&&...args) {
+#ifdef LEVITATION_ENABLE_TASK_MANAGER_LOGS
+    auto _ = Log.lock();
+    Log.verbose() << "TaskManager: ";
+    log_suffix(std::forward<ArgsT>(args)...);
+    Log.verbose() << "\n";
+#endif
+  }
+
+  void log_suffix() {
+  }
+
+  template <typename FirstArgT>
+  void log_suffix(FirstArgT Arg) {
+    Log.verbose() << Arg;
+  }
+
+  template <typename FirstArgT, typename ...ArgsT>
+  void log_suffix(FirstArgT first, ArgsT&&...args) {
+    log_suffix(first);
+    log_suffix(std::forward<ArgsT>(args)...);
+  }
 
   std::unique_lock<std::mutex> lockTasks() {
     return std::unique_lock<std::mutex>(TasksLocker);
@@ -164,18 +206,25 @@ protected:
 
         PendingTasks.push_front(TID);
       }
-      Log.verbose() << "Registered task " << TID << "\n";
+
+      log("Registered task ", TID);
+
       QueueNotifier.notify_one();
       return TID;
     }
   }
 
-  Task &getNextTask() {
+  Task *getNextTask(bool *Terminated) {
     auto tasksLocker = lockTasks();
 
     QueueNotifier.wait(tasksLocker, [&] {
-      return (bool)PendingTasks.size();
+      return TerminationRequested || (bool)PendingTasks.size();
     });
+
+    if (TerminationRequested) {
+      *Terminated = true;
+      return nullptr;
+    }
 
     auto PendingTaskID = PendingTasks.back();
     PendingTasks.pop_back();
@@ -183,11 +232,12 @@ protected:
     Task *ptr = Tasks[PendingTaskID].get();
     assert(ptr);
 
-    return *ptr;
+    return ptr;
   }
 
-  llvm::raw_ostream& logWorker(int Id) {
-    return Log.verbose() << "Worker[" << Id << "]: ";
+  template <typename ...ArgsT>
+  void logWorker(int Id, ArgsT&&...args) {
+    log("Worker[", Id, "]: ", std::forward<ArgsT>(args)...);
   }
 
   void runWorkers() {
@@ -196,12 +246,19 @@ protected:
       static int Id = 0;
       int MyId = Id++;
 
-      logWorker(MyId) << "Launched.\n";
 
-      while (!TerminationRequested) {
-        Task &Tsk = getNextTask();
+      logWorker(MyId, "Launched");
 
-        logWorker(MyId) << "Got task " << Tsk.ID << "\n";
+      while (true) {
+        bool Terminated = false;
+        Task *TaskPtr = getNextTask(&Terminated);
+
+        if (Terminated)
+          break;
+
+        Task &Tsk = *TaskPtr;
+
+        logWorker(MyId, "Got task ", Tsk.ID);
 
         TaskContext context(Tsk.ID);
 
@@ -213,14 +270,16 @@ protected:
               TaskStatus::Successful : TaskStatus::Failed;
         }
 
-        logWorker(MyId)
-        << "Finished task " << Tsk.ID
-        << ", status: "
-        << (Tsk.Status == TaskStatus::Successful ? "Success" : "Failed")
-        << "\n";
+        logWorker(MyId,
+          "Finished task ", Tsk.ID,
+          ", status: ",
+          (Tsk.Status == TaskStatus::Successful ? "Success" : "Failed")
+        );
 
         TaskFinishedNotifier.notify_all();
       }
+
+      logWorker(MyId, "Stopped");
     };
 
     for (int j = 0; j != JobsNumber; ++j) {
