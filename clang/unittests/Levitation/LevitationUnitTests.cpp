@@ -38,14 +38,90 @@ TEST_F(LevitationUnitTests, FirstTest) {
     tasks::TasksManager TM(1);
 
     TM.addTask([&](tasks::TasksManager::TaskContext &Context) {
-      std::this_thread::sleep_for(std::chrono::seconds(5));
+      std::this_thread::sleep_for(std::chrono::seconds(1));
       Flag = true;
       Context.Successful = true;
     });
 
-    TM.waitForTasks();
+    EXPECT_TRUE(TM.waitForTasks());
   }
 
   EXPECT_TRUE(Flag);
+}
+
+TEST_F(LevitationUnitTests, InnerTask) {
+
+  bool Inside1 = false;
+  bool Inside2 = false;
+  bool End = false;
+
+  {
+    tasks::TasksManager TM(3);
+
+    TM.addTask([&](tasks::TasksManager::TaskContext &Context) {
+
+      auto TID1 = TM.addTask([&] (tasks::TasksManager::TaskContext &Context) {
+        Inside1 = true;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+      });
+
+      auto TID2 = TM.addTask([&] (tasks::TasksManager::TaskContext &Context) {
+        Inside2 = true;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+      });
+
+      tasks::TasksManager::TasksSet InnerTasks;
+      InnerTasks.insert(TID1);
+      InnerTasks.insert(TID2);
+
+      TM.waitForTasks(InnerTasks);
+
+      EXPECT_TRUE(Inside1);
+      EXPECT_TRUE(Inside2);
+
+      End = true;
+
+      Context.Successful = true;
+    });
+
+    EXPECT_TRUE(TM.waitForTasks());
+  }
+
+  EXPECT_TRUE(End);
+}
+
+TEST_F(LevitationUnitTests, InnerTaskSameThread) {
+
+  bool Inside1 = false;
+  bool End = false;
+
+  {
+    tasks::TasksManager TM(1);
+
+    TM.addTask([&](tasks::TasksManager::TaskContext &Context) {
+
+      auto TID1 = TM.addTask([&] (tasks::TasksManager::TaskContext &Context) {
+          Inside1 = true;
+          std::this_thread::sleep_for(std::chrono::seconds(1));
+        },
+        true /*same thread*/
+      );
+
+      tasks::TasksManager::TasksSet InnerTasks;
+      InnerTasks.insert(TID1);
+
+      TM.waitForTasks(InnerTasks);
+
+      EXPECT_TRUE(Inside1);
+
+      End = true;
+
+      Context.Successful = true;
+    });
+
+    EXPECT_TRUE(TM.waitForTasks());
+  }
+
+  EXPECT_TRUE(End);
 }
 }

@@ -115,9 +115,11 @@ public:
   }
 
   TaskID addTask(ActionFn &&Fn, bool SameThread = false) {
-    // TODO Levitation: it is still not implemented
-    // Current implementation is a stub
-    return registerTask(std::move(Fn));
+    Task *Tsk = registerTask(std::move(Fn), !SameThread);
+    if (SameThread) {
+      executeTask(*Tsk);
+    }
+    return Tsk->ID;
   }
 
   bool waitForTasks(const TasksSet &tasksSet) {
@@ -193,24 +195,29 @@ protected:
     return std::unique_lock<std::mutex>(StatusLocker);
   }
 
-  TaskID registerTask(ActionFn &&action) {
+  Task* registerTask(ActionFn &&action, bool Push) {
     {
-      TaskID TID;
+      Task* ptr = nullptr;
       {
         auto tasksLocker = lockTasks();
 
-        TID = NextTaskID++;
+        TaskID TID = NextTaskID++;
 
-        auto Res = Tasks.emplace(TID, new Task(TID, std::move(action)));
+        ptr = new Task(TID, std::move(action));
+
+        auto Res = Tasks.emplace(TID, ptr);
         assert(Res.second);
 
-        PendingTasks.push_front(TID);
+        if (Push)
+          PendingTasks.push_front(TID);
       }
 
-      log("Registered task ", TID);
+      log("Registered task ", ptr->ID);
 
-      QueueNotifier.notify_one();
-      return TID;
+      if (Push)
+        QueueNotifier.notify_one();
+
+      return ptr;
     }
   }
 
@@ -240,6 +247,20 @@ protected:
     log("Worker[", Id, "]: ", std::forward<ArgsT>(args)...);
   }
 
+  void executeTask(Task &Tsk) {
+    TaskContext context(Tsk.ID);
+
+    Tsk.Action(context);
+
+    {
+      auto locker = lockStatus();
+      Tsk.Status = context.Successful ?
+          TaskStatus::Successful : TaskStatus::Failed;
+    }
+
+    TaskFinishedNotifier.notify_all();
+  }
+
   void runWorkers() {
     auto worker = [&] {
 
@@ -260,23 +281,13 @@ protected:
 
         logWorker(MyId, "Got task ", Tsk.ID);
 
-        TaskContext context(Tsk.ID);
-
-        Tsk.Action(context);
-
-        {
-          auto locker = lockStatus();
-          Tsk.Status = context.Successful ?
-              TaskStatus::Successful : TaskStatus::Failed;
-        }
+        executeTask(Tsk);
 
         logWorker(MyId,
           "Finished task ", Tsk.ID,
           ", status: ",
           (Tsk.Status == TaskStatus::Successful ? "Success" : "Failed")
         );
-
-        TaskFinishedNotifier.notify_all();
       }
 
       logWorker(MyId, "Stopped");
