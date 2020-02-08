@@ -73,10 +73,11 @@ private:
 
     TaskID ID;
     ActionFn Action;
-    TaskStatus Status = TaskStatus::Pending;
+    TaskStatus Status = TaskStatus::Unknown;
 
-    bool isPending() {
-      return Status == TaskStatus::Pending;
+    bool isComplete() {
+      return Status == TaskStatus::Failed ||
+             Status == TaskStatus::Successful;
     }
   };
 
@@ -176,7 +177,7 @@ public:
     for (TaskID TID : v) {
       Tasks.insert(TID);
     }
-    waitForTasks(Tasks);
+    return waitForTasks(Tasks);
   }
 
   bool waitForTasks(const TasksSet &tasksSet) {
@@ -187,7 +188,7 @@ public:
     TaskFinishedNotifier.wait(locker, [&] {
       for (auto TID : tasksSet) {
         auto Found = Tasks.find(TID);
-        if (Found != Tasks.end() && Found->second->isPending())
+        if (Found != Tasks.end() && !Found->second->isComplete())
           return false;
       }
       return true;
@@ -204,8 +205,8 @@ public:
     TaskFinishedNotifier.wait(locker, [&] {
       log("Checking...");
       for (auto &kv : Tasks) {
-        if (kv.second->isPending()) {
-          log("Task ", kv.first, " is pending");
+        if (!kv.second->isComplete()) {
+          log("Task ", kv.first, " is in progress");
           return false;
         }
       }
