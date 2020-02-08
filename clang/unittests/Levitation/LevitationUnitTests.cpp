@@ -58,6 +58,7 @@ TEST_F(LevitationUnitTests, InnerTask) {
   {
     tasks::TasksManager TM(2);
 
+    auto TID0 =
     TM.addTask([&](tasks::TasksManager::TaskContext &Context) {
 
       auto TID1 = TM.addTask([&] (tasks::TasksManager::TaskContext &Context) {
@@ -70,11 +71,7 @@ TEST_F(LevitationUnitTests, InnerTask) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
       });
 
-      tasks::TasksManager::TasksSet InnerTasks;
-      InnerTasks.insert(TID1);
-      InnerTasks.insert(TID2);
-
-      TM.waitForTasks(InnerTasks);
+      TM.waitForTasks({TID1, TID2});
 
       EXPECT_TRUE(Inside1);
       EXPECT_TRUE(Inside2);
@@ -84,7 +81,7 @@ TEST_F(LevitationUnitTests, InnerTask) {
       Context.Successful = true;
     });
 
-    EXPECT_TRUE(TM.waitForTasks());
+    EXPECT_TRUE(TM.waitForTasks({TID0}));
   }
 
   EXPECT_TRUE(End);
@@ -98,6 +95,7 @@ TEST_F(LevitationUnitTests, InnerTaskSameThread) {
   {
     tasks::TasksManager TM(1);
 
+    auto TID0 =
     TM.addTask([&](tasks::TasksManager::TaskContext &Context) {
 
       auto TID1 = TM.addTask([&] (tasks::TasksManager::TaskContext &Context) {
@@ -107,10 +105,7 @@ TEST_F(LevitationUnitTests, InnerTaskSameThread) {
         true /*same thread*/
       );
 
-      tasks::TasksManager::TasksSet InnerTasks;
-      InnerTasks.insert(TID1);
-
-      TM.waitForTasks(InnerTasks);
+      TM.waitForTasks({TID1});
 
       EXPECT_TRUE(Inside1);
 
@@ -119,7 +114,7 @@ TEST_F(LevitationUnitTests, InnerTaskSameThread) {
       Context.Successful = true;
     });
 
-    EXPECT_TRUE(TM.waitForTasks());
+    EXPECT_TRUE(TM.waitForTasks({TID0}));
   }
 
   EXPECT_TRUE(End);
@@ -150,11 +145,7 @@ TEST_F(LevitationUnitTests, RunTask) {
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
   TS1 = TM.getTaskStatus(TID1);
 
-  tasks::TasksManager::TasksSet InnerTasks;
-  InnerTasks.insert(TID1);
-  InnerTasks.insert(TID2);
-
-  TM.waitForTasks(InnerTasks);
+  TM.waitForTasks({TID1, TID2});
 
   TS11 = TM.getTaskStatus(TID1);
 
