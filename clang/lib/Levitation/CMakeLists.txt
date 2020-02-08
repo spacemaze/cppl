@@ -8,7 +8,6 @@ add_clang_library(
   Dependencies.cpp
   FileExtensions.cpp
   Serialization.cpp
-  TasksManager/TasksManager.cpp
 
   LINK_LIBS
   clangAST

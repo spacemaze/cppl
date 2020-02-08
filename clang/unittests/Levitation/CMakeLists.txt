@@ -7,7 +7,7 @@ add_clang_unittest(LevitationUnitTests
   LevitationUnitTests.cpp
 )
 
-#clang_target_link_libraries(LevitationUnitTests
-#  PRIVATE
-#  clangLevitationDriver
-#)
+clang_target_link_libraries(LevitationUnitTests
+  PRIVATE
+  clangLevitation
+)

@@ -18,6 +18,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
 #include <mutex>
+#include <functional>
 namespace clang { namespace levitation { namespace log {
 
 enum class Level {
@@ -26,6 +27,8 @@ enum class Level {
   Info,
   Verbose
 };
+
+using manipulator_t = std::function<void(llvm::raw_ostream &out)>;
 
 /// Logger is a simple logger implementation.
 /// Example of use:
@@ -100,7 +103,54 @@ public:
     return std::unique_lock<std::mutex>(Locker);
   }
 
+  template <typename ...ArgsT>
+  void log_verbose(ArgsT&&...args) {
+    logImpl(Level::Verbose, std::forward<ArgsT>(args)...);
+  }
+
+  template <typename ...ArgsT>
+  void log_info(ArgsT&&...args) {
+    logImpl(Level::Info, std::forward<ArgsT>(args)...);
+  }
+
+  template <typename ...ArgsT>
+  void log_warning(ArgsT&&...args) {
+    logImpl(Level::Warning, std::forward<ArgsT>(args)...);
+  }
+
+  template <typename ...ArgsT>
+  void log_error(ArgsT&&...args) {
+    logImpl(Level::Error, std::forward<ArgsT>(args)...);
+  }
+
 protected:
+
+  template <typename ...ArgsT>
+  void logImpl(Level level, ArgsT &&...args) {
+    auto _ = lock();
+    getStream(level) << "TaskManager: ";
+    logSuffix(level, std::forward<ArgsT>(args)...);
+    getStream(level) << "\n";
+  }
+
+  void logSuffix(Level level) {
+  }
+
+  void logSuffix(Level level, manipulator_t Arg) {
+    Arg(getStream(level));
+  }
+
+  template <typename FirstArgT>
+  void logSuffix(Level level, FirstArgT Arg) {
+    getStream(level) << Arg;
+  }
+
+  template <typename FirstArgT, typename ...ArgsT>
+  void logSuffix(Level level, FirstArgT first, ArgsT&&...args) {
+    logSuffix(level, first);
+    logSuffix(level, std::forward<ArgsT>(args)...);
+  }
+
   llvm::raw_ostream &getStream(Level ForLevel) {
     if (ForLevel <= LogLevel)
       return Out;

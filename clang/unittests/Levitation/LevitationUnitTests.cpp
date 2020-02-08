@@ -135,13 +135,16 @@ TEST_F(LevitationUnitTests, RunTask) {
   tasks::TasksManager::TaskID TID1, TID2;
   tasks::TasksManager::TaskStatus TS1, TS11, TS2;
 
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
   TID1 = TM.runTask([&] (tasks::TasksManager::TaskContext &Context) {
       Inside1 = true;
       TID2 = TM.runTask([&] (tasks::TasksManager::TaskContext &Context) {
         Inside2 = true;
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
       });
       TS2 = TM.getTaskStatus(TID2);
+      TM.waitForTasks({TID2});
     }
   );
   std::this_thread::sleep_for(std::chrono::milliseconds(500));

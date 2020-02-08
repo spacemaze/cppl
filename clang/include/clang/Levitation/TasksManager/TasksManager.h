@@ -31,7 +31,7 @@
 #include <unordered_set>
 #include <utility>
 
-// #define LEVITATION_ENABLE_TASK_MANAGER_LOGS
+#define LEVITATION_ENABLE_TASK_MANAGER_LOGS
 
 namespace clang { namespace levitation { namespace tasks {
 
@@ -171,6 +171,14 @@ public:
     return Tasks[TID]->Status;
   }
 
+  bool waitForTasks(const std::initializer_list<TaskID> &v) {
+    TasksSet Tasks;
+    for (TaskID TID : v) {
+      Tasks.insert(TID);
+    }
+    waitForTasks(Tasks);
+  }
+
   bool waitForTasks(const TasksSet &tasksSet) {
 
     log("Waiting for some tasks to be completed.");
@@ -212,35 +220,46 @@ public:
 
 protected:
 
-  using manupulator = std::function<void(llvm::raw_ostream &out)>;
+  log::manipulator_t str(TasksManager::TaskStatus v) {
+    return [=] (llvm::raw_ostream &out) {
+      switch (v) {
+        case TaskStatus::Pending:
+          out << "Pending";
+          break;
+        case TaskStatus::Registered:
+          out << "Registered";
+          break;
+        case TaskStatus::Successful:
+          out << "Successful";
+          break;
+        case TaskStatus::Failed:
+          out << "Failed";
+          break;
+        case TaskStatus::Unknown:
+          out << "Unknown";
+          break;
+        case TaskStatus::Executing:
+          out << "Executing";
+          break;
+      }
+    };
+  }
+
+  log::manipulator_t str(TasksManager::Task v) {
+    return [=] (llvm::raw_ostream &out) {
+      out
+      << "{ ID:" << v.ID << ", ";
+      str(v.Status)(out);
+      out
+      << "}";
+    };
+  }
 
   template <typename ...ArgsT>
   void log(ArgsT&&...args) {
 #ifdef LEVITATION_ENABLE_TASK_MANAGER_LOGS
-    auto _ = Log.lock();
-    Log.verbose() << "TaskManager: ";
-    log_suffix(std::forward<ArgsT>(args)...);
-    Log.verbose() << "\n";
+    Log.log_verbose("TaskManager: ", std::forward<ArgsT>(args)...);
 #endif
-  }
-
-  void log_suffix() {
-  }
-
-  template <typename FirstArgT>
-  void inline log_suffix(FirstArgT Arg) {
-    Log.verbose() << Arg;
-  }
-
-  template <typename FirstArgT, typename ...ArgsT>
-  void log_suffix(FirstArgT first, ArgsT&&...args) {
-    log_suffix(first);
-    log_suffix(std::forward<ArgsT>(args)...);
-  }
-
-  template <typename ArgT>
-  manupulator str(ArgT v) {
-    llvm_unreachable("Unsupported str stype.");
   }
 
   std::unique_lock<std::mutex> lockTasks() {
@@ -321,6 +340,8 @@ protected:
     {
       auto locker = lockStatus();
       Tsk.Status = TaskStatus::Executing;
+
+      log("Updated task status: ", str(Tsk));
     }
 
     Tsk.Action(context);
@@ -329,6 +350,8 @@ protected:
       auto locker = lockStatus();
       Tsk.Status = context.Successful ?
           TaskStatus::Successful : TaskStatus::Failed;
+
+      log("Updated task status: ", str(Tsk));
     }
 
     TaskFinishedNotifier.notify_all();
@@ -346,16 +369,17 @@ protected:
         bool Terminated = false;
         Task *TaskPtr = getNextTask(&Terminated);
 
-        if (Terminated)
+        if (Terminated) {
           break;
+        }
 
         Task &Tsk = *TaskPtr;
 
-        logWorker(MyId, "Got task ", Tsk);
+        logWorker(MyId, "Got task ", str(Tsk));
 
         executeTask(Tsk);
 
-        logWorker(MyId, "Finished task ", Tsk);
+        logWorker(MyId, "Finished task ", str(Tsk));
       }
 
       logWorker(MyId, "Stopped");
