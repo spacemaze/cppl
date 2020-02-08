@@ -44,15 +44,25 @@ public:
     TaskID ID;
     bool Successful = true;
   };
+
+  enum struct TaskStatus {
+    Unknown = -3,
+    Registered = -2,
+    Pending = -1,
+    Failed = 0,
+    Executing,
+    Successful
+  };
+
   using ActionFn = std::function<void(TaskContext&)>;
   using TasksSet = llvm::DenseSet<TaskID>;
 
 private:
 
-  enum struct TaskStatus {
-    Pending = -1,
-    Failed = 0,
-    Successful = 1
+  enum struct RegisterAction {
+    RegisterOnly,
+    Push,
+    PushIfHaveFreeWorker
   };
 
   struct Task {
@@ -89,6 +99,7 @@ private:
   std::deque<TaskID> PendingTasks;
 
   bool TerminationRequested = false;
+  unsigned NumFreeWorkers = 0;
   std::unordered_set<std::unique_ptr<std::thread>> Workers;
 
 public:
@@ -114,12 +125,50 @@ public:
     }
   }
 
+  /**
+   * Adds new task.
+   * @param Fn task action
+   * @param SameThread if false, then task will be added into
+   * workers queue and execution will be continued.
+   * If this flag is false, then task will be registered
+   * and executed immediately in same thread.
+   * @return task ID
+   */
   TaskID addTask(ActionFn &&Fn, bool SameThread = false) {
-    Task *Tsk = registerTask(std::move(Fn), !SameThread);
+    auto RegAction = SameThread ?
+        RegisterAction::RegisterOnly : RegisterAction::Push;
+
+    Task *Tsk = registerTask(std::move(Fn), RegAction);
     if (SameThread) {
       executeTask(*Tsk);
     }
     return Tsk->ID;
+  }
+
+  /**
+   * Runs task.
+   * If task manager has free workers, then it will add task into
+   * queue and continue main thread execution.
+   * Otherwise, it will execute task in current thread.
+   * @param Fn action to be executed
+   * @return task ID
+   */
+  TaskID runTask(ActionFn &&Fn) {
+    Task *Tsk = registerTask(std::move(Fn), RegisterAction::PushIfHaveFreeWorker);
+    if (Tsk->Status == TaskStatus::Registered) {
+      executeTask(*Tsk);
+    }
+    return Tsk->ID;
+  }
+
+  TaskStatus getTaskStatus(TaskID TID) {
+    auto _ = lockStatus();
+    auto __ = lockTasks();
+
+    auto Found = Tasks.find(TID);
+    assert(Found != Tasks.end());
+
+    return Tasks[TID]->Status;
   }
 
   bool waitForTasks(const TasksSet &tasksSet) {
@@ -163,6 +212,8 @@ public:
 
 protected:
 
+  using manupulator = std::function<void(llvm::raw_ostream &out)>;
+
   template <typename ...ArgsT>
   void log(ArgsT&&...args) {
 #ifdef LEVITATION_ENABLE_TASK_MANAGER_LOGS
@@ -177,7 +228,7 @@ protected:
   }
 
   template <typename FirstArgT>
-  void log_suffix(FirstArgT Arg) {
+  void inline log_suffix(FirstArgT Arg) {
     Log.verbose() << Arg;
   }
 
@@ -185,6 +236,11 @@ protected:
   void log_suffix(FirstArgT first, ArgsT&&...args) {
     log_suffix(first);
     log_suffix(std::forward<ArgsT>(args)...);
+  }
+
+  template <typename ArgT>
+  manupulator str(ArgT v) {
+    llvm_unreachable("Unsupported str stype.");
   }
 
   std::unique_lock<std::mutex> lockTasks() {
@@ -195,35 +251,46 @@ protected:
     return std::unique_lock<std::mutex>(StatusLocker);
   }
 
-  Task* registerTask(ActionFn &&action, bool Push) {
+  Task* registerTask(ActionFn &&action, RegisterAction RegAction) {
     {
-      Task* ptr = nullptr;
+      Task* TaskPtr = nullptr;
       {
         auto tasksLocker = lockTasks();
 
         TaskID TID = NextTaskID++;
 
-        ptr = new Task(TID, std::move(action));
+        TaskPtr = new Task(TID, std::move(action));
 
-        auto Res = Tasks.emplace(TID, ptr);
+        auto Res = Tasks.emplace(TID, TaskPtr);
         assert(Res.second);
 
-        if (Push)
+        if (
+          RegAction == RegisterAction::Push ||
+          (
+            RegAction == RegisterAction::PushIfHaveFreeWorker &&
+            NumFreeWorkers
+          )
+        ) {
           PendingTasks.push_front(TID);
+          TaskPtr->Status = TaskStatus::Pending;
+        } else {
+          TaskPtr->Status = TaskStatus::Registered;
+        }
       }
 
-      log("Registered task ", ptr->ID);
+      log("Registered task ", str(*TaskPtr));
 
-      if (Push)
+      if (TaskPtr->Status == TaskStatus::Pending)
         QueueNotifier.notify_one();
 
-      return ptr;
+      return TaskPtr;
     }
   }
 
   Task *getNextTask(bool *Terminated) {
     auto tasksLocker = lockTasks();
 
+    ++NumFreeWorkers;
     QueueNotifier.wait(tasksLocker, [&] {
       return TerminationRequested || (bool)PendingTasks.size();
     });
@@ -232,6 +299,7 @@ protected:
       *Terminated = true;
       return nullptr;
     }
+    --NumFreeWorkers;
 
     auto PendingTaskID = PendingTasks.back();
     PendingTasks.pop_back();
@@ -250,6 +318,11 @@ protected:
   void executeTask(Task &Tsk) {
     TaskContext context(Tsk.ID);
 
+    {
+      auto locker = lockStatus();
+      Tsk.Status = TaskStatus::Executing;
+    }
+
     Tsk.Action(context);
 
     {
@@ -267,7 +340,6 @@ protected:
       static int Id = 0;
       int MyId = Id++;
 
-
       logWorker(MyId, "Launched");
 
       while (true) {
@@ -279,15 +351,11 @@ protected:
 
         Task &Tsk = *TaskPtr;
 
-        logWorker(MyId, "Got task ", Tsk.ID);
+        logWorker(MyId, "Got task ", Tsk);
 
         executeTask(Tsk);
 
-        logWorker(MyId,
-          "Finished task ", Tsk.ID,
-          ", status: ",
-          (Tsk.Status == TaskStatus::Successful ? "Success" : "Failed")
-        );
+        logWorker(MyId, "Finished task ", Tsk);
       }
 
       logWorker(MyId, "Stopped");
