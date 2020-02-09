@@ -1866,6 +1866,7 @@ Parser::ParseCXXTypeConstructExpression(const DeclSpec &DS) {
          && "Expected '(' or '{'!");
 
   if (Tok.is(tok::l_brace)) {
+    PreferredType.enterTypeCast(Tok.getLocation(), TypeRep.get());
     ExprResult Init = ParseBraceInitializer();
     if (Init.isInvalid())
       return Init;
@@ -2323,7 +2324,7 @@ bool Parser::ParseUnqualifiedIdTemplateId(CXXScopeSpec &SS,
         // before 'getAs' and treat this as a dependent template name.
         std::string Name;
         if (Id.getKind() == UnqualifiedIdKind::IK_Identifier)
-          Name = Id.Identifier->getName();
+          Name = std::string(Id.Identifier->getName());
         else {
           Name = "operator ";
           if (Id.getKind() == UnqualifiedIdKind::IK_OperatorFunctionId)
@@ -3383,25 +3384,6 @@ ExprResult Parser::ParseRequiresExpression() {
           Diag(Tok, diag::err_requires_expr_missing_arrow)
               << FixItHint::CreateInsertion(Tok.getLocation(), "->");
         // Try to parse a 'type-constraint'
-        CXXScopeSpec SS;
-        if (ParseOptionalCXXScopeSpecifier(SS, ParsedType(),
-                                           /*EnteringContext=*/false,
-                                           /*MayBePseudoDestructor=*/nullptr,
-                                           // If this is not a type-constraint,
-                                           // then this scope-spec is part of
-                                           // the typename of a non-type
-                                           // template parameter
-                                           /*IsTypename=*/true,
-                                           /*LastII=*/nullptr,
-                                           // We won't find concepts in
-                                           // non-namespaces anyway, so might as
-                                           // well parse this correctly for
-                                           // possible type names.
-                                           /*OnlyNamespace=*/false,
-                                           /*SuppressDiagnostic=*/true)) {
-          SkipUntil(tok::semi, tok::r_brace, SkipUntilFlags::StopBeforeMatch);
-          break;
-        }
         if (TryAnnotateTypeConstraint()) {
           SkipUntil(tok::semi, tok::r_brace, SkipUntilFlags::StopBeforeMatch);
           break;
@@ -3411,8 +3393,13 @@ ExprResult Parser::ParseRequiresExpression() {
           SkipUntil(tok::semi, tok::r_brace, SkipUntilFlags::StopBeforeMatch);
           break;
         }
-        if (Tok.is(tok::annot_cxxscope))
+        CXXScopeSpec SS;
+        if (Tok.is(tok::annot_cxxscope)) {
+          Actions.RestoreNestedNameSpecifierAnnotation(Tok.getAnnotationValue(),
+                                                       Tok.getAnnotationRange(),
+                                                       SS);
           ConsumeAnnotationToken();
+        }
 
         Req = Actions.ActOnCompoundRequirement(
             Expression.get(), NoexceptLoc, SS, takeTemplateIdAnnotation(Tok),

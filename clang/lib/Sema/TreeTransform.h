@@ -2016,6 +2016,19 @@ public:
                                                   EndLoc);
   }
 
+  /// Build a new OpenMP 'order' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenMP clause.
+  /// Subclasses may override this routine to provide different behavior.
+  OMPClause *RebuildOMPOrderClause(OpenMPOrderClauseKind Kind,
+                                   SourceLocation KindKwLoc,
+                                   SourceLocation StartLoc,
+                                   SourceLocation LParenLoc,
+                                   SourceLocation EndLoc) {
+    return getSema().ActOnOpenMPOrderClause(Kind, KindKwLoc, StartLoc,
+                                            LParenLoc, EndLoc);
+  }
+
   /// Rebuild the operand to an Objective-C \@synchronized statement.
   ///
   /// By default, performs semantic analysis to build the new statement.
@@ -8793,6 +8806,13 @@ TreeTransform<Derived>::TransformOMPSeqCstClause(OMPSeqCstClause *C) {
 
 template <typename Derived>
 OMPClause *
+TreeTransform<Derived>::TransformOMPAcqRelClause(OMPAcqRelClause *C) {
+  // No need to rebuild this clause, no template-dependent parameters.
+  return C;
+}
+
+template <typename Derived>
+OMPClause *
 TreeTransform<Derived>::TransformOMPThreadsClause(OMPThreadsClause *C) {
   // No need to rebuild this clause, no template-dependent parameters.
   return C;
@@ -9399,6 +9419,14 @@ TreeTransform<Derived>::TransformOMPNontemporalClause(OMPNontemporalClause *C) {
       Vars, C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
 }
 
+template <typename Derived>
+OMPClause *
+TreeTransform<Derived>::TransformOMPOrderClause(OMPOrderClause *C) {
+  return getDerived().RebuildOMPOrderClause(C->getKind(), C->getKindKwLoc(),
+                                            C->getBeginLoc(), C->getLParenLoc(),
+                                            C->getEndLoc());
+}
+
 //===----------------------------------------------------------------------===//
 // Expression transformation
 //===----------------------------------------------------------------------===//
@@ -9938,7 +9966,7 @@ TreeTransform<Derived>::TransformBinaryOperator(BinaryOperator *E) {
       RHS.get() == E->getRHS())
     return E;
 
-  Sema::FPContractStateRAII FPContractState(getSema());
+  Sema::FPFeaturesStateRAII FPFeaturesState(getSema());
   getSema().FPFeatures = E->getFPFeatures();
 
   return getDerived().RebuildBinaryOperator(E->getOperatorLoc(), E->getOpcode(),
@@ -10464,7 +10492,7 @@ TreeTransform<Derived>::TransformCXXOperatorCallExpr(CXXOperatorCallExpr *E) {
       (E->getNumArgs() != 2 || Second.get() == E->getArg(1)))
     return SemaRef.MaybeBindToTemporary(E);
 
-  Sema::FPContractStateRAII FPContractState(getSema());
+  Sema::FPFeaturesStateRAII FPFeaturesState(getSema());
   getSema().FPFeatures = E->getFPFeatures();
 
   return getDerived().RebuildCXXOperatorCallExpr(E->getOperator(),

@@ -871,11 +871,11 @@ OutputSection *ScriptParser::readOutputSectionDescription(StringRef outSec) {
   }
 
   if (consume(">"))
-    cmd->memoryRegionName = next();
+    cmd->memoryRegionName = std::string(next());
 
   if (consume("AT")) {
     expect(">");
-    cmd->lmaRegionName = next();
+    cmd->lmaRegionName = std::string(next());
   }
 
   if (cmd->lmaExpr && !cmd->lmaRegionName.empty())
@@ -1454,9 +1454,8 @@ void ScriptParser::readVersionDeclaration(StringRef verStr) {
   // as a parent. This version hierarchy is, probably against your
   // instinct, purely for hint; the runtime doesn't care about it
   // at all. In LLD, we simply ignore it.
-  if (peek() != ";")
-    skip();
-  expect(";");
+  if (next() != ";")
+    expect(";");
 }
 
 static bool hasWildcard(StringRef s) {

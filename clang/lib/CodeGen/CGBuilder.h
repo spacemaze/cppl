@@ -68,38 +68,34 @@ public:
   // take an alignment.
   llvm::LoadInst *CreateLoad(Address Addr, const llvm::Twine &Name = "") {
     return CreateAlignedLoad(Addr.getPointer(),
-                             Addr.getAlignment().getQuantity(),
-                             Name);
+                             Addr.getAlignment().getAsAlign(), Name);
   }
   llvm::LoadInst *CreateLoad(Address Addr, const char *Name) {
     // This overload is required to prevent string literals from
     // ending up in the IsVolatile overload.
     return CreateAlignedLoad(Addr.getPointer(),
-                             Addr.getAlignment().getQuantity(),
-                             Name);
+                             Addr.getAlignment().getAsAlign(), Name);
   }
   llvm::LoadInst *CreateLoad(Address Addr, bool IsVolatile,
                              const llvm::Twine &Name = "") {
-    return CreateAlignedLoad(Addr.getPointer(),
-                             Addr.getAlignment().getQuantity(),
-                             IsVolatile,
-                             Name);
+    return CreateAlignedLoad(
+        Addr.getPointer(), Addr.getAlignment().getAsAlign(), IsVolatile, Name);
   }
 
   using CGBuilderBaseTy::CreateAlignedLoad;
   llvm::LoadInst *CreateAlignedLoad(llvm::Value *Addr, CharUnits Align,
                                     const llvm::Twine &Name = "") {
-    return CreateAlignedLoad(Addr, Align.getQuantity(), Name);
+    return CreateAlignedLoad(Addr, Align.getAsAlign(), Name);
   }
   llvm::LoadInst *CreateAlignedLoad(llvm::Value *Addr, CharUnits Align,
                                     const char *Name) {
-    return CreateAlignedLoad(Addr, Align.getQuantity(), Name);
+    return CreateAlignedLoad(Addr, Align.getAsAlign(), Name);
   }
   llvm::LoadInst *CreateAlignedLoad(llvm::Type *Ty, llvm::Value *Addr,
                                     CharUnits Align,
                                     const llvm::Twine &Name = "") {
     assert(Addr->getType()->getPointerElementType() == Ty);
-    return CreateAlignedLoad(Addr, Align.getQuantity(), Name);
+    return CreateAlignedLoad(Addr, Align.getAsAlign(), Name);
   }
 
   // Note that we intentionally hide the CreateStore APIs that don't
@@ -282,6 +278,13 @@ public:
     return CreateMemCpy(Dest.getPointer(), Dest.getAlignment().getAsAlign(),
                         Src.getPointer(), Src.getAlignment().getAsAlign(), Size,
                         IsVolatile);
+  }
+
+  using CGBuilderBaseTy::CreateMemCpyInline;
+  llvm::CallInst *CreateMemCpyInline(Address Dest, Address Src, uint64_t Size) {
+    return CreateMemCpyInline(
+        Dest.getPointer(), Dest.getAlignment().getAsAlign(), Src.getPointer(),
+        Src.getAlignment().getAsAlign(), getInt64(Size));
   }
 
   using CGBuilderBaseTy::CreateMemMove;

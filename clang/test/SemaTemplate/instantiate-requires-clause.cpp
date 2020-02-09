@@ -51,3 +51,19 @@ struct S2 {
 
 static_assert((S2<int>::f(), true));
 
+template<typename T>
+struct S3 {
+	template<typename... Args> requires true
+	static constexpr void f(Args...) { }
+};
+
+static_assert((S3<int>::f(), true));
+
+template<typename T>
+struct S4 {
+    template<typename>
+    constexpr void foo() requires (*this, true) { }
+    constexpr void goo() requires (*this, true) { }
+};
+
+static_assert((S4<int>{}.foo<int>(), S4<int>{}.goo(), true));

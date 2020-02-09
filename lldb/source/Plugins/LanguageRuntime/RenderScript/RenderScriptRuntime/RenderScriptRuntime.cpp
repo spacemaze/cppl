@@ -46,6 +46,8 @@ using namespace lldb;
 using namespace lldb_private;
 using namespace lldb_renderscript;
 
+LLDB_PLUGIN(RenderScriptRuntime);
+
 #define FMT_COORD "(%" PRIu32 ", %" PRIu32 ", %" PRIu32 ")"
 
 char RenderScriptRuntime::ID = 0;
@@ -1513,7 +1515,7 @@ void RenderScriptRuntime::CaptureScriptInit(RuntimeHook *hook,
       script->type = ScriptDetails::eScriptC;
       script->cache_dir = cache_dir;
       script->res_name = res_name;
-      script->shared_lib = strm.GetString();
+      script->shared_lib = std::string(strm.GetString());
       script->context = addr_t(args[eRsContext]);
     }
 
