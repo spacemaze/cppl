@@ -971,20 +971,46 @@ public:
 
 protected:
 
-  // FIXME Levitation: Deprecated
-  //   all dump methods below are deprecated,
-  //   use DriverPhaseDump methods instead.
+  static log::manipulator_t workerId() {
+    auto &TM = TasksManager::get();
+    auto WID = TM.getWorkerID();
+      if (TasksManager::isValid(WID))
+        return [=] (llvm::raw_ostream &out) {
+          out << WID;
+        };
+      else
+        return [=] (llvm::raw_ostream &out) {
+          out << "Main";
+        };
+  }
+
+  template <typename ...ArgsT>
+  static void log_info(ArgsT&&...args) {
+    log::Logger::get().log_info(
+        "[", workerId(), "] ",
+        std::forward<ArgsT>(args)...
+    );
+  }
+
+  template <typename ...ArgsT>
+  static void log_verbose(ArgsT&&...args) {
+    log::Logger::get().log_verbose(
+        "[", workerId(), "] ",
+        std::forward<ArgsT>(args)...
+    );
+  }
 
   static void dumpBuildPreamble(
       StringRef PreambleSource,
       StringRef PreambleOut
   ) {
-    auto &LogInfo = log::Logger::get().info();
-    LogInfo
-    << "PREAMBLE " << PreambleSource << " -> "
-    << "preamble out: " << PreambleOut << "\n";
+    log_info(
+        "PREAMBLE ", PreambleSource, " -> ",
+        "preamble out: ", PreambleOut
+    );
   }
 
+  // TODO: Deprecarted
   static void dumpParse(
       StringRef OutASTFile,
       StringRef OutLDepsFile,
@@ -1002,11 +1028,10 @@ protected:
       StringRef OutLDepsFile,
       StringRef SourceFile
   ) {
-    auto &LogInfo = log::Logger::get().info();
-    LogInfo
-    << "PARSE IMP " << SourceFile << " -> "
-    << "(ldeps: " << OutLDepsFile << ")"
-    << "\n";
+    log_info(
+        "PARSE IMP ", SourceFile, " -> ",
+        "(ldeps: ", OutLDepsFile, ")"
+    );
   }
 
 
@@ -1072,59 +1097,54 @@ protected:
   ) {
     assert(OutDeclASTFile.size() && InputObject.size());
 
-    auto &LogInfo = log::Logger::get().info();
-    LogInfo << ActionName << " " << InputObject;
-
-    LogInfo << ", ";
-    dumpLDepsFiles(LogInfo, Deps);
-
-    LogInfo << " -> " << OutputName << ": " << OutDeclASTFile << "\n";
+    log_info(
+        ActionName, " ", InputObject,
+        ", ",
+        dumpLDepsFiles(Deps),
+        " -> ", OutputName, ": ", OutDeclASTFile
+    );
   }
 
-  static void dumpLDepsFiles(
-      raw_ostream &Out,
+  static log::manipulator_t dumpLDepsFiles(
       const Paths &Deps
   ) {
-    dumpPathsArray(Out, Deps, "deps");
+    return dumpPathsArray(Deps, "deps");
   }
 
   static void dumpLink(StringRef OutputFile, const Paths &ObjectFiles) {
     assert(OutputFile.size() && ObjectFiles.size());
-
-    auto &LogInfo = log::Logger::get().info();
-
-    LogInfo << "LINK ";
-
-    dumpObjectFiles(LogInfo, ObjectFiles);
-
-    LogInfo << " -> " << OutputFile << "\n";
+    log_info(
+        "LINK ",
+        dumpObjectFiles(ObjectFiles),
+        " -> ", OutputFile
+    );
   }
 
-  static void dumpObjectFiles(
-      raw_ostream &Out,
+  static log::manipulator_t dumpObjectFiles(
       const Paths &ObjectFiles
   ) {
-    dumpPathsArray(Out, ObjectFiles, "objects");
+    return dumpPathsArray(ObjectFiles, "objects");
   }
 
-  static void dumpPathsArray(
-      raw_ostream &Out,
+  static log::manipulator_t dumpPathsArray(
       const Paths &ObjectFiles,
       StringRef ArrayName
   ) {
-    Out << ArrayName << ": ";
+    return [=] (llvm::raw_ostream &out) {
+      out << ArrayName << ": ";
 
-    if (ObjectFiles.size()) {
-      Out << "(";
-      for (size_t i = 0, e = ObjectFiles.size(); i != e; ++i) {
-        log::Logger::get().info() << ObjectFiles[i];
-        if (i + 1 != e)
-          log::Logger::get().info() << ", ";
+      if (ObjectFiles.size()) {
+        out << "(";
+        for (size_t i = 0, e = ObjectFiles.size(); i != e; ++i) {
+          out << ObjectFiles[i];
+          if (i + 1 != e)
+            out << ", ";
+        }
+        out << ")";
+      } else {
+        out << "<empty>";
       }
-      Out << ")";
-    } else {
-      Out << "<empty>";
-    }
+    };
   }
 
   static bool processStatus(const Failable &Status) {
