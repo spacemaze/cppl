@@ -416,7 +416,9 @@ protected:
 
         if (Found == Tasks.end()) {
           auto &TM = tasks::TasksManager::get();
-          auto TID = TM.addTask(std::move(Fn), SameThread);
+          auto TID = SameThread ?
+              TM.addTask(std::move(Fn), true) :
+              TM.runTask(std::move(Fn));
 
           auto Res = Tasks.insert({NID, TID});
           assert(Res.second);
