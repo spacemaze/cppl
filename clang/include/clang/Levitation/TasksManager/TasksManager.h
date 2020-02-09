@@ -31,8 +31,6 @@
 #include <unordered_set>
 #include <utility>
 
-#define LEVITATION_ENABLE_TASK_MANAGER_LOGS
-
 namespace clang { namespace levitation { namespace tasks {
 
 class TasksManager : public CreatableSingleton<TasksManager> {

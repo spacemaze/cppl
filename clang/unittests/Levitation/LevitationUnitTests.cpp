@@ -11,6 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#define LEVITATION_ENABLE_TASK_MANAGER_LOGS
+
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
 #include "llvm/Support/raw_ostream.h"
