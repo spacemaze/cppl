@@ -1948,15 +1948,16 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   Opts.StatsFile = std::string(Args.getLastArgValue(OPT_stats_file));
 
   Opts.LevitationPreambleFileName =
-          Args.getLastArgValue(OPT_levitation_preamble);
+          std::string(Args.getLastArgValue(OPT_levitation_preamble));
   Opts.LevitationDependencyDeclASTs =
           Args.getAllArgValues(OPT_levitation_dependency);
-  Opts.LevitationDependenciesOutputFile =
-          Args.getLastArgValue(OPT_levitation_dependencies_output_file);
+  Opts.LevitationDependenciesOutputFile = std::string(
+          Args.getLastArgValue(OPT_levitation_dependencies_output_file)
+  );
   Opts.LevitationSourcesRootDir =
-          Args.getLastArgValue(OPT_levitation_sources_root_dir);
+          std::string(Args.getLastArgValue(OPT_levitation_sources_root_dir));
   Opts.LevitationDeclASTMeta =
-          Args.getLastArgValue(OPT_levitation_decl_ast_meta);
+          std::string(Args.getLastArgValue(OPT_levitation_decl_ast_meta));
   Opts.LevitationASTPrint =
           Args.hasArg(OPT_flevitation_ast_print);
 
