@@ -36,6 +36,7 @@ namespace clang { namespace levitation { namespace tasks {
 class TasksManager : public CreatableSingleton<TasksManager> {
 public:
   using TaskID = int;
+  using WorkerID = int;
 
   struct TaskContext {
     TaskContext(TaskID tid) : ID(tid) {}
@@ -86,6 +87,7 @@ private:
 
   int JobsNumber;
 
+  std::mutex WorkerIDsLocker;
   std::mutex StatusLocker;
   std::mutex TasksLocker;
 
@@ -98,8 +100,10 @@ private:
   std::deque<TaskID> PendingTasks;
 
   bool TerminationRequested = false;
+  WorkerID NextWorkerId = 0;
   unsigned NumFreeWorkers = 0;
   std::unordered_set<std::unique_ptr<std::thread>> Workers;
+  std::unordered_map<std::thread::id, WorkerID> WorkerIDs;
 
 public:
 
@@ -159,6 +163,28 @@ public:
     }
     return Tsk->ID;
   }
+
+  WorkerID getWorkerID() {
+
+    auto _ = lockWorkerIDs();
+
+    auto ThreadID = std::this_thread::get_id();
+
+    auto Found = WorkerIDs.find(ThreadID);
+    if (Found != WorkerIDs.end())
+      return Found->second;
+
+    return getInvalidWorkerID();
+  }
+
+  static WorkerID getInvalidWorkerID() {
+    return -1;
+  }
+
+  static bool isValid(WorkerID WID) {
+    return WID != getInvalidWorkerID();
+  }
+
 
   TaskStatus getTaskStatus(TaskID TID) {
     auto _ = lockStatus();
@@ -269,6 +295,10 @@ protected:
     return std::unique_lock<std::mutex>(StatusLocker);
   }
 
+  std::unique_lock<std::mutex> lockWorkerIDs() {
+    return std::unique_lock<std::mutex>(WorkerIDsLocker);
+  }
+
   Task* registerTask(ActionFn &&action, RegisterAction RegAction) {
     {
       Task* TaskPtr = nullptr;
@@ -359,8 +389,13 @@ protected:
   void runWorkers() {
     auto worker = [&] {
 
-      static int Id = 0;
-      int MyId = Id++;
+      int MyId;
+
+      {
+        auto _ = lockWorkerIDs();
+        MyId = NextWorkerId++;
+        WorkerIDs.insert({std::this_thread::get_id(), MyId});
+      }
 
       logWorker(MyId, "Launched");
 

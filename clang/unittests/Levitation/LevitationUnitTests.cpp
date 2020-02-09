@@ -56,6 +56,7 @@ TEST_F(LevitationUnitTests, InnerTask) {
   bool Inside1 = false;
   bool Inside2 = false;
   bool End = false;
+  tasks::TasksManager::WorkerID WID0, WID1, WID2;
 
   {
     tasks::TasksManager TM(2);
@@ -63,13 +64,17 @@ TEST_F(LevitationUnitTests, InnerTask) {
     auto TID0 =
     TM.addTask([&](tasks::TasksManager::TaskContext &Context) {
 
+      WID0 = TM.getWorkerID();
+
       auto TID1 = TM.addTask([&] (tasks::TasksManager::TaskContext &Context) {
         Inside1 = true;
+        WID1 = TM.getWorkerID();
         std::this_thread::sleep_for(std::chrono::seconds(1));
       });
 
       auto TID2 = TM.addTask([&] (tasks::TasksManager::TaskContext &Context) {
         Inside2 = true;
+        WID2 = TM.getWorkerID();
         std::this_thread::sleep_for(std::chrono::seconds(1));
       });
 
@@ -77,6 +82,7 @@ TEST_F(LevitationUnitTests, InnerTask) {
 
       EXPECT_TRUE(Inside1);
       EXPECT_TRUE(Inside2);
+      EXPECT_EQ(WID1, WID2);
 
       End = true;
 
@@ -84,6 +90,7 @@ TEST_F(LevitationUnitTests, InnerTask) {
     });
 
     EXPECT_TRUE(TM.waitForTasks({TID0}));
+    EXPECT_NE(WID0, WID1);
   }
 
   EXPECT_TRUE(End);
