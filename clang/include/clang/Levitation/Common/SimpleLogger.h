@@ -128,7 +128,6 @@ protected:
   template <typename ...ArgsT>
   void logImpl(Level level, ArgsT &&...args) {
     auto _ = lock();
-    getStream(level) << "TaskManager: ";
     logSuffix(level, std::forward<ArgsT>(args)...);
     getStream(level) << "\n";
   }
