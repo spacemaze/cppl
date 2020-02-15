@@ -1844,7 +1844,7 @@ bool LevitationDriver::run() {
 
   log::Logger::createLogger(log::Level::Info);
   TasksManager::create(JobsNumber);
-  CreatableSingleton<FileManager>::create( FileSystemOptions { StringRef() });
+  CreatableSingleton<FileManager>::create( FileSystemOptions { std::string(StringRef()) });
   CreatableSingleton<DependenciesStringsPool >::create();
 
   initParameters();

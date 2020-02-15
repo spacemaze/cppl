@@ -616,7 +616,7 @@ bool DependenciesSolver::solve() {
 
   log::Logger::createLogger(Verbose ? log::Level::Verbose : log::Level::Warning);
   CreatableSingleton<DependenciesStringsPool>::create();
-  CreatableSingleton<FileManager>::create( FileSystemOptions { StringRef() });
+  CreatableSingleton<FileManager>::create( FileSystemOptions { std::string(StringRef()) });
 
   Paths LDepsFiles;
 
