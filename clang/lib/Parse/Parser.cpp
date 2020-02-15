@@ -1347,10 +1347,13 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
       Actions.ActOnSkippedFunctionBody(Res);
       return Actions.ActOnFinishFunctionBody(Res, nullptr, false);
     }
-  } else if (!Res || Actions.canSkipFunctionBody(Res)) {
-
-    // Levitation altered
-
+  }
+  else
+  // Levitation altered
+  if (!Res || (
+      Actions.canSkipFunctionBody(Res) &&
+      Actions.levitationMayBeSkipFunctionDefinition(Res)
+  )) {
     SourceLocation SkipStart;
     bool BurnWithSemicolon = false;
     if (Res) {

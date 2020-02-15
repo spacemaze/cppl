@@ -138,6 +138,14 @@ bool Sema::levitationMayBeSkipVarDefinition(
   return false;
 }
 
+bool Sema::levitationMayBeSkipFunctionDefinition(const Decl *D) {
+  auto *FunctionDecl = D->getAsFunction();
+  return
+    FunctionDecl &&
+    !FunctionDecl->isInlined() &&
+    !FunctionDecl->isTemplated();
+}
+
 Sema::LevitationVarSkipAction Sema::levitationGetSkipActionFor(
     const Declarator &D
 ) {

@@ -53,6 +53,26 @@ namespace Inputs {
   // CHECK: my_int_t
   typedef int my_int_t;
 
-#define DEF { return 0 };
+  // CHECK-NOT: return 123123
+#define DEF { return 123123 };
   void f() DEF
+
+  // CHECK: !(__x == __y)
+  template <class _Tp, class _Allocator>
+  inline
+  bool
+  operator!=(const AA<_Tp>& __x, const AA<_Allocator>& __y)
+  {
+      return !(__x == __y);
+  }
+
+  // CHECK: int a = 345345;
+  template<typename _RandomAccessIterator>
+  void
+  __final_insertion_sort(_RandomAccessIterator __first,
+                         _RandomAccessIterator __last)
+  {
+    int a = 345345;
+  }
+
 }

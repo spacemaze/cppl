@@ -12191,6 +12191,9 @@ public:
         StorageClass SC
     );
 
+  bool levitationMayBeSkipFunctionDefinition(const Decl *D);
+
+
   LevitationVarSkipAction levitationGetSkipActionFor(const Declarator &D);
 
   void levitationAddSkippedSourceFragment(
