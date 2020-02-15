@@ -2,6 +2,6 @@
 #define HEADER
 
 // #define SOME_DEF
-void f() {}
+void f();
 
 #endif
