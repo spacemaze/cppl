@@ -132,7 +132,8 @@ NamedDecl *Parser::ParseCXXInlineMethodDef(
     }
   } else if (
       !LevitationInlineFunction && (!FnD || Actions.canSkipFunctionBody(FnD)) &&
-      !PP.isCodeCompletionEnabled() /* here we expand trySkippingFunctionBody */
+      !PP.isCodeCompletionEnabled() /* here we expand trySkippingFunctionBody */ &&
+      Actions.getSourceManager().isInMainFile(FnD->getLocation())
   ) {
     // C++ Levitation: keep track of skipped source fragments, start
     SourceLocation LevitationStartSkip = Tok.getLocation();
