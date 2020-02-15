@@ -1,0 +1,4 @@
+#import Inputs::A
+#import Inputs::B
+
+int main() { return 0; }
