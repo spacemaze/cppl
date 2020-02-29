@@ -113,9 +113,27 @@ void Preprocessor::setLoadedMacroDirective(IdentifierInfo *II,
     // are loaded completely before predefines are processed, so StoredMD
     // will be nullptr for them when they're loaded. StoredMD should only be
     // non-nullptr for builtins read from a pch file.
+
+    // C++ Levitation, fix of #55
+#if 0
+    // Legacy code:
     assert(OldMD->getMacroInfo()->isBuiltinMacro() &&
            "only built-ins should have an entry here");
     assert(!OldMD->getPrevious() && "builtin should only have a single entry");
+#else
+    // Altered code:
+    if (
+      !getLangOpts().isLevitationMode(LangOptions::LBSK_BuildPreamble) &&
+      !getLangOpts().isLevitationMode(LangOptions::LBSK_BuildDeclAST) &&
+      !getLangOpts().isLevitationMode(LangOptions::LBSK_BuildObjectFile)
+    ) {
+      assert(OldMD->getMacroInfo()->isBuiltinMacro() &&
+             "only built-ins should have an entry here");
+      assert(!OldMD->getPrevious() && "builtin should only have a single entry");
+    }
+#endif
+    // end of C++ Levitation
+
     ED->setPrevious(OldMD);
     StoredMD.setLatest(MD);
   } else {

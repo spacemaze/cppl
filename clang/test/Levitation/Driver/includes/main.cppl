@@ -1,3 +1,6 @@
+// RUN: rm -Rf %T/*
+// RUN: cppl -root=%S -buildRoot=%T -lit -c --verbose
+
 #import Inputs::A
 #import Inputs::B
 

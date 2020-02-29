@@ -1,9 +1,6 @@
 #ifndef HEADER
 #define HEADER
 
-
-// #include <iostream>
-
 // See, bug #55
 // Only exactly "__const" definition triggers this crash.
 //
