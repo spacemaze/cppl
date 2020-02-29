@@ -2229,6 +2229,7 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
         if (
             Var->getStorageClass() != StorageClass::SC_Extern &&
             Var->getStorageClass() != StorageClass::SC_Static &&
+            !Var->getType().isConstQualified() &&
             Var->getDeclContext()->isFileContext()
             )
           Actions.levitationInsertExternForHeader(GroupBegin);

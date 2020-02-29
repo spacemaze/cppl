@@ -5,6 +5,8 @@
 
 #import Inputs::A
 
+const int const_int = 9999;
+
 int main() {
   return 0;
 }
