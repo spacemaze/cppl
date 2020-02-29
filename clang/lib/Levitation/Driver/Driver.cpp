@@ -428,24 +428,6 @@ public:
       return Cmd;
     }
 
-    // TODO Levitation: Deprecated
-    static CommandInfo getParse(
-        StringRef BinDir,
-        StringRef PrecompiledPreamble,
-        bool verbose,
-        bool dryRun
-    ) {
-      auto Cmd = getClangXXCommand(
-          BinDir, "-libstdc++", verbose, dryRun
-      );
-
-      Cmd.addArg("-cppl-parse");
-
-      if (PrecompiledPreamble.size())
-        Cmd.addKVArgEq("-cppl-include-preamble", PrecompiledPreamble);
-
-      return Cmd;
-    }
     static CommandInfo getParseImport(
         StringRef BinDir,
         StringRef PrecompiledPreamble,
@@ -717,36 +699,6 @@ public:
       Out << "\n";
     }
   };
-
-  static bool parse(
-      StringRef BinDir,
-      StringRef PrecompiledPreamble,
-      StringRef OutASTFile,
-      StringRef OutLDepsFile,
-      StringRef SourceFile,
-      StringRef SourcesRoot,
-      const LevitationDriver::Args &ExtraArgs,
-      bool Verbose,
-      bool DryRun
-  ) {
-    if (!DryRun || Verbose)
-      dumpParse(OutASTFile, OutLDepsFile, SourceFile);
-
-    levitation::Path::createDirsForFile(OutASTFile);
-    levitation::Path::createDirsForFile(OutLDepsFile);
-
-    auto ExecutionStatus = CommandInfo::getParse(
-        BinDir, PrecompiledPreamble, Verbose, DryRun
-    )
-    .addKVArgEq("-cppl-src-root", SourcesRoot)
-    .addKVArgEq("-cppl-deps-out", OutLDepsFile)
-    .addArgs(ExtraArgs)
-    .addArg(SourceFile)
-    .addKVArgSpace("-o", OutASTFile)
-    .execute();
-
-    return processStatus(ExecutionStatus);
-  }
 
   static bool parseImport(
       StringRef BinDir,
@@ -1206,36 +1158,6 @@ void LevitationDriverImpl::buildPreamble() {
   setPreambleUpdated();
 }
 
-// TODO Levitation: deprecated
-void LevitationDriverImpl::runParse() {
-  auto &TM = TasksManager::get();
-
-  for (auto PackagePath : Context.Packages) {
-
-    auto Files = Context.Files[PackagePath];
-
-    TM.addTask([=] (TasksManager::TaskContext &TC) {
-      TC.Successful = Commands::parse(
-          Context.Driver.BinDir,
-          Context.Driver.PreambleOutput,
-          Files.AST,
-          Files.LDeps,
-          Files.Source,
-          Context.Driver.SourcesRoot,
-          Context.Driver.ExtraParseArgs,
-          Context.Driver.Verbose,
-          Context.Driver.DryRun
-      );
-    });
-  }
-
-  auto Res = TM.waitForTasks();
-
-  if (!Res)
-    Status.setFailure()
-    << "Parse: phase failed.";
-}
-
 void LevitationDriverImpl::runParseImport() {
   auto &TM = TasksManager::get();
 
@@ -1294,23 +1216,6 @@ void LevitationDriverImpl::solveDependencies() {
   Context.DependenciesInfo = Solver.solve(LDepsFiles);
 
   Status.inheritResult(Solver, "Dependencies solver: ");
-}
-
-// TODO Levitation: deprecated
-void LevitationDriverImpl::instantiateAndCodeGen() {
-  if (!Status.isValid())
-    return;
-
-  bool Res =
-    Context.DependenciesInfo->getDependenciesGraph().dsfJobs(
-        [&] (const DependenciesGraph::Node &N) {
-          return processDependencyNodeDeprecated(N);
-        }
-    );
-
-  if (!Res)
-    Status.setFailure()
-    << "Instantiate and codegen: phase failed.";
 }
 
 void LevitationDriverImpl::codeGen() {
@@ -1738,70 +1643,6 @@ void LevitationDriverImpl::setNodeUpdated(DependenciesGraph::NodeID::Type NID) {
 
 void LevitationDriverImpl::setObjectsUpdated() {
   Context.ObjectsUpdated = true;
-}
-
-// TODO Levitation: Deprecated
-bool LevitationDriverImpl::processDependencyNodeDeprecated(
-    const DependenciesGraph::Node &N
-) {
-  const auto &Strings = CreatableSingleton<DependenciesStringsPool>::get();
-  const auto &Graph = Context.DependenciesInfo->getDependenciesGraph();
-
-  const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
-
-  auto FoundFiles = Context.Files.find(SrcRel);
-  if(FoundFiles == Context.Files.end()) {
-    Log.error()
-    << "Package '" << SrcRel << "' is present in dependencies, but not found.\n";
-    llvm_unreachable("Package not found");
-  }
-
-  const auto &Files = FoundFiles->second;
-
-  auto &RangedDeps = Context.DependenciesInfo->getRangedDependencies(N.ID);
-
-  Paths fullDependencies;
-  for (auto RangeNID : RangedDeps) {
-    auto &DNode = Graph.getNode(RangeNID.second);
-    auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
-
-    DependenciesSolverPath::addDepPathsForDeprecated(
-        fullDependencies,
-        Context.Driver.BuildRoot,
-        DepPath
-    );
-  }
-
-  switch (N.Kind) {
-
-    case DependenciesGraph::NodeKind::Declaration:
-      return Commands::instantiateDecl(
-          Context.Driver.BinDir,
-          Context.Driver.PreambleOutput,
-          Files.DeclAST,
-          Files.AST,
-          fullDependencies,
-          Context.Driver.ExtraCodeGenArgs,
-          Context.Driver.Verbose,
-          Context.Driver.DryRun
-      );
-
-    case DependenciesGraph::NodeKind::Definition: {
-      return Commands::instantiateObject(
-        Context.Driver.BinDir,
-        Context.Driver.PreambleOutput,
-        Files.Object,
-        Files.AST,
-        fullDependencies,
-        Context.Driver.ExtraCodeGenArgs,
-        Context.Driver.Verbose,
-        Context.Driver.DryRun
-      );
-    }
-
-    default:
-      llvm_unreachable("Unknown dependency kind");
-  }
 }
 
 //-----------------------------------------------------------------------------

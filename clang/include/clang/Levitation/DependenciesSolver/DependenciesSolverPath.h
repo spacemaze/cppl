@@ -23,17 +23,7 @@ namespace clang { namespace levitation { namespace dependencies_solver {
 /*static*/
 class DependenciesSolverPath {
 public:
-  // TODO Levitation: Deprecated
-  static void addDepPathsForDeprecated(
-      Paths &Dst,
-      StringRef BuildRoot,
-      StringRef Package,
-      bool MainFile = false
-  ) {
-    Dst.emplace_back(levitation::Path::getPath<SinglePath>(
-        BuildRoot, Package, FileExtensions::DeclarationAST
-    ));
-  }
+
   static void addDepPathsFor(
       Paths &Dst,
       StringRef BuildRoot,
