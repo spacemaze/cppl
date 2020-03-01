@@ -3644,19 +3644,7 @@ static void parseLevitationBuildPreambleArgs(
 
   LangOpts.LevitationMode = 1;
 
-  // Don't skip functions bodies during parse by means of
-  // FrontendOpts.SkipFunctionBodies.
-  // This flag also forces to skip inline functions, which
-  // are not emitted by codegen, without references.
-  // We need function body either to be emitted by codegen or skipped.
-  // No other alternatives.
-  // So don't do this:
-  //   FrontendOpts.SkipFunctionBodies = 1;
-  // Instead we just skip reading of function bodies with external linkage
-  // in places we need just declarations.
-  // (see LevitationModulesReader constructor)
   LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildPreamble);
-  FrontendOpts.SkipFunctionBodies = 1;
 }
 
 static void parseLevitationBuildObjectArgs(
@@ -3693,7 +3681,6 @@ static void parseLevitationBuildObjectArgs(
 
   LangOpts.LevitationMode = 1;
   if (FrontendOpts.LevitationBuildDeclaration) {
-    FrontendOpts.SkipFunctionBodies = 1;
     LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildDeclAST);
   } else
     LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildObjectFile);

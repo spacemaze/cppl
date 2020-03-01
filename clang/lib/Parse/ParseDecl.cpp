@@ -2464,7 +2464,8 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
   if (
     Actions.isLevitationMode() &&
     !D.isFunctionDefinition() &&
-    SkipFunctionBodies
+    Actions.isLevitationStage(LangOptions::LBSK_BuildDeclAST) ||
+    Actions.isLevitationStage(LangOptions::LBSK_BuildPreamble)
   ) {
     levitationHandleVarDeclarator(
         D, Tok, Actions,
