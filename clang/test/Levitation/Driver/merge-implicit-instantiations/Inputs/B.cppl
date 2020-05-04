@@ -1,0 +1,5 @@
+#include "template"
+
+int fb() {
+  return Templ<int>::get();
+}

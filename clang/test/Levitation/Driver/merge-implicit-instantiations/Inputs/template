@@ -1,0 +1,7 @@
+#ifndef TEMPLATE
+#define TEMPLATE
+template <typename T>
+struct Templ {
+  static T get() { return T(); }
+};
+#endif
