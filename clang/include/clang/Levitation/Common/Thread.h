@@ -18,8 +18,9 @@
 
 namespace clang { namespace levitation {
 
-inline std::unique_lock<std::mutex> lock(std::mutex &M) {
-  return std::unique_lock<std::mutex>(M);
+using MutexLock = std::unique_lock<std::mutex>;
+inline MutexLock lock(std::mutex &M) {
+  return MutexLock(M);
 }
 
 }}
