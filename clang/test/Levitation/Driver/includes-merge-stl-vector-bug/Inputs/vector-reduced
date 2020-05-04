@@ -1,0 +1,30 @@
+#ifndef STL_VECTOR
+#define STL_VECTOR
+
+template<typename T>
+struct __is_integer {
+  enum {
+    __value = 0
+  };
+};
+
+template <>
+struct __is_integer<int> {
+  enum {
+    __value = 1
+  };
+};
+
+template<typename _Tp>
+void
+fill(const _Tp& __value)
+{
+  const bool __scalar = __is_integer<_Tp>::__value;
+}
+
+inline void filll()
+{
+   fill(1);
+}
+
+#endif // STL_VECTOR

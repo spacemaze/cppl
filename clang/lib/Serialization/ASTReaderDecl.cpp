@@ -2637,7 +2637,10 @@ static bool allowODRLikeMergeInC(NamedDecl *ND) {
 /// identical class definitions from two different modules.
 void ASTDeclReader::mergeMergeable(LifetimeExtendedTemporaryDecl *D) {
   // If modules are not available, there is no reason to perform this merge.
-  if (!Reader.getContext().getLangOpts().Modules)
+  if (
+      !Reader.getContext().getLangOpts().Modules &&
+      !Reader.getContext().getLangOpts().LevitationMode
+  )
     return;
 
   LifetimeExtendedTemporaryDecl *LETDecl = D;
@@ -2659,7 +2662,10 @@ void ASTDeclReader::mergeMergeable(LifetimeExtendedTemporaryDecl *D) {
 template<typename T>
 void ASTDeclReader::mergeMergeable(Mergeable<T> *D) {
   // If modules are not available, there is no reason to perform this merge.
-  if (!Reader.getContext().getLangOpts().Modules)
+  if (
+    !Reader.getContext().getLangOpts().Modules &&
+    !Reader.getContext().getLangOpts().LevitationMode
+  )
     return;
 
   // ODR-based merging is performed in C++ and in some cases (tag types) in C.
