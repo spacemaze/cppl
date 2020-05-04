@@ -2638,11 +2638,28 @@ static bool allowODRLikeMergeInC(NamedDecl *ND) {
 /// identical class definitions from two different modules.
 void ASTDeclReader::mergeMergeable(LifetimeExtendedTemporaryDecl *D) {
   // If modules are not available, there is no reason to perform this merge.
+
+  // C++ Levitation:
+  //
+  // #46, #47: Fix STL support, add #include support
+  //
+  // If we include with #include same code into modules A and B
+  // and then import both into C, then we have to merge
+  // included decls.
+  //
+  // This fix adds support for merging declarations like enum constants
+  // and others.
+#if 0
+  if (!Reader.getContext().getLangOpts().Modules)
+    return;
+#else
   if (
       !Reader.getContext().getLangOpts().Modules &&
       !Reader.getContext().getLangOpts().LevitationMode
   )
     return;
+#endif
+  // end of C++ Levitation
 
   LifetimeExtendedTemporaryDecl *LETDecl = D;
 
@@ -2663,11 +2680,28 @@ void ASTDeclReader::mergeMergeable(LifetimeExtendedTemporaryDecl *D) {
 template<typename T>
 void ASTDeclReader::mergeMergeable(Mergeable<T> *D) {
   // If modules are not available, there is no reason to perform this merge.
+
+  // C++ Levitation:
+  // C++ Levitation:
+  //
+  // #46, #47: Fix STL support, add #include support
+  //
+  // If we include with #include same code into modules A and B
+  // and then import both into C, then we have to merge
+  // included decls.
+  //
+  // This fix adds support for merging declarations like enum constants
+  // and others.
+#if 0
+  if (!Reader.getContext().getLangOpts().Modules)
+    return;
+#else
   if (
     !Reader.getContext().getLangOpts().Modules &&
     !Reader.getContext().getLangOpts().LevitationMode
   )
     return;
+#endif
 
   // ODR-based merging is performed in C++ and in some cases (tag types) in C.
   // Note that C identically-named things in different translation units are
