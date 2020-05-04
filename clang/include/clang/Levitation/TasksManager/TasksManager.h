@@ -301,9 +301,20 @@ protected:
   }
 
   template <typename ...ArgsT>
-  void log(ArgsT&&...args) {
+  void logWorker(int Id, ArgsT&&...args) {
 #ifdef LEVITATION_ENABLE_TASK_MANAGER_LOGS
-    Log.log_verbose("TaskManager: ", std::forward<ArgsT>(args)...);
+    if (Id != getInvalidWorkerID())
+      Log.log_verbose("Worker[", Id, "]: ", std::forward<ArgsT>(args)...);
+    else
+      Log.log_verbose("MainThread: ", std::forward<ArgsT>(args)...);
+#endif
+  }
+
+  template <typename ...ArgsT>
+  void log(ArgsT&&...args) {
+    logWorker(getWorkerID(), std::forward<ArgsT>(args)...);
+#ifdef LEVITATION_ENABLE_TASK_MANAGER_LOGS
+    Log.log_verbose("TaskManager: ", );
 #endif
   }
 
@@ -376,11 +387,6 @@ protected:
     assert(ptr);
 
     return ptr;
-  }
-
-  template <typename ...ArgsT>
-  void logWorker(int Id, ArgsT&&...args) {
-    log("Worker[", Id, "]: ", std::forward<ArgsT>(args)...);
   }
 
   void executeTask(Task &Tsk) {
