@@ -1684,7 +1684,7 @@ void LevitationDriver::setExtraLinkerArgs(StringRef Args) {
 bool LevitationDriver::run() {
 
   log::Logger::createLogger(log::Level::Info);
-  TasksManager::create(JobsNumber);
+  TasksManager::create(JobsNumber-1);
   CreatableSingleton<FileManager>::create( FileSystemOptions { std::string(StringRef()) });
   CreatableSingleton<DependenciesStringsPool >::create();
 
@@ -1739,7 +1739,7 @@ void LevitationDriver::dumpParameters() {
   << "    BinaryDir: " << BinDir << "\n"
   << "    SourcesRoot: " << SourcesRoot << "\n"
   << "    PreambleSource: " << (PreambleSource.empty() ? "<preamble compilation not requested>" : PreambleSource) << "\n"
-  << "    JobsNumber: " << JobsNumber << "\n"
+  << "    JobsNumber (including main thread): " << JobsNumber << "\n"
   << "    Output: " << Output << "\n"
   << "    OutputHeadersDir: " << (isLinkPhaseEnabled() ? "<n/a>" : OutputHeadersDir.c_str()) << "\n"
   << "    DryRun: " << (DryRun ? "yes" : "no") << "\n"

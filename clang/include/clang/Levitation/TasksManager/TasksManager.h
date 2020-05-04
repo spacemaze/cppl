@@ -86,7 +86,7 @@ private:
 
   levitation::log::Logger &Log;
 
-  int JobsNumber;
+  int WorkesNumber;
 
   std::mutex WorkerIDsLocker;
   std::mutex StatusLocker;
@@ -110,7 +110,7 @@ public:
 
   TasksManager(int jobsNumber)
   : Log(log::Logger::get()),
-    JobsNumber(jobsNumber)
+    WorkesNumber(jobsNumber)
   {
     runWorkers();
   }
@@ -314,9 +314,6 @@ protected:
   template <typename ...ArgsT>
   void log(ArgsT&&...args) {
     logWorker(getWorkerID(), std::forward<ArgsT>(args)...);
-#ifdef LEVITATION_ENABLE_TASK_MANAGER_LOGS
-    Log.log_verbose("TaskManager: ", );
-#endif
   }
 
   MutexLock lockTasks() {
@@ -446,9 +443,7 @@ protected:
       logWorker(MyId, "Stopped");
     };
 
-    // Not, that current thread can also execute task,
-    // so total number of works is JobsNumber-1
-    for (int j = 0, e = JobsNumber-1; j != e; ++j) {
+    for (int j = 0, e = WorkesNumber; j != e; ++j) {
       Workers.emplace(new std::thread(worker));
     }
   }
