@@ -439,7 +439,9 @@ protected:
       logWorker(MyId, "Stopped");
     };
 
-    for (int j = 0; j != JobsNumber; ++j) {
+    // Not, that current thread can also execute task,
+    // so total number of works is JobsNumber-1
+    for (int j = 0, e = JobsNumber-1; j != e; ++j) {
       Workers.emplace(new std::thread(worker));
     }
   }
