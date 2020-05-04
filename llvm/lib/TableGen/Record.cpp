@@ -1778,6 +1778,14 @@ Init *FieldInit::Fold(Record *CurRec) const {
   return const_cast<FieldInit *>(this);
 }
 
+bool FieldInit::isConcrete() const {
+  if (DefInit *DI = dyn_cast<DefInit>(Rec)) {
+    Init *FieldVal = DI->getDef()->getValue(FieldName)->getValue();
+    return FieldVal->isConcrete();
+  }
+  return false;
+}
+
 static void ProfileCondOpInit(FoldingSetNodeID &ID,
                              ArrayRef<Init *> CondRange,
                              ArrayRef<Init *> ValRange,
@@ -2146,11 +2154,6 @@ void Record::resolveReferences() {
   RecordResolver R(*this);
   R.setFinal(true);
   resolveReferences(R);
-}
-
-void Record::resolveReferencesTo(const RecordVal *RV) {
-  RecordValResolver R(*this, RV);
-  resolveReferences(R, RV);
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)

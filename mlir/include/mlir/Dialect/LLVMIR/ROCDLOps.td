@@ -14,6 +14,7 @@
 #define ROCDLIR_OPS
 
 include "mlir/Dialect/LLVMIR/LLVMOpBase.td"
+include "mlir/Interfaces/SideEffects.td"
 
 //===----------------------------------------------------------------------===//
 // ROCDL dialect definitions
@@ -86,5 +87,19 @@ def ROCDL_GridDimYOp : ROCDL_DeviceFunctionOp<"grid.dim.y",
 def ROCDL_GridDimZOp : ROCDL_DeviceFunctionOp<"grid.dim.z",
                                                "__ockl_get_global_size", 2>;
 
+//===----------------------------------------------------------------------===//
+// Synchronization primitives
+
+def ROCDL_BarrierOp : ROCDL_Op<"barrier"> {
+  string llvmBuilder = [{
+    llvm::LLVMContext &llvmContext = builder.getContext();
+    builder.CreateFence(llvm::AtomicOrdering::Release,
+                        llvmContext.getOrInsertSyncScopeID("workgroup"));
+    createIntrinsicCall(builder, llvm::Intrinsic::amdgcn_s_barrier);
+    builder.CreateFence(llvm::AtomicOrdering::Acquire,
+                        llvmContext.getOrInsertSyncScopeID("workgroup"));
+  }];
+  let assemblyFormat = "attr-dict";
+}
 
 #endif // ROCDLIR_OPS

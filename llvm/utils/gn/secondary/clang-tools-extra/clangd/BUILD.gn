@@ -10,7 +10,9 @@ config("features_config") {
 write_cmake_config("features") {
   input = "Features.inc.in"
   output = "$target_gen_dir/Features.inc"
-  values = []
+
+  # FIXME: Real remote support.
+  values = [ "CLANGD_ENABLE_REMOTE=0" ]
   if (clangd_build_xpc) {
     values += [ "CLANGD_BUILD_XPC=1" ]
   } else {
@@ -26,6 +28,7 @@ static_library("clangd") {
     ":features",
     "//clang-tools-extra/clang-tidy",
     "//clang-tools-extra/clang-tidy:all-checks",
+    "//clang-tools-extra/clangd/support",
     "//clang/lib/AST",
     "//clang/lib/ASTMatchers",
     "//clang/lib/Basic",
@@ -43,7 +46,6 @@ static_library("clangd") {
     "//clang/lib/Tooling/Syntax",
     "//llvm/lib/Support",
     "//llvm/lib/Target:AllTargetsInfos",
-    "//llvm/utils/gn/build/libs/atomic",
     "//llvm/utils/gn/build/libs/pthread",
   ]
   include_dirs = [
@@ -54,24 +56,21 @@ static_library("clangd") {
   ]
   sources = [
     "AST.cpp",
-    "Cancellation.cpp",
     "ClangdLSPServer.cpp",
     "ClangdServer.cpp",
     "CodeComplete.cpp",
     "CodeCompletionStrings.cpp",
+    "CollectMacros.cpp",
     "CompileCommands.cpp",
     "Compiler.cpp",
-    "Context.cpp",
     "Diagnostics.cpp",
     "DraftStore.cpp",
     "ExpectedTypes.cpp",
     "FS.cpp",
-    "FSProvider.cpp",
     "FileDistance.cpp",
     "FindSymbols.cpp",
     "FindTarget.cpp",
     "Format.cpp",
-    "FormattedString.cpp",
     "FuzzyMatch.cpp",
     "GlobalCompilationDatabase.cpp",
     "HeaderSourceSwitch.cpp",
@@ -79,7 +78,6 @@ static_library("clangd") {
     "Hover.cpp",
     "IncludeFixer.cpp",
     "JSONTransport.cpp",
-    "Logger.cpp",
     "ParsedAST.cpp",
     "PathMapping.cpp",
     "Preamble.cpp",
@@ -90,11 +88,8 @@ static_library("clangd") {
     "Selection.cpp",
     "SemanticHighlighting.cpp",
     "SemanticSelection.cpp",
-    "Shutdown.cpp",
     "SourceCode.cpp",
     "TUScheduler.cpp",
-    "Threading.cpp",
-    "Trace.cpp",
     "URI.cpp",
     "XRefs.cpp",
     "index/Background.cpp",

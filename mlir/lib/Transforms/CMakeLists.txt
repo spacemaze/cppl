@@ -1,8 +1,7 @@
 add_subdirectory(Utils)
 
-add_llvm_library(MLIRTransforms
-  AffineDataCopyGeneration.cpp
-  AffineLoopInvariantCodeMotion.cpp
+add_mlir_library(MLIRTransforms
+  BufferPlacement.cpp
   Canonicalizer.cpp
   CSE.cpp
   DialectConversion.cpp
@@ -11,31 +10,31 @@ add_llvm_library(MLIRTransforms
   LoopCoalescing.cpp
   LoopFusion.cpp
   LoopInvariantCodeMotion.cpp
-  LoopTiling.cpp
-  LoopUnrollAndJam.cpp
-  LoopUnroll.cpp
   MemRefDataFlowOpt.cpp
   OpStats.cpp
+  ParallelLoopCollapsing.cpp
   PipelineDataTransfer.cpp
-  SimplifyAffineStructures.cpp
+  SCCP.cpp
   StripDebugInfo.cpp
   SymbolDCE.cpp
-  Vectorize.cpp
   ViewOpGraph.cpp
   ViewRegionGraph.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Transforms
+
+  DEPENDS
+  MLIRStandardOpsIncGen
+  MLIRTransformsPassIncGen
   )
 
-add_dependencies(MLIRTransforms
-  MLIRLoopLikeInterfaceIncGen
-  MLIRStandardOpsIncGen)
 target_link_libraries(MLIRTransforms
+  PUBLIC
   MLIRAffineOps
   MLIRAnalysis
+  MLIRLoopLikeInterface
   MLIRLoopOps
   MLIRPass
   MLIRTransformUtils
-  MLIRVectorOps
+  MLIRVector
   )

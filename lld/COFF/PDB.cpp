@@ -63,11 +63,10 @@
 
 using namespace llvm;
 using namespace llvm::codeview;
+using namespace lld;
+using namespace lld::coff;
 
 using llvm::object::coff_section;
-
-namespace lld {
-namespace coff {
 
 static ExitOnError exitOnErr;
 
@@ -100,6 +99,9 @@ public:
 
   /// Add natvis files specified on the command line.
   void addNatvisFiles();
+
+  /// Add named streams specified on the command line.
+  void addNamedStreams();
 
   /// Link CodeView from each object file in the symbol table into the PDB.
   void addObjectsToPDB();
@@ -724,10 +726,9 @@ static void translateIdSymbols(MutableArrayRef<uint8_t> &recordData,
     // in both cases we just need the second type index.
     if (!ti->isSimple() && !ti->isNoneType()) {
       CVType funcIdData = iDTable.getType(*ti);
-      SmallVector<TypeIndex, 2> indices;
-      discoverTypeIndices(funcIdData, indices);
-      assert(indices.size() == 2);
-      *ti = indices[1];
+      ArrayRef<uint8_t> tiBuf = funcIdData.data().slice(8, 4);
+      assert(tiBuf.size() == 4 && "corruct LF_[MEM]FUNC_ID record");
+      *ti = *reinterpret_cast<const TypeIndex *>(tiBuf.data());
     }
 
     kind = (kind == SymbolKind::S_GPROC32_ID) ? SymbolKind::S_GPROC32
@@ -1386,6 +1387,8 @@ void PDBLinker::printStats() {
       TypeIndex typeIndex;
       uint64_t totalInputSize() const { return uint64_t(dupCount) * typeSize; }
       bool operator<(const TypeSizeInfo &rhs) const {
+        if (totalInputSize() == rhs.totalInputSize())
+          return typeIndex < rhs.typeIndex;
         return totalInputSize() < rhs.totalInputSize();
       }
     };
@@ -1433,6 +1436,19 @@ void PDBLinker::addNatvisFiles() {
       continue;
     }
     builder.addInjectedSource(file, std::move(*dataOrErr));
+  }
+}
+
+void PDBLinker::addNamedStreams() {
+  for (const auto &streamFile : config->namedStreams) {
+    const StringRef stream = streamFile.getKey(), file = streamFile.getValue();
+    ErrorOr<std::unique_ptr<MemoryBuffer>> dataOrErr =
+        MemoryBuffer::getFile(file);
+    if (!dataOrErr) {
+      warn("Cannot open input file: " + file);
+      continue;
+    }
+    exitOnErr(builder.addNamedStream(stream, (*dataOrErr)->getBuffer()));
   }
 }
 
@@ -1679,10 +1695,10 @@ void PDBLinker::addImportFilesToPDB(ArrayRef<OutputSection *> outputSections) {
 }
 
 // Creates a PDB file.
-void createPDB(SymbolTable *symtab,
-                     ArrayRef<OutputSection *> outputSections,
-                     ArrayRef<uint8_t> sectionTable,
-                     llvm::codeview::DebugInfo *buildId) {
+void lld::coff::createPDB(SymbolTable *symtab,
+                          ArrayRef<OutputSection *> outputSections,
+                          ArrayRef<uint8_t> sectionTable,
+                          llvm::codeview::DebugInfo *buildId) {
   ScopedTimer t1(totalPdbLinkTimer);
   PDBLinker pdb(symtab);
 
@@ -1691,6 +1707,7 @@ void createPDB(SymbolTable *symtab,
   pdb.addImportFilesToPDB(outputSections);
   pdb.addSections(outputSections, sectionTable);
   pdb.addNatvisFiles();
+  pdb.addNamedStreams();
 
   ScopedTimer t2(diskCommitTimer);
   codeview::GUID guid;
@@ -1880,7 +1897,7 @@ static bool findLineTable(const SectionChunk *c, uint32_t addr,
 // offset into the given chunk and return them, or None if a line table was
 // not found.
 Optional<std::pair<StringRef, uint32_t>>
-getFileLineCodeView(const SectionChunk *c, uint32_t addr) {
+lld::coff::getFileLineCodeView(const SectionChunk *c, uint32_t addr) {
   ExitOnError exitOnErr;
 
   DebugStringTableSubsectionRef cVStrTab;
@@ -1914,6 +1931,3 @@ getFileLineCodeView(const SectionChunk *c, uint32_t addr) {
   StringRef filename = exitOnErr(getFileName(cVStrTab, checksums, *nameIndex));
   return std::make_pair(filename, *lineNumber);
 }
-
-} // namespace coff
-} // namespace lld

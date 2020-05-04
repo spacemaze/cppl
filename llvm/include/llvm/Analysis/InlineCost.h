@@ -27,6 +27,7 @@ class DataLayout;
 class Function;
 class ProfileSummaryInfo;
 class TargetTransformInfo;
+class TargetLibraryInfo;
 
 namespace InlineConstants {
 // Various thresholds used by inline cost analysis.
@@ -219,6 +220,7 @@ InlineCost getInlineCost(
     CallBase &Call, const InlineParams &Params, TargetTransformInfo &CalleeTTI,
     std::function<AssumptionCache &(Function &)> &GetAssumptionCache,
     Optional<function_ref<BlockFrequencyInfo &(Function &)>> GetBFI,
+    function_ref<const TargetLibraryInfo &(Function &)> GetTLI,
     ProfileSummaryInfo *PSI, OptimizationRemarkEmitter *ORE = nullptr);
 
 /// Get an InlineCost with the callee explicitly specified.
@@ -231,7 +233,32 @@ getInlineCost(CallBase &Call, Function *Callee, const InlineParams &Params,
               TargetTransformInfo &CalleeTTI,
               std::function<AssumptionCache &(Function &)> &GetAssumptionCache,
               Optional<function_ref<BlockFrequencyInfo &(Function &)>> GetBFI,
+              function_ref<const TargetLibraryInfo &(Function &)> GetTLI,
               ProfileSummaryInfo *PSI, OptimizationRemarkEmitter *ORE);
+
+/// Returns InlineResult::success() if the call site should be always inlined
+/// because of user directives, and the inlining is viable. Returns
+/// InlineResult::failure() if the inlining may never happen because of user
+/// directives or incompatibilities detectable without needing callee traversal.
+/// Otherwise returns None, meaning that inlining should be decided based on
+/// other criteria (e.g. cost modeling).
+Optional<InlineResult> getAttributeBasedInliningDecision(
+    CallBase &Call, Function *Callee, TargetTransformInfo &CalleeTTI,
+    function_ref<const TargetLibraryInfo &(Function &)> GetTLI);
+
+/// Get the cost estimate ignoring thresholds. This is similar to getInlineCost
+/// when passed InlineParams::ComputeFullInlineCost, or a non-null ORE. It
+/// uses default InlineParams otherwise.
+/// Contrary to getInlineCost, which makes a threshold-based final evaluation of
+/// should/shouldn't inline, captured in InlineResult, getInliningCostEstimate
+/// returns:
+/// - None, if the inlining cannot happen (is illegal)
+/// - an integer, representing the cost.
+Optional<int> getInliningCostEstimate(
+    CallBase &Call, TargetTransformInfo &CalleeTTI,
+    std::function<AssumptionCache &(Function &)> &GetAssumptionCache,
+    Optional<function_ref<BlockFrequencyInfo &(Function &)>> GetBFI,
+    ProfileSummaryInfo *PSI, OptimizationRemarkEmitter *ORE);
 
 /// Minimal filter to detect invalid constructs for inlining.
 InlineResult isInlineViable(Function &Callee);

@@ -51,7 +51,8 @@ public:
       lldb::SectionType sect_type =
           llvm::StringSwitch<lldb::SectionType>(name)
               .Case("debug_info", lldb::eSectionTypeDWARFDebugInfo)
-              .Case("debug_abbrev", lldb::eSectionTypeDWARFDebugAbbrev);
+              .Case("debug_abbrev", lldb::eSectionTypeDWARFDebugAbbrev)
+              .Case("debug_str", lldb::eSectionTypeDWARFDebugStr);
       auto &membuf = entry.getValue();
       lldb::addr_t file_vm_addr = 0;
       lldb::addr_t vm_size = 0;
@@ -111,7 +112,7 @@ YAMLModuleTester::YAMLModuleTester(llvm::StringRef yaml_data,
   llvm::Expected<DWARFUnitSP> dwarf_unit = DWARFUnit::extract(
       *m_symfile_dwarf, uid,
       *static_cast<lldb_private::DWARFDataExtractor *>(&debug_info),
-      DIERef::DebugInfo, &offset_ptr);
+      DIERef::DebugInfo, &offset_ptr, nullptr);
   if (dwarf_unit)
     m_dwarf_unit = dwarf_unit.get();
 }

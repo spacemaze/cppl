@@ -51,10 +51,35 @@ Major New Features
 Improvements to Clang's diagnostics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-- ...
+- -Wpointer-to-int-cast is a new warning group. This group warns about C-style
+  casts of pointers to a integer type too small to hold all possible values.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
+
+- For the ARM target, C-language intrinsics are now provided for the full Arm
+  v8.1-M MVE instruction set. ``<arm_mve.h>`` supports the complete API defined
+  in the Arm C Language Extensions.
+
+- For the ARM target, C-language intrinsics ``<arm_cde.h>`` for the CDE
+  instruction set are now provided.
+
+- clang adds support for a set of  extended integer types (``_ExtInt(N)``) that
+  permit non-power of 2 integers, exposing the LLVM integer types. Since a major
+  motivating use case for these types is to limit 'bit' usage, these types don't
+  automatically promote to 'int' when operations are done between two ``ExtInt(N)``
+  types, instead math occurs at the size of the largest ``ExtInt(N)`` type.
+
+- Users of UBSan, PGO, and coverage on Windows will now need to add clang's
+  library resource directory to their library search path. These features all
+  use runtime libraries, and Clang provides these libraries in its resource
+  directory. For example, if LLVM is installed in ``C:\Program Files\LLVM``,
+  then the profile runtime library will appear at
+  ``C:\Program Files\LLVM\lib\clang\11.0.0\lib\windows\clang_rt.profile-x86_64.lib``.
+  To ensure that the linker can find the appropriate library, users should pass
+  ``/LIBPATH:C:\Program Files\LLVM\lib\clang\11.0.0\lib\windows`` to the
+  linker. If the user links the program with the ``clang`` or ``clang-cl``
+  drivers, the driver will pass this flag for them.
 
 
 New Compiler Flags
@@ -64,6 +89,13 @@ New Compiler Flags
 - -fstack-clash-protection will provide a protection against the stack clash
   attack for x86 architecture through automatic probing of each page of
   allocated stack.
+
+- -ffp-exception-behavior={ignore,maytrap,strict} allows the user to specify
+  the floating-point exception behavior.  The default setting is ``ignore``.
+
+- -ffp-model={precise,strict,fast} provides the user an umbrella option to
+  simplify access to the many single purpose floating point options. The default
+  setting is ``precise``.
 
 Deprecated Compiler Flags
 -------------------------
@@ -76,6 +108,28 @@ future versions of Clang.
 Modified Compiler Flags
 -----------------------
 
+- -fno-common has been enabled as the default for all targets.  Therefore, C
+  code that uses tentative definitions as definitions of a variable in multiple
+  translation units will trigger multiple-definition linker errors.  Generally,
+  this occurs when the use of the ``extern`` keyword is neglected in the declaration
+  of a variable in a header file. In some cases, no specific translation unit
+  provides a definition of the variable. The previous behavior can be restored by
+  specifying ``-fcommon``.
+- -Wasm-ignored-qualifier (ex. `asm const ("")`) has been removed and replaced
+  with an error (this matches a recent change in GCC-9).
+- -Wasm-file-asm-volatile (ex. `asm volatile ("")` at global scope) has been
+  removed and replaced with an error (this matches GCC's behavior).
+- Duplicate qualifiers on asm statements (ex. `asm volatile volatile ("")`) no
+  longer produces a warning via -Wduplicate-decl-specifier, but now an error
+  (this matches GCC's behavior).
+- The deprecated argument ``-f[no-]sanitize-recover`` has changed to mean
+  ``-f[no-]sanitize-recover=all`` instead of
+  ``-f[no-]sanitize-recover=undefined,integer`` and is no longer deprecated.
+- The argument to ``-f[no-]sanitize-trap=...`` is now optional and defaults to
+  ``all``.
+- ``-fno-char8_t`` now disables the ``char8_t`` keyword, not just the use of
+  ``char8_t`` as the character type of ``u8`` literals. This restores the
+  Clang 8 behavior that regressed in Clang 9 and 10.
 
 New Pragmas in Clang
 --------------------
@@ -85,7 +139,9 @@ New Pragmas in Clang
 Attribute Changes in Clang
 --------------------------
 
-- ...
+- Attributes can now be specified by clang plugins. See the
+  `Clang Plugins <ClangPlugins.html#defining-attributes>`_ documentation for
+  details.
 
 Windows Support
 ---------------
@@ -93,12 +149,13 @@ Windows Support
 C Language Changes in Clang
 ---------------------------
 
+- The default C language standard used when `-std=` is not specified has been
+  upgraded from gnu11 to gnu17.
+
+- Clang now supports the GNU C extension `asm inline`; it won't do anything
+  *yet*, but it will be parsed.
+
 - ...
-
-C11 Feature Support
-^^^^^^^^^^^^^^^^^^^
-
-...
 
 C++ Language Changes in Clang
 -----------------------------
@@ -221,6 +278,25 @@ clang-format
   multiple lines. It is currently only available for JavaScript and disabled by
   default (``TCS_None``).
 
+- Option ``BraceWrapping.BeforeLambdaBody`` has been added to manage lambda
+  line break inside function parameter call in Allman style.
+
+  .. code-block:: c++
+
+      true:
+      connect(
+        []()
+        {
+          foo();
+          bar();
+        });
+
+      false:
+      connect([]() {
+          foo();
+          bar();
+        });
+
 libclang
 --------
 
@@ -262,7 +338,7 @@ Additional Information
 
 A wide variety of additional information is available on the `Clang web
 page <https://clang.llvm.org/>`_. The web page contains versions of the
-API documentation which are up-to-date with the Subversion version of
+API documentation which are up-to-date with the Git version of
 the source code. You can access versions of these documents specific to
 this release by going into the "``clang/docs/``" directory in the Clang
 tree.

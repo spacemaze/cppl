@@ -33,6 +33,10 @@ EnablePPCColdCC("ppc-enable-coldcc", cl::Hidden, cl::init(false),
                 cl::desc("Enable using coldcc calling conv for cold "
                          "internal functions"));
 
+static cl::opt<bool>
+LsrNoInsnsCost("ppc-lsr-no-insns-cost", cl::Hidden, cl::init(false),
+               cl::desc("Do not add instruction count to lsr cost model"));
+
 // The latency of mtctr is only justified if there are more than 4
 // comparisons that will be removed as a result.
 static cl::opt<unsigned>
@@ -202,19 +206,20 @@ int PPCTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
   return PPCTTIImpl::getIntImmCost(Imm, Ty);
 }
 
-unsigned PPCTTIImpl::getUserCost(const User *U,
-                                 ArrayRef<const Value *> Operands) {
+unsigned
+PPCTTIImpl::getUserCost(const User *U, ArrayRef<const Value *> Operands,
+                        TTI::TargetCostKind CostKind) {
   if (U->getType()->isVectorTy()) {
     // Instructions that need to be split should cost more.
     std::pair<int, MVT> LT = TLI->getTypeLegalizationCost(DL, U->getType());
-    return LT.first * BaseT::getUserCost(U, Operands);
+    return LT.first * BaseT::getUserCost(U, Operands, CostKind);
   }
 
-  return BaseT::getUserCost(U, Operands);
+  return BaseT::getUserCost(U, Operands, CostKind);
 }
 
-bool PPCTTIImpl::mightUseCTR(BasicBlock *BB,
-                             TargetLibraryInfo *LibInfo) {
+bool PPCTTIImpl::mightUseCTR(BasicBlock *BB, TargetLibraryInfo *LibInfo,
+                             SmallPtrSetImpl<const Value *> &Visited) {
   const PPCTargetMachine &TM = ST->getTargetMachine();
 
   // Loop through the inline asm constraints and look for something that
@@ -233,8 +238,11 @@ bool PPCTTIImpl::mightUseCTR(BasicBlock *BB,
 
   // Determining the address of a TLS variable results in a function call in
   // certain TLS models.
-  std::function<bool(const Value*)> memAddrUsesCTR =
-    [&memAddrUsesCTR, &TM](const Value *MemAddr) -> bool {
+  std::function<bool(const Value *)> memAddrUsesCTR =
+      [&memAddrUsesCTR, &TM, &Visited](const Value *MemAddr) -> bool {
+    // No need to traverse again if we already checked this operand.
+    if (!Visited.insert(MemAddr).second)
+      return false;
     const auto *GV = dyn_cast<GlobalValue>(MemAddr);
     if (!GV) {
       // Recurse to check for constants that refer to TLS global variables.
@@ -264,7 +272,7 @@ bool PPCTTIImpl::mightUseCTR(BasicBlock *BB,
        J != JE; ++J) {
     if (CallInst *CI = dyn_cast<CallInst>(J)) {
       // Inline ASM is okay, unless it clobbers the ctr register.
-      if (InlineAsm *IA = dyn_cast<InlineAsm>(CI->getCalledValue())) {
+      if (InlineAsm *IA = dyn_cast<InlineAsm>(CI->getCalledOperand())) {
         if (asmClobbersCTR(IA))
           return true;
         continue;
@@ -498,9 +506,10 @@ bool PPCTTIImpl::isHardwareLoopProfitable(Loop *L, ScalarEvolution &SE,
 
   // We don't want to spill/restore the counter register, and so we don't
   // want to use the counter register if the loop contains calls.
+  SmallPtrSet<const Value *, 4> Visited;
   for (Loop::block_iterator I = L->block_begin(), IE = L->block_end();
        I != IE; ++I)
-    if (mightUseCTR(*I, LibInfo))
+    if (mightUseCTR(*I, LibInfo, Visited))
       return false;
 
   SmallVector<BasicBlock*, 4> ExitingBlocks;
@@ -893,7 +902,7 @@ int PPCTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
   // stores, loads are expanded using the vector-load + permutation sequence,
   // which is much less expensive).
   if (Src->isVectorTy() && Opcode == Instruction::Store)
-    for (int i = 0, e = Src->getVectorNumElements(); i < e; ++i)
+    for (int i = 0, e = cast<VectorType>(Src)->getNumElements(); i < e; ++i)
       Cost += getVectorInstrCost(Instruction::ExtractElement, Src, i);
 
   return Cost;
@@ -932,17 +941,21 @@ int PPCTTIImpl::getInterleavedMemoryOpCost(unsigned Opcode, Type *VecTy,
 }
 
 unsigned PPCTTIImpl::getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
-      ArrayRef<Value*> Args, FastMathFlags FMF, unsigned VF) {
-  return BaseT::getIntrinsicInstrCost(ID, RetTy, Args, FMF, VF);
+                                           ArrayRef<Value *> Args,
+                                           FastMathFlags FMF, unsigned VF,
+                                           const Instruction *I) {
+  return BaseT::getIntrinsicInstrCost(ID, RetTy, Args, FMF, VF, I);
 }
 
 unsigned PPCTTIImpl::getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
-      ArrayRef<Type*> Tys, FastMathFlags FMF,
-      unsigned ScalarizationCostPassed) {
+                                           ArrayRef<Type *> Tys,
+                                           FastMathFlags FMF,
+                                           unsigned ScalarizationCostPassed,
+                                           const Instruction *I) {
   if (ID == Intrinsic::bswap && ST->hasP9Vector())
     return TLI->getTypeLegalizationCost(DL, RetTy).first;
   return BaseT::getIntrinsicInstrCost(ID, RetTy, Tys, FMF,
-                                      ScalarizationCostPassed);
+                                      ScalarizationCostPassed, I);
 }
 
 bool PPCTTIImpl::canSaveCmp(Loop *L, BranchInst **BI, ScalarEvolution *SE,
@@ -966,4 +979,17 @@ bool PPCTTIImpl::canSaveCmp(Loop *L, BranchInst **BI, ScalarEvolution *SE,
 
   *BI = HWLoopInfo.ExitBranch;
   return true;
+}
+
+bool PPCTTIImpl::isLSRCostLess(TargetTransformInfo::LSRCost &C1,
+                               TargetTransformInfo::LSRCost &C2) {
+  // PowerPC default behaviour here is "instruction number 1st priority".
+  // If LsrNoInsnsCost is set, call default implementation.
+  if (!LsrNoInsnsCost)
+    return std::tie(C1.Insns, C1.NumRegs, C1.AddRecCost, C1.NumIVMuls,
+                    C1.NumBaseAdds, C1.ScaleCost, C1.ImmCost, C1.SetupCost) <
+           std::tie(C2.Insns, C2.NumRegs, C2.AddRecCost, C2.NumIVMuls,
+                    C2.NumBaseAdds, C2.ScaleCost, C2.ImmCost, C2.SetupCost);
+  else
+    return TargetTransformInfoImplBase::isLSRCostLess(C1, C2);
 }

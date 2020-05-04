@@ -20,7 +20,6 @@
 #include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/Frontend/OpenMP/OMPIRBuilder.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/IPO.h"
@@ -44,12 +43,14 @@ STATISTIC(NumOpenMPRuntimeFunctionsIdentified,
 STATISTIC(NumOpenMPRuntimeFunctionUsesIdentified,
           "Number of OpenMP runtime function uses identified");
 
+#if !defined(NDEBUG)
 static constexpr auto TAG = "[" DEBUG_TYPE "]";
+#endif
 
 namespace {
 struct OpenMPOpt {
 
-  OpenMPOpt(SmallPtrSetImpl<Function *> &SCC,
+  OpenMPOpt(SmallVectorImpl<Function *> &SCC,
             SmallPtrSetImpl<Function *> &ModuleSlice,
             CallGraphUpdater &CGUpdater)
       : M(*(*SCC.begin())->getParent()), SCC(SCC), ModuleSlice(ModuleSlice),
@@ -61,6 +62,7 @@ struct OpenMPOpt {
 
   /// Generic information that describes a runtime function
   struct RuntimeFunctionInfo {
+
     /// The kind, as described by the RuntimeFunction enum.
     RuntimeFunction Kind;
 
@@ -77,10 +79,30 @@ struct OpenMPOpt {
     SmallVector<Type *, 8> ArgumentTypes;
 
     /// The declaration if available.
-    Function *Declaration;
+    Function *Declaration = nullptr;
 
     /// Uses of this runtime function per function containing the use.
-    DenseMap<Function *, SmallPtrSet<Use *, 16>> UsesMap;
+    using UseVector = SmallVector<Use *, 16>;
+
+    /// Return the vector of uses in function \p F.
+    UseVector &getOrCreateUseVector(Function *F) {
+      std::unique_ptr<UseVector> &UV = UsesMap[F];
+      if (!UV)
+        UV = std::make_unique<UseVector>();
+      return *UV;
+    }
+
+    /// Return the vector of uses in function \p F or `nullptr` if there are
+    /// none.
+    const UseVector *getUseVector(Function &F) const {
+      auto I = UsesMap.find(&F);
+      if (I != UsesMap.end())
+        return I->second.get();
+      return nullptr;
+    }
+
+    /// Return how many functions contain uses of this runtime function.
+    size_t getNumFunctionsWithUses() const { return UsesMap.size(); }
 
     /// Return the number of arguments (or the minimal number for variadic
     /// functions).
@@ -90,16 +112,31 @@ struct OpenMPOpt {
     /// true. The callback will be fed the function in which the use was
     /// encountered as second argument.
     void foreachUse(function_ref<bool(Use &, Function &)> CB) {
-      SmallVector<Use *, 8> ToBeDeleted;
+      SmallVector<unsigned, 8> ToBeDeleted;
       for (auto &It : UsesMap) {
         ToBeDeleted.clear();
-        for (Use *U : It.second)
+        unsigned Idx = 0;
+        UseVector &UV = *It.second;
+        for (Use *U : UV) {
           if (CB(*U, *It.first))
-            ToBeDeleted.push_back(U);
-        for (Use *U : ToBeDeleted)
-          It.second.erase(U);
+            ToBeDeleted.push_back(Idx);
+          ++Idx;
+        }
+
+        // Remove the to-be-deleted indices in reverse order as prior
+        // modifcations will not modify the smaller indices.
+        while (!ToBeDeleted.empty()) {
+          unsigned Idx = ToBeDeleted.pop_back_val();
+          UV[Idx] = UV.back();
+          UV.pop_back();
+        }
       }
     }
+
+  private:
+    /// Map from functions to all uses of this runtime function contained in
+    /// them.
+    DenseMap<Function *, std::unique_ptr<UseVector>> UsesMap;
   };
 
   /// Run all OpenMP optimizations on the underlying SCC/ModuleSlice.
@@ -117,7 +154,7 @@ struct OpenMPOpt {
   }
 
 private:
-  /// Try to delete parallel regions if possible
+  /// Try to delete parallel regions if possible.
   bool deleteParallelRegions() {
     const unsigned CallbackCalleeOperand = 2;
 
@@ -199,30 +236,105 @@ private:
     return Changed;
   }
 
+  static Value *combinedIdentStruct(Value *CurrentIdent, Value *NextIdent,
+                                    bool GlobalOnly, bool &SingleChoice) {
+    if (CurrentIdent == NextIdent)
+      return CurrentIdent;
+
+    // TODO: Figure out how to actually combine multiple debug locations. For
+    //       now we just keep an existing one if there is a single choice.
+    if (!GlobalOnly || isa<GlobalValue>(NextIdent)) {
+      SingleChoice = !CurrentIdent;
+      return NextIdent;
+    }
+    return nullptr;
+  }
+
+  /// Return an `struct ident_t*` value that represents the ones used in the
+  /// calls of \p RFI inside of \p F. If \p GlobalOnly is true, we will not
+  /// return a local `struct ident_t*`. For now, if we cannot find a suitable
+  /// return value we create one from scratch. We also do not yet combine
+  /// information, e.g., the source locations, see combinedIdentStruct.
+  Value *getCombinedIdentFromCallUsesIn(RuntimeFunctionInfo &RFI, Function &F,
+                                        bool GlobalOnly) {
+    bool SingleChoice = true;
+    Value *Ident = nullptr;
+    auto CombineIdentStruct = [&](Use &U, Function &Caller) {
+      CallInst *CI = getCallIfRegularCall(U, &RFI);
+      if (!CI || &F != &Caller)
+        return false;
+      Ident = combinedIdentStruct(Ident, CI->getArgOperand(0),
+                                  /* GlobalOnly */ true, SingleChoice);
+      return false;
+    };
+    RFI.foreachUse(CombineIdentStruct);
+
+    if (!Ident || !SingleChoice) {
+      // The IRBuilder uses the insertion block to get to the module, this is
+      // unfortunate but we work around it for now.
+      if (!OMPBuilder.getInsertionPoint().getBlock())
+        OMPBuilder.updateToLocation(OpenMPIRBuilder::InsertPointTy(
+            &F.getEntryBlock(), F.getEntryBlock().begin()));
+      // Create a fallback location if non was found.
+      // TODO: Use the debug locations of the calls instead.
+      Constant *Loc = OMPBuilder.getOrCreateDefaultSrcLocStr();
+      Ident = OMPBuilder.getOrCreateIdent(Loc);
+    }
+    return Ident;
+  }
+
   /// Try to eliminiate calls of \p RFI in \p F by reusing an existing one or
   /// \p ReplVal if given.
   bool deduplicateRuntimeCalls(Function &F, RuntimeFunctionInfo &RFI,
                                Value *ReplVal = nullptr) {
-    auto &Uses = RFI.UsesMap[&F];
-    if (Uses.size() + (ReplVal != nullptr) < 2)
+    auto *UV = RFI.getUseVector(F);
+    if (!UV || UV->size() + (ReplVal != nullptr) < 2)
       return false;
 
-    LLVM_DEBUG(dbgs() << TAG << "Deduplicate " << Uses.size() << " uses of "
+    LLVM_DEBUG(dbgs() << TAG << "Deduplicate " << UV->size() << " uses of "
                       << RFI.Name
                       << (ReplVal ? " with an existing value\n" : "\n")
                       << "\n");
-    assert(!ReplVal || (isa<Argument>(ReplVal) &&
-                        cast<Argument>(ReplVal)->getParent() == &F) &&
-                           "Unexpected replacement value!");
+    assert((!ReplVal || (isa<Argument>(ReplVal) &&
+                         cast<Argument>(ReplVal)->getParent() == &F)) &&
+           "Unexpected replacement value!");
+
+    // TODO: Use dominance to find a good position instead.
+    auto CanBeMoved = [](CallBase &CB) {
+      unsigned NumArgs = CB.getNumArgOperands();
+      if (NumArgs == 0)
+        return true;
+      if (CB.getArgOperand(0)->getType() != IdentPtr)
+        return false;
+      for (unsigned u = 1; u < NumArgs; ++u)
+        if (isa<Instruction>(CB.getArgOperand(u)))
+          return false;
+      return true;
+    };
+
     if (!ReplVal) {
-      for (Use *U : Uses)
+      for (Use *U : *UV)
         if (CallInst *CI = getCallIfRegularCall(*U, &RFI)) {
+          if (!CanBeMoved(*CI))
+            continue;
           CI->moveBefore(&*F.getEntryBlock().getFirstInsertionPt());
           ReplVal = CI;
           break;
         }
       if (!ReplVal)
         return false;
+    }
+
+    // If we use a call as a replacement value we need to make sure the ident is
+    // valid at the new location. For now we just pick a global one, either
+    // existing and used by one of the calls, or created from scratch.
+    if (CallBase *CI = dyn_cast<CallBase>(ReplVal)) {
+      if (CI->getNumArgOperands() > 0 &&
+          CI->getArgOperand(0)->getType() == IdentPtr) {
+        Value *Ident = getCombinedIdentFromCallUsesIn(RFI, F,
+                                                      /* GlobalOnly */ true);
+        CI->setArgOperand(0, Ident);
+      }
     }
 
     bool Changed = false;
@@ -280,10 +392,11 @@ private:
     // The argument users of __kmpc_global_thread_num calls are GTIds.
     RuntimeFunctionInfo &GlobThreadNumRFI =
         RFIs[OMPRTL___kmpc_global_thread_num];
-    for (auto &It : GlobThreadNumRFI.UsesMap)
-      for (Use *U : It.second)
-        if (CallInst *CI = getCallIfRegularCall(*U, &GlobThreadNumRFI))
-          AddUserArgs(*CI);
+    GlobThreadNumRFI.foreachUse([&](Use &U, Function &F) {
+      if (CallInst *CI = getCallIfRegularCall(U, &GlobThreadNumRFI))
+        AddUserArgs(*CI);
+      return false;
+    });
 
     // Transitively search for more arguments by looking at the users of the
     // ones we know already. During the search the GTIdArgs vector is extended
@@ -312,6 +425,32 @@ private:
     return nullptr;
   }
 
+  /// Returns true if the function declaration \p F matches the runtime
+  /// function types, that is, return type \p RTFRetType, and argument types
+  /// \p RTFArgTypes.
+  static bool declMatchesRTFTypes(Function *F, Type *RTFRetType,
+                                  SmallVector<Type *, 8> &RTFArgTypes) {
+    // TODO: We should output information to the user (under debug output
+    //       and via remarks).
+
+    if (!F)
+      return false;
+    if (F->getReturnType() != RTFRetType)
+      return false;
+    if (F->arg_size() != RTFArgTypes.size())
+      return false;
+
+    auto RTFTyIt = RTFArgTypes.begin();
+    for (Argument &Arg : F->args()) {
+      if (Arg.getType() != *RTFTyIt)
+        return false;
+
+      ++RTFTyIt;
+    }
+
+    return true;
+  }
+
   /// Helper to initialize all runtime function information for those defined in
   /// OpenMPKinds.def.
   void initializeRuntimeFunctions() {
@@ -329,11 +468,11 @@ private:
       for (Use &U : RFI.Declaration->uses()) {
         if (Instruction *UserI = dyn_cast<Instruction>(U.getUser())) {
           if (ModuleSlice.count(UserI->getFunction())) {
-            RFI.UsesMap[UserI->getFunction()].insert(&U);
+            RFI.getOrCreateUseVector(UserI->getFunction()).push_back(&U);
             ++NumUses;
           }
         } else {
-          RFI.UsesMap[nullptr].insert(&U);
+          RFI.getOrCreateUseVector(nullptr).push_back(&U);
           ++NumUses;
         }
       }
@@ -342,26 +481,30 @@ private:
 
 #define OMP_RTL(_Enum, _Name, _IsVarArg, _ReturnType, ...)                     \
   {                                                                            \
-    auto &RFI = RFIs[_Enum];                                                   \
-    RFI.Kind = _Enum;                                                          \
-    RFI.Name = _Name;                                                          \
-    RFI.IsVarArg = _IsVarArg;                                                  \
-    RFI.ReturnType = _ReturnType;                                              \
-    RFI.ArgumentTypes = SmallVector<Type *, 8>({__VA_ARGS__});                 \
-    RFI.Declaration = M.getFunction(_Name);                                    \
-    unsigned NumUses = CollectUses(RFI);                                       \
-    (void)NumUses;                                                             \
-    LLVM_DEBUG({                                                               \
-      dbgs() << TAG << RFI.Name << (RFI.Declaration ? "" : " not")             \
-             << " found\n";                                                    \
-      if (RFI.Declaration)                                                     \
-        dbgs() << TAG << "-> got " << NumUses << " uses in "                   \
-               << RFI.UsesMap.size() << " different functions.\n";             \
-    });                                                                        \
+    SmallVector<Type *, 8> ArgsTypes({__VA_ARGS__});                           \
+    Function *F = M.getFunction(_Name);                                        \
+    if (declMatchesRTFTypes(F, _ReturnType, ArgsTypes)) {                      \
+      auto &RFI = RFIs[_Enum];                                                 \
+      RFI.Kind = _Enum;                                                        \
+      RFI.Name = _Name;                                                        \
+      RFI.IsVarArg = _IsVarArg;                                                \
+      RFI.ReturnType = _ReturnType;                                            \
+      RFI.ArgumentTypes = std::move(ArgsTypes);                                \
+      RFI.Declaration = F;                                                     \
+      unsigned NumUses = CollectUses(RFI);                                     \
+      (void)NumUses;                                                           \
+      LLVM_DEBUG({                                                             \
+        dbgs() << TAG << RFI.Name << (RFI.Declaration ? "" : " not")           \
+               << " found\n";                                                  \
+        if (RFI.Declaration)                                                   \
+          dbgs() << TAG << "-> got " << NumUses << " uses in "                 \
+                 << RFI.getNumFunctionsWithUses()                              \
+                 << " different functions.\n";                                 \
+      });                                                                      \
+    }                                                                          \
   }
 #include "llvm/Frontend/OpenMP/OMPKinds.def"
 
-    // TODO: We should validate the declaration agains the types we expect.
     // TODO: We should attach the attributes defined in OMPKinds.def.
   }
 
@@ -369,7 +512,7 @@ private:
   Module &M;
 
   /// The SCC we are operating on.
-  SmallPtrSetImpl<Function *> &SCC;
+  SmallVectorImpl<Function *> &SCC;
 
   /// The slice of the module we are allowed to look at.
   SmallPtrSetImpl<Function *> &ModuleSlice;
@@ -397,9 +540,12 @@ PreservedAnalyses OpenMPOptPass::run(LazyCallGraph::SCC &C,
   if (DisableOpenMPOptimizations)
     return PreservedAnalyses::all();
 
-  SmallPtrSet<Function *, 16> SCC;
-  for (LazyCallGraph::Node &N : C)
-    SCC.insert(&N.getFunction());
+  SmallPtrSet<Function *, 16> ModuleSlice;
+  SmallVector<Function *, 16> SCC;
+  for (LazyCallGraph::Node &N : C) {
+    SCC.push_back(&N.getFunction());
+    ModuleSlice.insert(SCC.back());
+  }
 
   if (SCC.empty())
     return PreservedAnalyses::all();
@@ -407,7 +553,7 @@ PreservedAnalyses OpenMPOptPass::run(LazyCallGraph::SCC &C,
   CallGraphUpdater CGUpdater;
   CGUpdater.initialize(CG, C, AM, UR);
   // TODO: Compute the module slice we are allowed to look at.
-  OpenMPOpt OMPOpt(SCC, SCC, CGUpdater);
+  OpenMPOpt OMPOpt(SCC, ModuleSlice, CGUpdater);
   bool Changed = OMPOpt.run();
   (void)Changed;
   return PreservedAnalyses::all();
@@ -440,11 +586,14 @@ struct OpenMPOptLegacyPass : public CallGraphSCCPass {
     if (DisableOpenMPOptimizations || skipSCC(CGSCC))
       return false;
 
-    SmallPtrSet<Function *, 16> SCC;
+    SmallPtrSet<Function *, 16> ModuleSlice;
+    SmallVector<Function *, 16> SCC;
     for (CallGraphNode *CGN : CGSCC)
       if (Function *Fn = CGN->getFunction())
-        if (!Fn->isDeclaration())
-          SCC.insert(Fn);
+        if (!Fn->isDeclaration()) {
+          SCC.push_back(Fn);
+          ModuleSlice.insert(Fn);
+        }
 
     if (SCC.empty())
       return false;
@@ -453,7 +602,7 @@ struct OpenMPOptLegacyPass : public CallGraphSCCPass {
     CGUpdater.initialize(CG, CGSCC);
 
     // TODO: Compute the module slice we are allowed to look at.
-    OpenMPOpt OMPOpt(SCC, SCC, CGUpdater);
+    OpenMPOpt OMPOpt(SCC, ModuleSlice, CGUpdater);
     return OMPOpt.run();
   }
 

@@ -115,12 +115,20 @@
 							},
 							"sourceMap": {
 								"type": "array",
-								"description": "Specify an array of path remappings; each element must itself be a two element array containing a source and desination pathname. Overrides sourcePath.",
+								"description": "Specify an array of path remappings; each element must itself be a two element array containing a source and destination pathname. Overrides sourcePath.",
 								"default": []
 							},
 							"debuggerRoot": {
 								"type": "string",
 								"description": "Specify a working directory to set the debug adaptor to so relative object files can be located."
+							},
+							"targetTriple": {
+								"type": "string",
+								"description": "Triplet of the target architecture to override value derived from the program file."
+							},
+							"platformName": {
+								"type": "string",
+								"description": "Name of the execution platform to override value derived from the program file."
 							},
 							"initCommands": {
 									"type": "array",
@@ -130,6 +138,11 @@
 							"preRunCommands": {
 									"type": "array",
 									"description": "Commands executed just before the program is launched.",
+									"default": []
+							},
+							"launchCommands": {
+									"type": "array",
+									"description": "Custom commands that are executed instead of launching a process. A target will be created with the launch arguments prior to executing these commands. The commands may optionally create a new target and must perform a launch. A valid process must exist after these commands complete or the \"launch\" will fail.",
 									"default": []
 							},
 							"stopCommands": {
@@ -168,12 +181,20 @@
 							},
 							"sourceMap": {
 								"type": "array",
-								"description": "Specify an array of path remappings; each element must itself be a two element array containing a source and desination pathname. Overrides sourcePath.",
+								"description": "Specify an array of path remappings; each element must itself be a two element array containing a source and destination pathname. Overrides sourcePath.",
 								"default": []
 							},
 							"debuggerRoot": {
 								"type": "string",
 								"description": "Specify a working directory to set the debug adaptor to so relative object files can be located."
+							},
+							"targetTriple": {
+								"type": "string",
+								"description": "Triplet of the target architecture to override value derived from the program file."
+							},
+							"platformName": {
+								"type": "string",
+								"description": "Name of the execution platform to override value derived from the program file."
 							},
 							"attachCommands": {
 								"type": "array",
@@ -197,8 +218,12 @@
 							},
 							"exitCommands": {
 								"type": "array",
-									"description": "Commands executed at the end of debugging session.",
-									"default": []
+								"description": "Commands executed at the end of debugging session.",
+								"default": []
+							},
+							"coreFile": {
+								"type": "string",
+								"description": "Path to the core file to debug."
 							}
 						}
 					}
