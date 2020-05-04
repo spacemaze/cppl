@@ -196,6 +196,26 @@ public:
     return Tasks[TID]->Status;
   }
 
+  bool allSuccessfull(const std::initializer_list<TaskID> &v) {
+    TasksSet Tasks;
+    for (TaskID TID : v) {
+      Tasks.insert(TID);
+    }
+    return allSuccessfull(Tasks);
+  }
+
+  bool allSuccessfull(const TasksSet &tasksSet) {
+    for (const auto &TID : tasksSet) {
+      auto Found = Tasks.find(TID);
+      if (Found == Tasks.end())
+        return false;
+
+      if (Found->second->Status != TaskStatus::Successful)
+        return false;
+    }
+    return true;
+  }
+
   bool waitForTasks(const std::initializer_list<TaskID> &v) {
     TasksSet Tasks;
     for (TaskID TID : v) {
