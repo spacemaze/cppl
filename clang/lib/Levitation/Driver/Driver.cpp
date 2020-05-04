@@ -1176,7 +1176,7 @@ void LevitationDriverImpl::runParseImport() {
     ))
       continue;
 
-    TM.addTask([=] (TasksManager::TaskContext &TC) {
+    TM.runTask([=] (TasksManager::TaskContext &TC) {
       TC.Successful = Commands::parseImport(
           Context.Driver.BinDir,
           Context.Driver.PreambleOutput,
