@@ -17,6 +17,7 @@
 #include "clang/Levitation/Common/CreatableSingleton.h"
 #include "clang/Levitation/Common/Failable.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
+#include "clang/Levitation/Common/Thread.h"
 #include "clang/Levitation/Common/WithOperator.h"
 
 #include "llvm/ADT/DenseMap.h"
@@ -196,6 +197,26 @@ public:
     return Tasks[TID]->Status;
   }
 
+  bool allSuccessfull(const std::initializer_list<TaskID> &v) {
+    TasksSet Tasks;
+    for (TaskID TID : v) {
+      Tasks.insert(TID);
+    }
+    return allSuccessfull(Tasks);
+  }
+
+  bool allSuccessfull(const TasksSet &tasksSet) {
+    for (const auto &TID : tasksSet) {
+      auto Found = Tasks.find(TID);
+      if (Found == Tasks.end())
+        return false;
+
+      if (Found->second->Status != TaskStatus::Successful)
+        return false;
+    }
+    return true;
+  }
+
   bool waitForTasks(const std::initializer_list<TaskID> &v) {
     TasksSet Tasks;
     for (TaskID TID : v) {
@@ -281,22 +302,33 @@ protected:
   }
 
   template <typename ...ArgsT>
-  void log(ArgsT&&...args) {
+  void logWorker(int Id, ArgsT&&...args) {
 #ifdef LEVITATION_ENABLE_TASK_MANAGER_LOGS
-    Log.log_verbose("TaskManager: ", std::forward<ArgsT>(args)...);
+    if (Id != getInvalidWorkerID())
+      Log.log_verbose("Worker[", Id, "]: ", std::forward<ArgsT>(args)...);
+    else
+      Log.log_verbose("MainThread: ", std::forward<ArgsT>(args)...);
 #endif
   }
 
-  std::unique_lock<std::mutex> lockTasks() {
-    return std::unique_lock<std::mutex>(TasksLocker);
+  template <typename ...ArgsT>
+  void log(ArgsT&&...args) {
+    logWorker(getWorkerID(), std::forward<ArgsT>(args)...);
+#ifdef LEVITATION_ENABLE_TASK_MANAGER_LOGS
+    Log.log_verbose("TaskManager: ", );
+#endif
   }
 
-  std::unique_lock<std::mutex> lockStatus() {
-    return std::unique_lock<std::mutex>(StatusLocker);
+  MutexLock lockTasks() {
+    return lock(TasksLocker);
   }
 
-  std::unique_lock<std::mutex> lockWorkerIDs() {
-    return std::unique_lock<std::mutex>(WorkerIDsLocker);
+  MutexLock lockStatus() {
+    return lock(StatusLocker);
+  }
+
+  MutexLock lockWorkerIDs() {
+    return lock(WorkerIDsLocker);
   }
 
   Task* registerTask(ActionFn &&action, RegisterAction RegAction) {
@@ -358,11 +390,6 @@ protected:
     return ptr;
   }
 
-  template <typename ...ArgsT>
-  void logWorker(int Id, ArgsT&&...args) {
-    log("Worker[", Id, "]: ", std::forward<ArgsT>(args)...);
-  }
-
   void executeTask(Task &Tsk) {
     TaskContext context(Tsk.ID);
 
@@ -419,7 +446,9 @@ protected:
       logWorker(MyId, "Stopped");
     };
 
-    for (int j = 0; j != JobsNumber; ++j) {
+    // Not, that current thread can also execute task,
+    // so total number of works is JobsNumber-1
+    for (int j = 0, e = JobsNumber-1; j != e; ++j) {
       Workers.emplace(new std::thread(worker));
     }
   }
