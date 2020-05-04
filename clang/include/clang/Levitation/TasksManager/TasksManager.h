@@ -17,6 +17,7 @@
 #include "clang/Levitation/Common/CreatableSingleton.h"
 #include "clang/Levitation/Common/Failable.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
+#include "clang/Levitation/Common/Thread.h"
 #include "clang/Levitation/Common/WithOperator.h"
 
 #include "llvm/ADT/DenseMap.h"
@@ -318,16 +319,16 @@ protected:
 #endif
   }
 
-  std::unique_lock<std::mutex> lockTasks() {
-    return std::unique_lock<std::mutex>(TasksLocker);
+  MutexLock lockTasks() {
+    return lock(TasksLocker);
   }
 
-  std::unique_lock<std::mutex> lockStatus() {
-    return std::unique_lock<std::mutex>(StatusLocker);
+  MutexLock lockStatus() {
+    return lock(StatusLocker);
   }
 
-  std::unique_lock<std::mutex> lockWorkerIDs() {
-    return std::unique_lock<std::mutex>(WorkerIDsLocker);
+  MutexLock lockWorkerIDs() {
+    return lock(WorkerIDsLocker);
   }
 
   Task* registerTask(ActionFn &&action, RegisterAction RegAction) {
