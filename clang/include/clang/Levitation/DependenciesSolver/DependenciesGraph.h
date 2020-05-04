@@ -20,6 +20,7 @@
 #include "clang/Levitation/Common/WithOperator.h"
 #include "clang/Levitation/Common/SimpleLogger.h"
 #include "clang/Levitation/Common/StringsPool.h"
+#include "clang/Levitation/Common/Thread.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
 
 #include "llvm/ADT/DenseMap.h"
@@ -217,7 +218,17 @@ public:
       std::function<bool(const Node&)> &&OnNode
   ) const {
     JobsContext Jobs(std::move(OnNode));
-    return dsfJobsOnNode(nullptr, StartingPoints, Jobs);
+
+    std::mutex VisitedMutex;
+    NodesSet Visited;
+
+    return dsfJobsOnNode(
+        VisitedMutex,
+        Visited,
+        nullptr,
+        StartingPoints,
+        Jobs
+    );
   }
 
   bool dsfJobs(
@@ -396,9 +407,18 @@ protected:
   }
 
   class JobsContext {
-    llvm::DenseMap<NodeID::Type, tasks::TasksManager::TaskID> Tasks;
+
+    using TasksMapType =
+        llvm::DenseMap<NodeID::Type, tasks::TasksManager::TaskID>;
+
+    TasksMapType Tasks;
+
     OnNodeFn OnNode;
     std::mutex Mutex;
+
+    MutexLock lockTasks() {
+      return lock(Mutex);
+    }
 
   public:
 
@@ -409,26 +429,14 @@ protected:
         tasks::TasksManager::ActionFn &&Fn,
         bool SameThread
     ) {
-      Mutex.lock();
-      with (levitation::make_scope_exit([=] { Mutex.unlock(); } )) {
+      auto &TM = tasks::TasksManager::get();
+      auto TID = SameThread ?
+          TM.addTask(std::move(Fn), true) :
+          TM.runTask(std::move(Fn));
 
-        auto Found = Tasks.find(NID);
-
-        if (Found == Tasks.end()) {
-          auto &TM = tasks::TasksManager::get();
-          auto TID = SameThread ?
-              TM.addTask(std::move(Fn), true) :
-              TM.runTask(std::move(Fn));
-
-          auto Res = Tasks.insert({NID, TID});
-          assert(Res.second);
-
-          return TID;
-        }
-
-        return Found->second;
-      }
-      llvm_unreachable("");
+      auto _ = lockTasks();
+      auto Res = Tasks.insert({NID, TID});
+      return Res.first->second;
     }
 
     bool onNode(const Node &N) {
@@ -437,6 +445,8 @@ protected:
   };
 
   bool dsfJobsOnNode(
+      std::mutex &VisitedMutex,
+      NodesSet &Visited,
       const Node *N,
       const NodesSet &SubNodes,
       JobsContext &Jobs
@@ -456,20 +466,32 @@ protected:
       for (auto NID : SubNodes) {
         const auto &SubNode = getNode(NID);
 
+        with (auto _ = lock(VisitedMutex)) {
+          auto VisitIt = Visited.insert(NID);
+          if (!VisitIt.second)
+            continue;
+        }
+
         auto TID = Jobs.getJobForNode(
             SubNode.ID,
             [&](tasks::TasksManager::TaskContext &TC) {
               TC.Successful = dsfJobsOnNode(
-                  &SubNode, SubNode.Dependencies, Jobs
+                  VisitedMutex,
+                  Visited,
+                  &SubNode,
+                  SubNode.Dependencies,
+                  Jobs
               );
             },
+            // Process last subnode in same thread
             /*Same thread*/++SubNodeIdx == NumSubNodes
         );
 
         NodeTasks.insert(TID);
 
         auto &TM = tasks::TasksManager::get();
-        Successful = TM.waitForTasks(NodeTasks);
+
+        Successful = TM.allSuccessfull(NodeTasks);
       }
     }
 
