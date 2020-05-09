@@ -21,7 +21,6 @@
 #include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
 #include "clang/Levitation/DeclASTMeta/DeclASTMetaLoader.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesGraph.h"
-#include "clang/Levitation/DependenciesSolver/DependenciesSolverPath.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesSolver.h"
 #include "clang/Levitation/DependenciesSolver/SolvedDependenciesInfo.h"
 #include "clang/Levitation/Driver/Driver.h"

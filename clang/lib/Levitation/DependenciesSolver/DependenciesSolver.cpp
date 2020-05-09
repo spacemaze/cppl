@@ -21,7 +21,6 @@
 #include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesGraph.h"
 #include "clang/Levitation/DependenciesSolver/SolvedDependenciesInfo.h"
-#include "clang/Levitation/DependenciesSolver/DependenciesSolverPath.h"
 #include "clang/Levitation/DependenciesSolver/DependenciesSolver.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/Serialization.h"
@@ -400,78 +399,8 @@ public:
     }
   }
 
-
-  // TODO Levitation: Deprecated
-  void writeResult() {
-    if (!Solver->isValid())
-      return;
-
-    Log.verbose()
-    << "Writing dependencies...\n";
-
-    const auto &SolvedInfo = Context.getSolvedDependenciesInfo();
-
-    if (!writeResult(SolvedInfo)) {
-      Log.error()
-      << "failed to write solved depenendices.\n";
-      Log.error()
-      << Solver->getErrorMessage() << "\n";
-      return;
-    }
-  }
-
   using PathString = SinglePath;
   using DependenciesPaths = Paths;
-
-  // TODO Levitation: Deprecated
-  bool writeResult(
-      const SolvedDependenciesInfo &SolvedDependencies
-  ) {
-
-    // TODO Levitation: remove this
-    const auto &Strings = Context.getStringsPool();
-
-    const DependenciesGraph &DGraph = SolvedDependencies.getDependenciesGraph();
-    for (auto &NodeIt : SolvedDependencies.getDependenciesMap()) {
-      auto NID = NodeIt.first;
-
-      const auto &Node = DGraph.getNode(NID);
-
-      StringRef ParentDir = Solver->BuildRoot;
-
-      DependenciesPaths DirectDependencies = buildDirectDependencies(
-          ParentDir, Strings, DGraph, Node.Dependencies
-      );
-
-      DependenciesPaths FullDependencies = buildFullDependencies(
-          ParentDir, Strings, DGraph, NodeIt.second.FullDependencies
-      );
-
-      auto DependentFilePath = getNodeFilePath(
-          ParentDir, Strings, Node
-      );
-
-      if (!writeDependenciesFile(
-          *Solver,
-          FileExtensions::DirectDependencies,
-          DependentFilePath,
-          DirectDependencies
-      )) {
-        return false;
-      }
-
-      if (!writeDependenciesFile(
-          *Solver,
-          FileExtensions::FullDependencies,
-          DependentFilePath,
-          FullDependencies
-      )) {
-        return false;
-      }
-    }
-
-    return true;
-  }
 
   PathString getNodeSourceFilePath(
       const StringRef ParentDir,
@@ -556,37 +485,6 @@ public:
     return Paths;
   }
 
-  DependenciesPaths buildFullDependencies(
-    StringRef DepsRoot,
-    const DependenciesStringsPool &Strings,
-    const DependenciesGraph &DGraph,
-    const SolvedDependenciesInfo::RangedDependenciesMap &Dependencies
-  ) {
-    DependenciesPaths Paths;
-    for (auto Dep : Dependencies) {
-
-      auto &N = DGraph.getNode(Dep.second);
-
-      PathString Package = *Strings.getItem(N.PackageInfo->PackagePath);
-
-      assert(
-          N.Kind == DependenciesGraph::NodeKind::Declaration &&
-          "Only declaration nodes are allowed to be dependencies"
-      );
-
-      // Declaration AST is instantiated from parsed AST,
-      // and thus latter depends on former.
-      // The only exception is main file.
-      DependenciesSolverPath::addDepPathsFor(
-          Paths, Context.Solver.BuildRoot,
-          Package,
-          N.PackageInfo->IsMainFile
-      );
-    }
-
-    return Paths;
-  }
-
   bool writeDependenciesFile(
       DependenciesSolver &Solver,
       StringRef Extension,
@@ -647,42 +545,6 @@ DependenciesSolver::solve(const Paths &LDepsFiles) {
 
   Log.error() << getErrorMessage() << "\n";
   return nullptr;
-}
-
-// FIXME Levitation: Deprecated
-bool DependenciesSolver::solve() {
-
-  llvm_unreachable("Not supported");
-
-  log::Logger::createLogger(Verbose ? log::Level::Verbose : log::Level::Warning);
-  CreatableSingleton<DependenciesStringsPool>::create();
-  CreatableSingleton<FileManager>::create( FileSystemOptions { std::string(StringRef()) });
-
-  Paths LDepsFiles;
-
-  levitation::FileSystem::collectFiles(
-      LDepsFiles,
-      BuildRoot,
-      FileExtensions::ParsedDependencies
-  );
-
-  auto &Log = log::Logger::get();
-
-  DependenciesSolverContext Context(*this, LDepsFiles);
-  DependenciesSolverImpl Impl(Context);
-
-  // Impl.solve();
-  Impl.writeResult();
-
-  if (isValid()) {
-    Log.verbose()
-    << "\nComplete!\n";
-
-    return true;
-  }
-
-  Log.error() << getErrorMessage() << "\n";
-  return false;
 }
 
 }}}
