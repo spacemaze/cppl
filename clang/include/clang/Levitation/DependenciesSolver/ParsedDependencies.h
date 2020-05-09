@@ -60,11 +60,6 @@ public:
   DependenciesMap::const_iterator begin() const { return Map.begin(); }
   DependenciesMap::const_iterator end() const { return Map.end(); }
 
-  // TODO Levitation: Deprecated
-  const DependenciesStringsPool &getStringsPool() const {
-    return Strings;
-  }
-
 private:
 
   llvm::DenseMap<StringID, StringID> makeOldToNew(const DependenciesStringsPool& OldStrings) {
@@ -88,78 +83,6 @@ private:
 
     return nullptr;
   }
-
-  std::unique_ptr<DependenciesData> createPackageFor(
-      const DependenciesStringsPool& OldStrings,
-      StringID OldPackageID,
-      std::function<bool(PathsPoolTy::key_type)>&& addIfPredicate = nullptr
-  ) {
-    auto OldToNew = makeOldToNew(OldStrings);
-
-    auto NewPackageID = OldToNew[OldPackageID];
-
-    if (addIfPredicate == nullptr || addIfPredicate(NewPackageID))
-      return std::make_unique<DependenciesData>(&Strings, NewPackageID);
-
-    return nullptr;
-  }
-
-  DependenciesData& getOrCreatePackageFor(
-      const DependenciesStringsPool& OldStrings,
-      StringID OldPackageID,
-      bool *Created = nullptr
-  ) {
-
-    std::pair<DependenciesMap::iterator, bool> InsertionRes;
-
-    auto PackagePtr = createPackageFor(
-        OldStrings,
-        OldPackageID,
-        [&] (PathsPoolTy::key_type NewPackageID) {
-          InsertionRes = Map.insert({ NewPackageID, nullptr });
-          return InsertionRes.second;
-        }
-    );
-
-    if (InsertionRes.second) {
-      assert(PackagePtr);
-      PackagePtr->IsExternal = true;
-      InsertionRes.first->second = std::move(PackagePtr);
-    }
-
-    if (Created)
-      *Created = InsertionRes.second;
-
-    return *InsertionRes.first->second;
-  }
-
-  DependenciesData& getOrCreatePackageFor(
-      StringID NewPackageID,
-      bool *Created = nullptr
-  ) {
-
-    std::pair<DependenciesMap::iterator, bool> InsertionRes;
-
-    auto PackagePtr = createPackageFor(
-        NewPackageID,
-        [&] (PathsPoolTy::key_type NewPackageID) {
-          InsertionRes = Map.insert({ NewPackageID, nullptr });
-          return InsertionRes.second;
-        }
-    );
-
-    if (InsertionRes.second) {
-      assert(PackagePtr);
-      PackagePtr->IsExternal = true;
-      InsertionRes.first->second = std::move(PackagePtr);
-    }
-
-    if (Created)
-      *Created = InsertionRes.second;
-
-    return *InsertionRes.first->second;
-  }
-
 };
 
 }}} // end of clang::levitation::dependencies_solver namespace
