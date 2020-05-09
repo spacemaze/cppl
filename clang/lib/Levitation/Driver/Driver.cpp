@@ -92,10 +92,11 @@ namespace {
     LevitationDriver &Driver;
     Failable Status;
 
-    Paths Packages;
+    PathIDsSet AllPackages;
+    PathIDsSet ProjectPackages;
+    PathIDsSet ExternalPackages;
 
-    // TODO Levitation: key may be an integer (string ID for PackagePath)
-    llvm::DenseMap<StringRef, FilesInfo> Files;
+    llvm::DenseMap<StringID, FilesInfo> Files;
 
     std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
 
@@ -138,6 +139,15 @@ public:
   void collectSources();
 
 private:
+
+  void collectProjectSources();
+  void collectLibrariesSources();
+
+  void setOutputFilesInfo(
+      FilesInfo& Info,
+      StringRef OutputPathWithoutExt,
+      bool SetObjectRelatedInfo
+  );
 
   void addMainFileInfo();
 
@@ -182,7 +192,7 @@ private:
       const DependenciesGraph &Graph
   ) const;
 
-  Paths getIncludes(
+  Paths getIncludeSources(
       const DependenciesGraph::Node &N,
       const DependenciesGraph &Graph
   ) const;
@@ -462,6 +472,8 @@ public:
 
       return Cmd;
     }
+
+    // TODO Levitation: Deprecated
     static CommandInfo getInstDecl(
         StringRef BinDir,
         StringRef PrecompiledPreamble,
@@ -495,6 +507,7 @@ public:
     ) {
       auto Cmd = getClangXXCommand(BinDir, StdLib, verbose, dryRun);
       Cmd
+      .addArg("-xc++")
       .addArg("-cppl-decl");
       return Cmd;
     }
@@ -745,6 +758,7 @@ public:
     return processStatus(ExecutionStatus);
   }
 
+  // TODO Levitation: Deprecated
   static bool instantiateDecl(
       StringRef BinDir,
       StringRef PrecompiledPreamble,
@@ -1002,7 +1016,7 @@ protected:
     );
   }
 
-
+  // TODO Levitation: Deprecated
   static void dumpInstantiateDecl(
       StringRef OutDeclASTFile,
       StringRef InputObject,
@@ -1177,7 +1191,7 @@ void LevitationDriverImpl::buildPreamble() {
 void LevitationDriverImpl::runParseImport() {
   auto &TM = TasksManager::get();
 
-  for (auto PackagePath : Context.Packages) {
+  for (auto PackagePath : Context.AllPackages) {
 
     auto Files = Context.Files[PackagePath];
 
@@ -1226,7 +1240,7 @@ void LevitationDriverImpl::solveDependencies() {
   // Get all discovered project LDep files
 
   Paths LDepsFiles;
-  for (auto &PackagePath : Context.Packages) {
+  for (auto &PackagePath : Context.AllPackages) {
     assert(Context.Files.count(PackagePath));
     LDepsFiles.push_back(Context.Files[PackagePath].LDeps);
   }
@@ -1264,7 +1278,7 @@ void LevitationDriverImpl::runLinker() {
   assert(Context.Driver.isLinkPhaseEnabled() && "Link phase must be enabled.");
 
   Paths ObjectFiles;
-  for (auto &PackagePath : Context.Packages) {
+  for (auto &PackagePath : Context.ProjectPackages) {
     assert(Context.Files.count(PackagePath));
     ObjectFiles.push_back(Context.Files[PackagePath].Object);
   }
@@ -1286,24 +1300,39 @@ void LevitationDriverImpl::runLinker() {
 }
 
 void LevitationDriverImpl::collectSources() {
+  collectProjectSources();
+  collectLibrariesSources();
+}
 
-  Log.verbose() << "Collecting sources...\n";
+void LevitationDriverImpl::collectProjectSources() {
+
+  Log.log_verbose("Collecting project sources...");
 
   // Gather all .cppl files
+  Paths ProjectPackages;
+
   FileSystem::collectFiles(
-      Context.Packages,
+      ProjectPackages,
       Context.Driver.SourcesRoot,
       FileExtensions::SourceCode
   );
 
-  // Normalize all paths to .cppl files
-  for (auto &Src : Context.Packages) {
-    Src = levitation::Path::makeRelative<SinglePath>(
+  // Normalize all paths to project .cppl files and register them.
+  for (const auto &Src : ProjectPackages) {
+    auto Rel = levitation::Path::makeRelative<SinglePath>(
         Src, Context.Driver.SourcesRoot
     );
+
+    auto PackageID = Strings.addItem(Rel);
+    Context.ProjectPackages.insert(PackageID);
+    Context.AllPackages.insert(PackageID);
   }
 
-  for (const auto &PackagePath : Context.Packages) {
+  for (auto PackageID : Context.ProjectPackages) {
+
+    const auto& PackagePath = *Strings.getItem(PackageID);
+
+    Log.log_trace("  Generating paths for '", PackagePath, "'...");
 
     FilesInfo Files;
 
@@ -1321,49 +1350,128 @@ void LevitationDriverImpl::collectSources() {
         FileExtensions::Header
     );
 
-    Files.DeclASTMetaFile = Path::getPath<SinglePath>(
+    SinglePath OutputTemplate = Path::getPath<SinglePath>(
         Context.Driver.BuildRoot,
-        PackagePath,
-        FileExtensions::DeclASTMeta
+        PackagePath
     );
 
-    Files.ObjMetaFile = Path::getPath<SinglePath>(
-        Context.Driver.BuildRoot,
-        PackagePath,
-        FileExtensions::ObjMeta
-    );
+    setOutputFilesInfo(Files, OutputTemplate, true);
 
-    Files.LDeps = Path::getPath<SinglePath>(
-        Context.Driver.BuildRoot,
-        PackagePath,
-        FileExtensions::ParsedDependencies
-    );
+    auto Res = Context.Files.insert({ PackageID, Files });
 
-    Files.LDepsMeta = Path::getPath<SinglePath>(
-        Context.Driver.BuildRoot,
-        PackagePath,
-        FileExtensions::ParsedDependenciesMeta
-    );
-
-    Files.DeclAST = Path::getPath<SinglePath>(
-        Context.Driver.BuildRoot,
-        PackagePath,
-        FileExtensions::DeclarationAST
-    );
-    Files.Object = Path::getPath<SinglePath>(
-        Context.Driver.BuildRoot,
-        PackagePath,
-        FileExtensions::Object
-    );
-
-    auto Res = Context.Files.insert({ PackagePath, Files });
+    Files.dump(Log, log::Level::Trace, 4);
 
     assert(Res.second);
   }
 
   Log.verbose()
-  << "Found " << Context.Packages.size()
+  << "Found " << Context.ProjectPackages.size()
+  << " '." << FileExtensions::SourceCode << "' project files.\n\n";
+}
+
+void LevitationDriverImpl::collectLibrariesSources() {
+
+  if (Context.Driver.LevitationLibs.empty())
+    return;
+
+  Log.log_verbose("Collecting libraries (presumable declaration) sources...");
+
+  // Register all external packages.
+
+  Paths ExternalPackages;
+
+  for (auto &ExtLib : Context.Driver.LevitationLibs) {
+    Log.log_verbose("  Checking dir '", ExtLib, "'...");
+    FileSystem::collectFiles(
+        ExternalPackages,
+        ExtLib,
+        FileExtensions::SourceCode
+    );
+  }
+
+  for (const auto &Src : ExternalPackages) {
+    auto PathID = Strings.addItem(Src);
+    Context.ExternalPackages.insert(PathID);
+    Context.AllPackages.insert(PathID);
+  }
+
+  for (auto PackageID : Context.ExternalPackages) {
+
+    const auto& PackagePath = *Strings.getItem(PackageID);
+
+    Log.log_trace("Checking lig package '", PackagePath, "'...");
+
+    FilesInfo Files;
+
+    // For libraries sources keep absolute source paths
+
+    Files.Source = Path::replaceExtension<SinglePath>(
+        PackagePath,
+        FileExtensions::SourceCode
+    );
+
+    Path::Builder PBHeader;
+    PBHeader
+      .addComponent(Context.Driver.getOutputHeadersDir())
+      .addComponent(Context.Driver.LevitationLibrariesSubDir)
+      .addComponent(PackagePath)
+      .replaceExtension(FileExtensions::Header)
+      .done(Files.Header);
+
+    SinglePath OutputTemplate;
+
+    Path::Builder PBOutputTemplate;
+    PBOutputTemplate
+      .addComponent(Context.Driver.BuildRoot)
+      .addComponent(Context.Driver.LevitationLibrariesSubDir)
+      .addComponent(PackagePath)
+      .done(OutputTemplate);
+
+    setOutputFilesInfo(Files, OutputTemplate, false);
+
+    auto Res = Context.Files.insert({ PackageID, Files });
+
+    Files.dump(Log, log::Level::Trace, 4);
+
+    assert(Res.second);
+  }
+
+  Log.verbose()
+  << "Found " << Context.ProjectPackages.size()
   << " '." << FileExtensions::SourceCode << "' files.\n\n";
+}
+
+void LevitationDriverImpl::setOutputFilesInfo(
+    FilesInfo &Files,
+    StringRef OutputPathWithoutExt,
+    bool SetObjectRelatedInfo
+) {
+    // In current implementation package path is equal to relative source path.
+
+    Files.DeclASTMetaFile = Path::replaceExtension<SinglePath>(
+        OutputPathWithoutExt, FileExtensions::DeclASTMeta
+    );
+
+    Files.LDeps = Path::replaceExtension<SinglePath>(
+        OutputPathWithoutExt, FileExtensions::ParsedDependencies
+    );
+
+    Files.LDepsMeta = Path::replaceExtension<SinglePath>(
+        OutputPathWithoutExt, FileExtensions::ParsedDependenciesMeta
+    );
+
+    Files.DeclAST = Path::replaceExtension<SinglePath>(
+        OutputPathWithoutExt, FileExtensions::DeclarationAST
+    );
+
+    if (SetObjectRelatedInfo) {
+      Files.ObjMetaFile = Path::replaceExtension<SinglePath>(
+          OutputPathWithoutExt, FileExtensions::ObjMeta
+      );
+      Files.Object = Path::replaceExtension<SinglePath>(
+          OutputPathWithoutExt, FileExtensions::Object
+      );
+    }
 }
 
 // TODO Levitation: try to make this method const.
@@ -1388,12 +1496,14 @@ bool LevitationDriverImpl::processDependencyNode(
 const FilesInfo& LevitationDriverImpl::getFilesInfoFor(
     const DependenciesGraph::Node &N
 ) const {
-  const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
-
-  auto FoundFiles = Context.Files.find(SrcRel);
+  auto FoundFiles = Context.Files.find(N.PackageInfo->PackagePath);
   if(FoundFiles == Context.Files.end()) {
-    Log.error()
-    << "Package '" << SrcRel << "' is present in dependencies, but not found.\n";
+    const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
+    Log.log_error(
+        "Package '",
+        SrcRel,
+        "' is present in dependencies, but not found."
+    );
     llvm_unreachable("Package not found");
   }
 
@@ -1411,29 +1521,28 @@ Paths LevitationDriverImpl::getFullDependencies(
     auto &DNode = Graph.getNode(RangeNID.second);
     auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
 
-    DependenciesSolverPath::addDepPathsFor(
-        FullDeps,
-        Context.Driver.BuildRoot,
-        DepPath
-    );
+    auto &Files = Context.Files[DNode.PackageInfo->PackagePath];
+
+    FullDeps.push_back(Files.DeclAST);
   }
   return FullDeps;
 }
 
-Paths LevitationDriverImpl::getIncludes(
+Paths LevitationDriverImpl::getIncludeSources(
     const DependenciesGraph::Node &N,
     const DependenciesGraph &Graph
 ) const {
   Paths Includes;
   for (auto DepNID : N.Dependencies) {
     auto &DNode = Graph.getNode(DepNID);
-    auto DepPath = *Strings.getItem(DNode.PackageInfo->PackagePath);
+    auto DepPath = Context.Files[DNode.PackageInfo->PackagePath].Header;
 
-    DependenciesSolverPath::addIncPathsFor(
-        Includes,
-        Context.Driver.BuildRoot,
-        DepPath
+    auto Header = Path::makeRelative<SinglePath>(
+        DepPath,
+        Context.Driver.getOutputHeadersDir()
     );
+
+    Includes.emplace_back(std::move(Header));
   }
   return Includes;
 }
@@ -1508,7 +1617,7 @@ bool LevitationDriverImpl::processDeclaration(
       Context.Driver.shouldCreateHeaders() &&
       Graph.isPublic(N.ID);
 
-  auto Includes = getIncludes(N, Graph);
+  auto IncludeSources = getIncludeSources(N, Graph);
 
   DeclASTMeta Meta;
   if (!DeclASTMetaLoader::fromFile(
@@ -1523,7 +1632,7 @@ bool LevitationDriverImpl::processDeclaration(
         Files.Header,
         Files.Source,
         N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
-        Includes,
+        IncludeSources,
         Meta.getFragmentsToSkip(),
         Context.Driver.isVerbose(),
         Context.Driver.DryRun

@@ -18,6 +18,7 @@ namespace clang { namespace levitation { namespace tools {
   constexpr char DriverDefaults::HEADER_DIR_SUFFIX[];
   constexpr char DriverDefaults::SOURCES_ROOT[];
   constexpr char DriverDefaults::BUILD_ROOT[];
+  constexpr char DriverDefaults::LEVITATION_LIBRARIES_SUBDIR[];
   constexpr char DriverDefaults::STDLIB[];
   constexpr int DriverDefaults::JOBS_NUMBER;
   constexpr char DriverDefaults::OUTPUT_EXECUTABLE[];

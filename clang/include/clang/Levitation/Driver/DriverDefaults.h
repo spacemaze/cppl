@@ -23,6 +23,7 @@ namespace clang { namespace levitation { namespace tools {
       static constexpr char HEADER_DIR_SUFFIX [] = "include";
       static constexpr char SOURCES_ROOT [] = ".";
       static constexpr char BUILD_ROOT [] = ".build";
+      static constexpr char LEVITATION_LIBRARIES_SUBDIR [] = "levitation-libs";
       static constexpr char STDLIB[] = "libc++";
       static constexpr int JOBS_NUMBER = 1;
       static constexpr char OUTPUT_EXECUTABLE [] = "a.out";
