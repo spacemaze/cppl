@@ -282,7 +282,7 @@ public:
 
       const auto &Path = *Strings.getItem(N.PackageInfo->PackagePath);
       out << "[";
-        DependenciesGraph::dumpNodeID(out, NID);
+        DGraphRef.dumpNodeID(out, NID);
       out << "]\n";
 
       out << "    Path: " << Path << "\n";
@@ -295,7 +295,7 @@ public:
           const auto &DepPath = *Strings.getItem(Dep.PackageInfo->PackagePath);
 
           out.indent(8) << "[";
-          DependenciesGraph::dumpNodeID(out, DepSzNID.second);
+          DGraphRef.dumpNodeID(out, DepSzNID.second);
           out
                   << "]: " << DepPath << "\n";
         }
