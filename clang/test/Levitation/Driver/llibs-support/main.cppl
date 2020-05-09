@@ -1,0 +1,10 @@
+// RUN: rm -Rf %T/*
+// RUN: cppl -root=%S +I../Inputs/libs/test-lib-a +I../Inputs/libs/test-lib-b -buildRoot=%T -lit --verbose
+
+#import test_lib::A
+#import test_lib::B
+
+test_lib::A a;
+test_lib::B b;
+
+int main() { return 0; }
