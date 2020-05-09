@@ -1412,7 +1412,7 @@ void LevitationDriverImpl::collectLibrariesSources() {
     Path::Builder PBHeader;
     PBHeader
       .addComponent(Context.Driver.getOutputHeadersDir())
-      .addComponent(Context.Driver.LevitationLibrariesSubDir)
+      .addComponent(Context.Driver.LibsOutSubDir)
       .addComponent(PackagePath)
       .replaceExtension(FileExtensions::Header)
       .done(Files.Header);
@@ -1422,7 +1422,7 @@ void LevitationDriverImpl::collectLibrariesSources() {
     Path::Builder PBOutputTemplate;
     PBOutputTemplate
       .addComponent(Context.Driver.BuildRoot)
-      .addComponent(Context.Driver.LevitationLibrariesSubDir)
+      .addComponent(Context.Driver.LibsOutSubDir)
       .addComponent(PackagePath)
       .done(OutputTemplate);
 

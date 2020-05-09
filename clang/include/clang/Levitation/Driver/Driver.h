@@ -45,7 +45,7 @@ namespace clang { namespace levitation { namespace tools {
     llvm::StringRef SourcesRoot = DriverDefaults::SOURCES_ROOT;
     llvm::SmallVector<llvm::StringRef, 16> LevitationLibs;
     llvm::StringRef BuildRoot = DriverDefaults::BUILD_ROOT;
-    StringRef LevitationLibrariesSubDir = DriverDefaults::LEVITATION_LIBRARIES_SUBDIR;
+    StringRef LibsOutSubDir = DriverDefaults::LIBS_OUTPUT_SUBDIR;
     llvm::StringRef PreambleSource;
     levitation::SinglePath PreambleOutput;
     levitation::SinglePath PreambleOutputMeta;
@@ -143,7 +143,7 @@ namespace clang { namespace levitation { namespace tools {
     }
 
     llvm::StringRef getLevitationLibrariesSubDir() const {
-      return LevitationLibrariesSubDir;
+      return LibsOutSubDir;
     }
 
     bool shouldCreateHeaders() const {
