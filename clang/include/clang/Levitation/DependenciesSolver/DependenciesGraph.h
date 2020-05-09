@@ -212,6 +212,11 @@ public:
     // Scan for regular terminal nodes
     DGraphPtr->collectTerminals();
 
+    // Look for cycles and may be even fix them.
+    // Note: cycles processing starts from
+    // terminals.
+    DGraphPtr->processCycles();
+
     // Scan for publically available terminal nodes.
     DGraphPtr->collectPublicNodes();
 
@@ -397,7 +402,7 @@ public:
     return Descr;
   }
 
-  static void dumpNodeID(llvm::raw_ostream &out, NodeID::Type NodeID) {
+  void dumpNodeID(llvm::raw_ostream &out, NodeID::Type NodeID) const {
     NodeKind Kind;
     StringID PathID;
     std::tie(Kind, PathID) = NodeID::getKindAndPathID(NodeID);
@@ -405,6 +410,29 @@ public:
     out
     << PathID << ":"
     << (Kind == NodeKind::Declaration ? "DECL" : "DEF");
+
+    SmallVector<StringRef, 4> Flags;
+
+    if (isPublic(NodeID))
+      Flags.push_back("public");
+
+    size_t FlagsSize = Flags.size();
+    if (FlagsSize) {
+      out << "(";
+      for (unsigned i = 0, e = FlagsSize-1; i != e; ++i)
+        out << Flags[i] << ", ";
+      out << Flags[FlagsSize-1];
+      out << ")";
+    }
+  }
+
+  Node &getNode(NodeID::Type ID) {
+    auto Found = AllNodes.find(ID);
+    assert(
+        Found != AllNodes.end() &&
+        "Node with current ID should be present in AllNodes"
+    );
+    return *Found->second;
   }
 
   const Node &getNode(NodeID::Type ID) const {
@@ -636,6 +664,124 @@ protected:
       InsertionRes.first->second.reset(new Node(ID, Kind));
 
     return *InsertionRes.first->second;
+  }
+
+  void processCycles() {
+    // Sometimes graph contains cycle.
+
+    bool Success = true;
+
+    NodesSet Visited;
+    NodesSet PathNodes;
+    NodesList Path;
+
+    Log.log_trace("Checking for cycles...");
+
+    for (auto NID : Terminals) {
+      auto &trace = Log.trace();
+      trace << "Checking cycles from terminal '";
+      dumpNodeID(Log.trace().indent(4), NID);
+      trace << "'\n";
+
+      auto &Node = getNode(NID);
+
+      Visited.insert(NID);
+
+      PathNodes.insert(NID);
+      Path.push_back(NID);
+
+      Success &= processCyclesRecursive(Visited, PathNodes, Path, Node);
+
+      Path.pop_back();
+      PathNodes.erase(NID);
+    }
+
+    if (Visited.size() < AllNodes.size()) {
+
+      Log.log_error("Found isolated nodes.");
+
+      // Some nodes are not reachable from roots, so that means
+      // they belong to isolated cycles.
+      NodesSet Isolated;
+      for (auto &kv : AllNodes) {
+        if (!Visited.count(kv.first)) {
+          Isolated.insert(kv.first);
+          auto &out = Log.error();
+
+          out.indent(4);
+          dumpNodeID(out, kv.first);
+          out << "\n";
+        }
+      }
+      Invalid = true;
+    }
+
+    Invalid = !Success;
+  }
+
+  bool processCyclesRecursive(
+      NodesSet &Visited,
+      NodesSet &PathNodes,
+      NodesList &Path,
+      Node &Parent
+  ) {
+
+    bool Success = true;
+
+    NodesSet cutSet;
+
+    auto dumpParentChild =
+    [&] (llvm::raw_ostream &out, const NodesList &Path, NodeID::Type Child) {
+
+      out << "Existing path:\n";
+
+      int indent = 2;
+      for (auto NID : Path) {
+        out.indent(indent);
+        dumpNodeID(out, NID);
+        out << " <--\n";
+        indent += 2;
+      }
+
+      out.indent(indent) << "(new) ";
+      dumpNodeID(out, Child);
+      out << "\n";
+    };
+
+    NodesSet NotVisitedDependencies = Parent.Dependencies;
+
+    while (NotVisitedDependencies.size()) {
+      auto NID = *NotVisitedDependencies.begin();
+      NotVisitedDependencies.erase(NID);
+
+      auto ins = PathNodes.insert(NID);
+      auto &Node = getNode(NID);
+
+      if (!ins.second) {
+
+        Success = false;
+        Log.log_error("Found unresolvable cycle:");
+        auto &out = Log.error();
+        dumpParentChild(out, Path, NID);
+
+        cutSet.insert(NID);
+        Node.DependentNodes.erase(Parent.ID);
+      } else {
+        Path.push_back(NID);
+        ins = Visited.insert(NID);
+        if (ins.second)
+          Success &= processCyclesRecursive(Visited, PathNodes, Path, Node);
+        Path.pop_back();
+      }
+
+      PathNodes.erase(NID);
+    }
+
+    for (auto CutNID : cutSet) {
+      Parent.Dependencies.erase(CutNID);
+    }
+
+    return Success;
   }
 
   void collectTerminals() {
