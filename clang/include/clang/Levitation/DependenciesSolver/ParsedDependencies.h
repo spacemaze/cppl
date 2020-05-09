@@ -30,40 +30,27 @@ public:
   ParsedDependencies(DependenciesStringsPool &Strings) : Strings(Strings) {}
 
   void add(const DependenciesData &Deps) {
-    auto NewDeps = std::make_unique<DependenciesData>(&Strings);
 
-    llvm::DenseMap<StringID, StringID> OldToNew;
+    auto OldToNew = makeOldToNew(*Deps.Strings);
 
-    for (auto &OldS : Deps.Strings->items()) {
-      auto NewID = Strings.addItem(OldS.second);
-      OldToNew[OldS.first] = NewID;
-    }
+    auto LevitationPackage = createPackageFor(OldToNew[Deps.PackageFilePathID]);
 
-    NewDeps->PackageFilePathID = OldToNew[Deps.PackageFilePathID];
-    NewDeps->IsPublic = Deps.IsPublic;
+    LevitationPackage->IsPublic = Deps.IsPublic;
 
     for (auto &DeclDep : Deps.DeclarationDependencies) {
-      NewDeps->DeclarationDependencies.emplace_back(
-          DependenciesData::Declaration {
-              OldToNew[DeclDep.FilePathID],
-              DeclDep.LocationIDBegin,
-              DeclDep.LocationIDEnd
-          }
-      );
+      auto NewDepID = OldToNew[DeclDep.FilePathID];
+      LevitationPackage->DeclarationDependencies.insert(Declaration(NewDepID));
     }
 
     for (auto &DeclDep : Deps.DefinitionDependencies) {
-      NewDeps->DefinitionDependencies.emplace_back(
-          DependenciesData::Declaration {
-              OldToNew[DeclDep.FilePathID],
-              DeclDep.LocationIDBegin,
-              DeclDep.LocationIDEnd
-          }
-      );
+      auto NewDepID = OldToNew[DeclDep.FilePathID];
+      LevitationPackage->DefinitionDependencies.insert(Declaration(NewDepID));
     }
 
-    auto InsertionRes =
-        Map.insert({ NewDeps->PackageFilePathID, std::move(NewDeps) });
+    auto InsertionRes = Map.insert({
+      LevitationPackage->PackageFilePathID,
+      std::move(LevitationPackage)
+    });
 
     assert(
         InsertionRes.second && "Loaded dependencies has been already added"
@@ -73,9 +60,106 @@ public:
   DependenciesMap::const_iterator begin() const { return Map.begin(); }
   DependenciesMap::const_iterator end() const { return Map.end(); }
 
+  // TODO Levitation: Deprecated
   const DependenciesStringsPool &getStringsPool() const {
     return Strings;
   }
+
+private:
+
+  llvm::DenseMap<StringID, StringID> makeOldToNew(const DependenciesStringsPool& OldStrings) {
+
+    llvm::DenseMap<StringID, StringID> OldToNew;
+
+    for (auto &OldS : OldStrings.items()) {
+      auto NewID = Strings.addItem(OldS.second);
+      OldToNew[OldS.first] = NewID;
+    }
+
+    return OldToNew;
+  }
+
+  std::unique_ptr<DependenciesData> createPackageFor(
+      StringID NewPackageID,
+      std::function<bool(PathsPoolTy::key_type)>&& addIfPredicate = nullptr
+  ) {
+    if (addIfPredicate == nullptr || addIfPredicate(NewPackageID))
+      return std::make_unique<DependenciesData>(&Strings, NewPackageID);
+
+    return nullptr;
+  }
+
+  std::unique_ptr<DependenciesData> createPackageFor(
+      const DependenciesStringsPool& OldStrings,
+      StringID OldPackageID,
+      std::function<bool(PathsPoolTy::key_type)>&& addIfPredicate = nullptr
+  ) {
+    auto OldToNew = makeOldToNew(OldStrings);
+
+    auto NewPackageID = OldToNew[OldPackageID];
+
+    if (addIfPredicate == nullptr || addIfPredicate(NewPackageID))
+      return std::make_unique<DependenciesData>(&Strings, NewPackageID);
+
+    return nullptr;
+  }
+
+  DependenciesData& getOrCreatePackageFor(
+      const DependenciesStringsPool& OldStrings,
+      StringID OldPackageID,
+      bool *Created = nullptr
+  ) {
+
+    std::pair<DependenciesMap::iterator, bool> InsertionRes;
+
+    auto PackagePtr = createPackageFor(
+        OldStrings,
+        OldPackageID,
+        [&] (PathsPoolTy::key_type NewPackageID) {
+          InsertionRes = Map.insert({ NewPackageID, nullptr });
+          return InsertionRes.second;
+        }
+    );
+
+    if (InsertionRes.second) {
+      assert(PackagePtr);
+      PackagePtr->IsExternal = true;
+      InsertionRes.first->second = std::move(PackagePtr);
+    }
+
+    if (Created)
+      *Created = InsertionRes.second;
+
+    return *InsertionRes.first->second;
+  }
+
+  DependenciesData& getOrCreatePackageFor(
+      StringID NewPackageID,
+      bool *Created = nullptr
+  ) {
+
+    std::pair<DependenciesMap::iterator, bool> InsertionRes;
+
+    auto PackagePtr = createPackageFor(
+        NewPackageID,
+        [&] (PathsPoolTy::key_type NewPackageID) {
+          InsertionRes = Map.insert({ NewPackageID, nullptr });
+          return InsertionRes.second;
+        }
+    );
+
+    if (InsertionRes.second) {
+      assert(PackagePtr);
+      PackagePtr->IsExternal = true;
+      InsertionRes.first->second = std::move(PackagePtr);
+    }
+
+    if (Created)
+      *Created = InsertionRes.second;
+
+    return *InsertionRes.first->second;
+  }
+
 };
 
 }}} // end of clang::levitation::dependencies_solver namespace

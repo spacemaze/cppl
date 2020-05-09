@@ -197,9 +197,13 @@ public:
     dump(Log.verbose(), Context.getParsedDependencies());
   }
 
-  bool sourceExists(StringRef OriginalSourceRel) {
+  bool sourceExists(StringRef Source) {
+
+    if (llvm::sys::path::is_absolute(Source))
+      return llvm::sys::fs::exists(Source);
+
     PathString OriginalSourceFull = Context.Solver.SourcesRoot;
-    llvm::sys::path::append(OriginalSourceFull, OriginalSourceRel);
+    llvm::sys::path::append(OriginalSourceFull, Source);
 
     return llvm::sys::fs::exists(OriginalSourceFull);
   }
@@ -223,22 +227,7 @@ public:
       Log.warning() << Reader->getStatus().getWarningMessage() << "\n";
     }
 
-    const auto &Source =
-        *PackageData.Strings->getItem(PackageData.PackageFilePathID);
-
-    if (llvm::sys::path::is_absolute(Source)) {
-      Log.error()
-          << "Source should not be absolute:\n"
-          << "    " << Source;
-      return false;
-    }
-
-    if (sourceExists(Source))
-      Dest.add(PackageData);
-    else
-      Log.warning()
-      << "Skipping parsed dependency, since its source was removed:\n"
-      << "    " << Source << "\n";
+    Dest.add(PackageData);
 
     return true;
   }
@@ -249,25 +238,69 @@ public:
     );
     ParsedDependencies &Dest = *Context.ParsedDeps;
 
-    Log.verbose() << "Loading dependencies info...\n";
+    Log.log_verbose("Loading dependencies info...");
 
     auto &FM = CreatableSingleton<FileManager>::get();
 
     for (StringRef PackagePath : ParsedDepFiles) {
       if (auto Buffer = FM.getBufferForFile(PackagePath)) {
+
+        Log.log_trace("  Reading '", PackagePath, "'...");
+
         llvm::MemoryBuffer &MemBuf = *Buffer.get();
 
         if (!loadFromBuffer(Dest, MemBuf)) {
-          // TODO Levitation: Do something with errors logging and DumpAction
-          //   it is awful.
           Solver->setFailure("Failed to read dependencies");
-          Log.error()
-          << "Failed to read dependencies for '" << PackagePath << "'\n";
+          Log.log_error("Failed to read dependencies for '", PackagePath, "'");
         }
       } else {
        Solver->setFailure("Failed to open one of dependency files");
-       Log.error() << "Failed to open file '" << PackagePath << "'\n";
+       Log.log_error("Failed to open file '", PackagePath, "'\n");
       }
+    }
+
+    // Check missed dependencies
+
+    bool FoundMissedDependencies = false;
+
+    for (const auto &kv : Dest) {
+
+      const auto &PackageStr = *Context.getStringsPool().getItem(kv.first);
+
+      Log.log_trace("Checking package '", PackageStr, "'...");
+
+      if (!sourceExists(PackageStr)) {
+        Log.log_error("Missed package: '", PackageStr, "'");
+        FoundMissedDependencies = true;
+      } else {
+        for (const auto &Dep : kv.second->DeclarationDependencies) {
+          const auto &DepStr = *Context.getStringsPool().getItem(Dep.FilePathID);
+          Log.log_trace("  -- checking decl dep '", DepStr, "'...");
+          if (!sourceExists(DepStr)) {
+            Log.log_error(
+                "Missed declaration dependency: '", DepStr,
+                "', used by '", PackageStr, "'"
+            );
+            FoundMissedDependencies = true;
+          }
+        }
+        for (const auto &Dep : kv.second->DefinitionDependencies) {
+          const auto &DepStr = *Context.getStringsPool().getItem(Dep.FilePathID);
+          Log.log_trace("  -- checking def dep '", DepStr, "'...");
+          if (!sourceExists(DepStr)) {
+            Log.log_error(
+                "Missed declaration dependency: '", DepStr,
+                "', used by '", PackageStr, "'"
+            );
+            FoundMissedDependencies = true;
+          }
+        }
+      }
+    }
+
+    if (FoundMissedDependencies) {
+      Log.log_error("Can't continue due to missed dependencies.");
+      Solver->setFailure("Can't continue due to missed dependencies.");
     }
   }
 
@@ -275,8 +308,10 @@ public:
     for (auto &PackageDependencies : ParsedDependencies) {
       DependenciesData &Data = *PackageDependencies.second;
       auto &Strings = *Data.Strings;
+
       out
-      << "Package: " << *Strings.getItem(Data.PackageFilePathID) << "\n";
+      << "Package #" << Data.PackageFilePathID
+      << ": " << *Strings.getItem(Data.PackageFilePathID) << "\n";
 
       if (
         Data.DeclarationDependencies.empty() &&
@@ -366,6 +401,7 @@ public:
   }
 
 
+  // TODO Levitation: Deprecated
   void writeResult() {
     if (!Solver->isValid())
       return;
@@ -387,6 +423,7 @@ public:
   using PathString = SinglePath;
   using DependenciesPaths = Paths;
 
+  // TODO Levitation: Deprecated
   bool writeResult(
       const SolvedDependenciesInfo &SolvedDependencies
   ) {
@@ -612,7 +649,10 @@ DependenciesSolver::solve(const Paths &LDepsFiles) {
   return nullptr;
 }
 
+// FIXME Levitation: Deprecated
 bool DependenciesSolver::solve() {
+
+  llvm_unreachable("Not supported");
 
   log::Logger::createLogger(Verbose ? log::Level::Verbose : log::Level::Warning);
   CreatableSingleton<DependenciesStringsPool>::create();
@@ -631,7 +671,7 @@ bool DependenciesSolver::solve() {
   DependenciesSolverContext Context(*this, LDepsFiles);
   DependenciesSolverImpl Impl(Context);
 
-  Impl.solve();
+  // Impl.solve();
   Impl.writeResult();
 
   if (isValid()) {

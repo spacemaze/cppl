@@ -16,6 +16,7 @@
 #define LLVM_CLANG_LEVITATION_DEPENDENCIES_H
 
 #include "clang/Basic/SourceLocation.h"
+#include "clang/Levitation/Common/StringsPool.h"
 #include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Common/IndexedSet.h"
 #include "llvm/ADT/ArrayRef.h"

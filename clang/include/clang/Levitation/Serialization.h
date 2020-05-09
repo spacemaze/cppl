@@ -16,6 +16,7 @@
 
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Levitation/Common/IndexedSet.h"
+#include "clang/Levitation/Common/Path.h"
 #include "clang/Levitation/Common/StringsPool.h"
 #include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
 #include "llvm/Bitstream/BitCodes.h"
@@ -31,31 +32,67 @@ namespace llvm {
 
 namespace clang {
 namespace levitation {
+  struct Declaration {
+    explicit Declaration(PathsPoolTy::key_type filePathID)
+    : FilePathID(filePathID) {}
 
-  using DependenciesStringsPool = StringsPool<256>;
+    // So far, only one field
+    StringID FilePathID;
+
+    // TODO Levitation: add location info
+  };
+}
+}
+
+namespace llvm {
+template<>
+struct DenseMapInfo<clang::levitation::Declaration> {
+  static inline clang::levitation::Declaration getEmptyKey() {
+    return clang::levitation::Declaration{(unsigned int) (-1)};
+  }
+
+  static inline clang::levitation::Declaration getTombstoneKey() {
+    return clang::levitation::Declaration{(unsigned int) (-2)};
+  }
+
+  static unsigned getHashValue(const clang::levitation::Declaration &Val) {
+    return (unsigned) (Val.FilePathID * 37U);
+  }
+
+  static bool isEqual(
+      const clang::levitation::Declaration &LHS,
+      const clang::levitation::Declaration &RHS
+  ) {
+    return LHS.FilePathID == RHS.FilePathID;
+  }
+};
+
+}
+
+namespace clang {
+namespace levitation {
+
+  using DependenciesStringsPool = PathsPoolTy;
+
 
   struct DependenciesData {
 
-    typedef uint32_t LocationIDType;
-
-    struct Declaration {
-      StringID FilePathID;
-      LocationIDType LocationIDBegin;
-      LocationIDType LocationIDEnd;
-    };
-
-    typedef SmallVector<Declaration, 32> DeclarationsBlock;
+    typedef DenseSet<Declaration> DeclarationsBlock;
 
     std::unique_ptr<DependenciesStringsPool> Strings;
     bool OwnStringsPool = true;
 
-    StringID PackageFilePathID;
+    DependenciesStringsPool::key_type PackageFilePathID;
 
     DeclarationsBlock DeclarationDependencies;
     DeclarationsBlock DefinitionDependencies;
 
     /// Whether this file should publish its interface
     bool IsPublic;
+
+    /// If this is an external package or include file
+    /// In this case we don't need to create .o file.
+    bool IsExternal = false;
 
     DependenciesData()
     : Strings(new DependenciesStringsPool),
@@ -66,6 +103,16 @@ namespace levitation {
     : Strings(Strings),
       OwnStringsPool(false)
     {}
+
+    DependenciesData(
+        DependenciesStringsPool *Strings,
+        DependenciesStringsPool::key_type packageFilePathID
+    )
+    : Strings(Strings),
+      OwnStringsPool(false),
+      PackageFilePathID(packageFilePathID)
+    {}
+
 
     DependenciesData(DependenciesData &&Src)
     : Strings(std::move(Src.Strings)),
@@ -112,12 +159,18 @@ namespace levitation {
       DEPS_DECLARATION_RECORD_ID = 1,
       DEPS_PACKAGE_TOP_LEVEL_FIELDS_RECORD_ID,
       DEPS_STRING_RECORD_ID,
+      DEPS_IDS_SET_RECORD_ID,
+  };
+
+  enum CommonBlockIDs {
+    INVALID_BLOCK_ID = llvm::bitc::FIRST_APPLICATION_BLOCKID,
+    FIRST_VALID_BLOCK_ID = llvm::bitc::FIRST_APPLICATION_BLOCKID + 1
   };
 
   /// Describes the various kinds of blocks that occur within
   /// an Dependencies file.
   enum DependenciesBlockIDs {
-    DEPS_STRINGS_BLOCK_ID = llvm::bitc::FIRST_APPLICATION_BLOCKID,
+    DEPS_STRINGS_BLOCK_ID = FIRST_VALID_BLOCK_ID,
     DEPS_DEPENDENCIES_MAIN_BLOCK_ID,
     DEPS_DECLARATION_DEPENDENCIES_BLOCK_ID,
     DEPS_DEFINITION_DEPENDENCIES_BLOCK_ID,
@@ -134,7 +187,7 @@ namespace levitation {
   /// Describes the various kinds of blocks that occur within
   /// an Dependencies file.
   enum MetaBlockIDs {
-    META_ARRAYS_BLOCK_ID = llvm::bitc::FIRST_APPLICATION_BLOCKID,
+    META_ARRAYS_BLOCK_ID = FIRST_VALID_BLOCK_ID,
     META_SKIPPED_FRAGMENT_BLOCK_ID
   };
 

@@ -40,8 +40,8 @@ public:
 
   struct PackageInfo {
     StringID PackagePath;
-    Node *Declaration;
-    Node *Definition;
+    Node *Declaration = nullptr;
+    Node *Definition = nullptr;
     bool IsMainFile = false;
   };
 
@@ -88,6 +88,7 @@ public:
 
   using NodesMap = llvm::DenseMap<NodeID::Type, std::unique_ptr<Node>>;
   using NodesSet = llvm::DenseSet<NodeID::Type>;
+  using NodesList = llvm::SmallVector<NodeID::Type, 16>;
   using PackagesMap = llvm::DenseMap<StringID, std::unique_ptr<PackageInfo>>;
 
   struct Node {
@@ -103,6 +104,8 @@ public:
 
 private:
 
+  log::Logger &Log = log::Logger::get();
+
   /// Nodes whithout dependencies.
   NodesSet Roots;
 
@@ -117,6 +120,10 @@ private:
   /// So far we expect only declaration nodes to be present here.
   NodesSet PublicNodes;
 
+  /// All nodes in graph which correspond to external nodes.
+  /// So far we expect only declaration nodes to be present here.
+  NodesSet ExternalNodes;
+
   NodesMap AllNodes;
   PackagesMap PackageInfos;
 
@@ -126,13 +133,17 @@ private:
   /// \param NID Node ID to be marked.
   void setPublic(NodeID::Type NID) { PublicNodes.insert(NID); }
 
+  /// Mark node as publicly available (present in library interface)
+  /// \param NID Node ID to be marked.
+  void setExternal(NodeID::Type NID) { ExternalNodes.insert(NID); }
+
 public:
 
   static std::shared_ptr<DependenciesGraph> build(
       const ParsedDependencies &ParsedDeps
   ) {
     auto DGraphPtr = std::make_shared<DependenciesGraph>();
-    auto &Log = log::Logger::get();
+    auto &Log = DGraphPtr->Log;
 
     Log.verbose() << "Building dependencies graph...\n";
 
@@ -141,33 +152,57 @@ public:
       auto PackagePathID = PackageDeps.first;
       DependenciesData &PackageDependencies = *PackageDeps.second;
 
-      PackageInfo &Package = DGraphPtr->createPackageInfo(PackagePathID);
+      Log.log_trace("Creating package for Package #", PackagePathID);
 
-      // If package declaration has no dependencies we add it into the Roots
+      PackageInfo &Package = DGraphPtr->createPackageInfo(
+        PackagePathID,
+        PackageDependencies.IsExternal
+      );
+
+      // If node has no dependencies we add it into the Roots
       // collection.
-      if (PackageDependencies.DeclarationDependencies.empty())
+
+      if (PackageDependencies.DeclarationDependencies.empty()) {
+
+        // If declaration doesn't depend on anything, then make it root.
         DGraphPtr->Roots.insert(Package.Declaration->ID);
+
+        // Additionally if relevant definition doesn't depent on anything too,
+        // then make it root as well.
+        if (
+          PackageDependencies.DefinitionDependencies.empty() &&
+          !PackageDependencies.IsExternal
+          ) {
+          assert(Package.Definition);
+          DGraphPtr->Roots.insert(Package.Definition->ID);
+        }
+      }
 
       DGraphPtr->addDependenciesTo(
           *Package.Declaration,
           PackageDependencies.DeclarationDependencies
       );
 
-      // For definition we have to add both declaration and definition
-      // dependencies.
+      if (!PackageDependencies.IsExternal) {
+        // For definition we have to add both declaration and definition
+        // dependencies.
 
-      DGraphPtr->addDependenciesTo(
+        DGraphPtr->addDependenciesTo(
           *Package.Definition,
           PackageDependencies.DeclarationDependencies
-      );
+        );
 
-      DGraphPtr->addDependenciesTo(
+        DGraphPtr->addDependenciesTo(
           *Package.Definition,
           PackageDependencies.DefinitionDependencies
-      );
+        );
+      }
 
       if (PackageDependencies.IsPublic)
         DGraphPtr->setPublic(Package.Declaration->ID);
+
+      if (PackageDependencies.IsExternal)
+        DGraphPtr->setExternal(Package.Declaration->ID);
     }
 
     if (!DGraphPtr->AllNodes.empty() && DGraphPtr->Roots.empty()) {
@@ -187,6 +222,11 @@ public:
   /// \param NID Node ID to be checked
   /// \return true if node should be present in library public interface
   bool isPublic(NodeID::Type NID) const { return PublicNodes.count(NID); }
+
+  /// Whether node belongs to external package.
+  /// \param NID Node ID to be checked
+  /// \return true if external
+  bool isExternal(NodeID::Type NID) const { return ExternalNodes.count(NID); }
 
   // TODO Levitation: That looks pretty much like A* walk.
   //
@@ -296,7 +336,13 @@ public:
         *Strings.getItem(NodeID::getKindAndPathID(Node.ID).second);
 
     out
-    << "Node[";
+    << "Node";
+
+    if (Roots.count(NodeID))
+      out << "(root)";
+
+    out
+    << "[";
     dumpNodeID(out, NodeID);
     out << "], "
         << PackagePathStr << ":\n";
@@ -519,7 +565,7 @@ protected:
     }
   }
 
-  PackageInfo &createPackageInfo(StringID PackagePathID) {
+  PackageInfo &createPackageInfo(StringID PackagePathID, bool IsExternal) {
 
     auto PackageRes = PackageInfos.insert({
       PackagePathID, std::make_unique<PackageInfo>()
@@ -533,17 +579,23 @@ protected:
     );
 
     Node &DeclNode = getOrCreateNode(NodeKind::Declaration, PackagePathID);
-    Node &DefNode = getOrCreateNode(NodeKind::Definition, PackagePathID);
 
-    // DeclNode.DependentNodes.insert(DefNode.ID);
-    // DefNode.Dependencies.insert(DeclNode.ID);
+    // Note, that we don't make definition node to be dependent on
+    // declaration node, the reason is how we build definition:
+    // per current implementation we compile whole source again,
+    // so no need to preload declaration AST.
 
     DeclNode.PackageInfo = &Package;
-    DefNode.PackageInfo = &Package;
 
     Package.PackagePath = PackagePathID;
     Package.Declaration = &DeclNode;
-    Package.Definition = &DefNode;
+
+    if (!IsExternal) {
+      Node &DefNode = getOrCreateNode(NodeKind::Definition, PackagePathID);
+      DefNode.PackageInfo = &Package;
+      Package.Definition = &DefNode;
+    }
+
 
     return Package;
   }
@@ -594,20 +646,36 @@ protected:
     }
   }
 
-  void collectPublicNodes(NodeID::Type ForNode, bool MarkPublic) {
+  void collectPublicNodes(NodesSet &Visited, NodeID::Type ForNode, bool MarkPublic) {
+
+    auto insRes = Visited.insert(ForNode);
+    if (!insRes.second)
+      return;
+
     if (isPublic(ForNode))
       MarkPublic = true;
     else if (MarkPublic)
       PublicNodes.insert(ForNode);
 
+    if (MarkPublic) {
+      auto &trace = Log.trace();
+      trace << "Public node: '";
+      dumpNodeID(Log.trace(), ForNode);
+      trace << "'\n";
+    }
+
     const auto &N = getNode(ForNode);
     for (auto DepN : N.Dependencies)
-      collectPublicNodes(DepN, MarkPublic);
+      collectPublicNodes(Visited, DepN, MarkPublic);
   }
 
   void collectPublicNodes() {
+
+    Log.log_verbose("Collecting public nodes...");
+
+    NodesSet Visited;
     for (auto TerminalNID : Terminals)
-      collectPublicNodes(TerminalNID, false);
+      collectPublicNodes(Visited, TerminalNID, false);
   }
 };
 
