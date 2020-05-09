@@ -18,6 +18,7 @@
 #include "clang/Basic/FileManager.h"
 #include "clang/Levitation/Common/CreatableSingleton.h"
 #include "clang/Levitation/Common/Path.h"
+#include "clang/Levitation/Common/SimpleLogger.h"
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FileSystem.h"
@@ -67,6 +68,11 @@ public:
       SubDirs.swap(NewSubDirs);
     }
   }
+
+  static void copy(StringRef Src, StringRef Dest) {
+    llvm::sys::fs::copy_file(Src, Dest);
+  }
+
 protected:
 
   template <typename FilesVectorTy>
@@ -77,6 +83,7 @@ protected:
       llvm::StringRef CurDir,
       llvm::StringRef FileExtension
   ) {
+    auto &Log = log::Logger::get();
     std::error_code EC;
 
     for (
@@ -88,8 +95,10 @@ protected:
 
       switch (Dir->type()) {
         case llvm::sys::fs::file_type::regular_file:
-          if (llvm::sys::path::extension(Path) == FileExtension)
+          if (llvm::sys::path::extension(Path) == FileExtension) {
+            Log.log_trace("  Found '", Path, "'...");
             Dest.push_back(Path);
+          }
         break;
 
         case llvm::sys::fs::file_type::directory_file:
