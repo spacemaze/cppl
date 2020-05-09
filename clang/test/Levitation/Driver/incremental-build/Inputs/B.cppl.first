@@ -1,5 +1,3 @@
-#import Inputs::MyClass
-
 namespace Inputs {
   // some contents
 }

@@ -15,7 +15,19 @@
 #import Inputs::Dep
 
 // CHECK-NOT: {{^\s*[^/]*}} int a = 123123;
+
 #include "Inputs/IncludedPart.h"
+#include "Inputs/IncludedPart3.h"
+#include "Inputs/IncludedPart4.h"
+
+// Make sure all includes processed
+
+// CHECK: {{^\s*[^/]*}}extern mytype_include2_t include2
+// CHECK: {{^\s*[^/]*}}extern mytype_include3_t include3
+// CHECK: {{^\s*[^/]*}}extern mytype_include4_t include4
+mytype_include2_t include2;
+mytype_include3_t include3;
+mytype_include4_t include4;
 
 namespace Inputs {
   class A {
