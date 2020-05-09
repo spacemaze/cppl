@@ -117,6 +117,10 @@ namespace clang { namespace levitation { namespace tools {
       LevitationDriver::StdLib = StdLib;
     }
 
+    void addLevitationLibPath(llvm::StringRef Path) {
+      LevitationLibs.push_back(Path);
+    }
+
     int getJobsNumber() const {
       return JobsNumber;
     }

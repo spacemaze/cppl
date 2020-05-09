@@ -1377,66 +1377,69 @@ void LevitationDriverImpl::collectLibrariesSources() {
 
   // Register all external packages.
 
-  Paths ExternalPackages;
+  for (auto &CollectedExtLib : Context.Driver.LevitationLibs) {
 
-  for (auto &ExtLib : Context.Driver.LevitationLibs) {
-    Log.log_verbose("  Checking dir '", ExtLib, "'...");
+    auto ExtLibAbsPath = Path::makeAbsolute<SinglePath>(CollectedExtLib);
+
+    Log.log_verbose("  Checking dir '", CollectedExtLib, "'...");
+    Paths ExternalPackages;
     FileSystem::collectFiles(
         ExternalPackages,
-        ExtLib,
-        FileExtensions::SourceCode
-    );
-  }
-
-  for (const auto &Src : ExternalPackages) {
-    auto PathID = Strings.addItem(Src);
-    Context.ExternalPackages.insert(PathID);
-    Context.AllPackages.insert(PathID);
-  }
-
-  for (auto PackageID : Context.ExternalPackages) {
-
-    const auto& PackagePath = *Strings.getItem(PackageID);
-
-    Log.log_trace("Checking lig package '", PackagePath, "'...");
-
-    FilesInfo Files;
-
-    // For libraries sources keep absolute source paths
-
-    Files.Source = Path::replaceExtension<SinglePath>(
-        PackagePath,
+        ExtLibAbsPath,
         FileExtensions::SourceCode
     );
 
-    Path::Builder PBHeader;
-    PBHeader
-      .addComponent(Context.Driver.getOutputHeadersDir())
-      .addComponent(Context.Driver.LibsOutSubDir)
-      .addComponent(PackagePath)
-      .replaceExtension(FileExtensions::Header)
-      .done(Files.Header);
+    for (const auto &CollectedPath : ExternalPackages) {
+      auto PackagePath = Path::makeAbsolute<SinglePath>(CollectedPath);
+      auto Package = Path::makeRelative<SinglePath>(PackagePath, ExtLibAbsPath);
 
-    SinglePath OutputTemplate;
+      auto PackageID = Strings.addItem(Package);
 
-    Path::Builder PBOutputTemplate;
-    PBOutputTemplate
-      .addComponent(Context.Driver.BuildRoot)
-      .addComponent(Context.Driver.LibsOutSubDir)
-      .addComponent(PackagePath)
-      .done(OutputTemplate);
+      Context.ExternalPackages.insert(PackageID);
+      Context.AllPackages.insert(PackageID);
 
-    setOutputFilesInfo(Files, OutputTemplate, false);
+      Log.log_trace(
+          "Checking lib package '", Package, "' -> '", PackagePath, "'..."
+      );
 
-    auto Res = Context.Files.insert({ PackageID, Files });
+      FilesInfo Files;
 
-    Files.dump(Log, log::Level::Trace, 4);
+      // For libraries sources keep absolute source paths
 
-    assert(Res.second);
+      Files.Source = Path::replaceExtension<SinglePath>(
+          PackagePath,
+          FileExtensions::SourceCode
+      );
+
+      Path::Builder PBHeader;
+      PBHeader
+        .addComponent(Context.Driver.getOutputHeadersDir())
+        .addComponent(Context.Driver.LibsOutSubDir)
+        .addComponent(PackagePath)
+        .replaceExtension(FileExtensions::Header)
+        .done(Files.Header);
+
+      SinglePath OutputTemplate;
+
+      Path::Builder PBOutputTemplate;
+      PBOutputTemplate
+        .addComponent(Context.Driver.BuildRoot)
+        .addComponent(Context.Driver.LibsOutSubDir)
+        .addComponent(PackagePath)
+        .done(OutputTemplate);
+
+      setOutputFilesInfo(Files, OutputTemplate, false);
+
+      auto Res = Context.Files.insert({ PackageID, Files });
+
+      Files.dump(Log, log::Level::Trace, 4);
+
+      assert(Res.second);
+    }
   }
 
   Log.verbose()
-  << "Found " << Context.ProjectPackages.size()
+  << "Found " << Context.ExternalPackages.size()
   << " '." << FileExtensions::SourceCode << "' files.\n\n";
 }
 

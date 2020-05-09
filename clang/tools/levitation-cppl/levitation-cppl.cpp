@@ -182,6 +182,15 @@ int levitation_driver_main(int argc, char **argv) {
           .useParser<KeySpaceValueParser>()
           .action([&](StringRef v) { Driver.setExtraLinkerArgs(v); })
       .done()
+      .optional()
+          .name("+I")
+          .valueHint("<path>")
+          .description(
+              "Add path to levitation library"
+          )
+          .useParser<KeyValueInOneWordParser>()
+          .action([&](StringRef v) { Driver.addLevitationLibPath(v); })
+      .done()
       .helpParameter(
           "--help",
           "Shows this help text.",
