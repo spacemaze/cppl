@@ -59,14 +59,22 @@ using namespace llvm;
     }
 
     template <typename SmallStringT>
+    static SmallStringT makeAbsolute(StringRef F) {
+      SmallStringT Relative(F);
+      llvm::sys::fs::make_absolute(Relative);
+      llvm::sys::path::remove_dots(Relative, /*remove ..*/true);
+      return Relative;
+    }
+
+    template <typename SmallStringT>
     static SmallStringT makeRelative(StringRef F, StringRef ParentRel) {
       SmallStringT Relative(F);
-      llvm::sys::path::remove_dots(Relative);
       llvm::sys::fs::make_absolute(Relative);
+      llvm::sys::path::remove_dots(Relative, /*remove ..*/ true);
 
       SmallStringT Parent = ParentRel;
-      llvm::sys::path::remove_dots(Parent);
       llvm::sys::fs::make_absolute(Parent);
+      llvm::sys::path::remove_dots(Parent,  /*remove ..*/ true);
 
       StringRef Separator = llvm::sys::path::get_separator();
 
@@ -75,7 +83,7 @@ using namespace llvm;
       if (Relative.startswith(Separator))
         Relative = Relative.substr(Separator.size());
 
-      llvm::sys::path::remove_dots(Relative);
+      llvm::sys::path::remove_dots(Relative, /*remove ..*/ true);
 
       return Relative;
     }
