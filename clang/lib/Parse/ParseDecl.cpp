@@ -2463,9 +2463,10 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
 
   if (
     Actions.isLevitationMode() &&
-    !D.isFunctionDefinition() &&
-    Actions.isLevitationStage(LangOptions::LBSK_BuildDeclAST) ||
-    Actions.isLevitationStage(LangOptions::LBSK_BuildPreamble)
+    !D.isFunctionDefinition() && (
+      Actions.isLevitationStage(LangOptions::LBSK_BuildDeclAST) ||
+      Actions.isLevitationStage(LangOptions::LBSK_BuildPreamble)
+    )
   ) {
     levitationHandleVarDeclarator(
         D, Tok, Actions,
