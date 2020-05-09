@@ -39,15 +39,33 @@ using namespace llvm;
   // TODO Levitation: rename to Path
   using SinglePath = llvm::SmallString<256>;
   using Paths = llvm::SmallVector<SinglePath, 64>;
+  using PathsPoolTy = StringsPool<256>;
+  using PathIDsSet = DenseSet<StringID>;
 
   // TODO Levitation: rename to PathUtils
   class Path {
   public:
+
+    static bool hasParent(StringRef Source, StringRef ParentRel) {
+      SinglePath ParentAbs = ParentRel;
+      llvm::sys::path::remove_dots(ParentAbs);
+      llvm::sys::fs::make_absolute(ParentAbs);
+
+      SinglePath SourceAbs = Source;
+      llvm::sys::path::remove_dots(SourceAbs);
+      llvm::sys::fs::make_absolute(SourceAbs);
+
+      return ((StringRef)SourceAbs).startswith(ParentAbs);
+    }
+
     template <typename SmallStringT>
     static SmallStringT makeRelative(StringRef F, StringRef ParentRel) {
       SmallStringT Relative(F);
+      llvm::sys::path::remove_dots(Relative);
+      llvm::sys::fs::make_absolute(Relative);
 
       SmallStringT Parent = ParentRel;
+      llvm::sys::path::remove_dots(Parent);
       llvm::sys::fs::make_absolute(Parent);
 
       StringRef Separator = llvm::sys::path::get_separator();
@@ -88,6 +106,7 @@ using namespace llvm;
     /// Builds path out of parent directory, relative path and new extension.
     /// \tparam SmallStringT type which reprents path
     /// \param ParentDir Parent directory to be added in the beginning
+    ///                  (appliable if path is not absolute)
     /// \param SrcRel Relative path
     /// \param Extension New extension.
     /// \return
