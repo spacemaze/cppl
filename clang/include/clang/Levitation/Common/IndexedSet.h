@@ -58,6 +58,9 @@ namespace clang { namespace levitation {
 
   public:
 
+      typedef IdTy key_type;
+      typedef ItemTy value_type;
+
       IndexedSet() : LastIndex(getInvalidIndex()) {}
 
       llvm::iterator_range<const_iterator> items() const {
