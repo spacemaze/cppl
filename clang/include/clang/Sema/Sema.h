@@ -12377,28 +12377,10 @@ public:
   //===--------------------------------------------------------------------===//
   // C++ Levitation Mode
   //
-private:
-
-  /// NOTE: We perhaps could put it into TranslactionUnitDecl,
-  /// for it is linked 1 to 1 with latter.
-  /// But as long as we serialize it out of TranslactionUnitDecl block,
-  /// and moreover in separate file, we store it in Sema directly.
-
-  /// Declaration dependencies.
-  /// Set of dependencies declaration depends on.
-  /// If dependency is met only in function body whith external
-  /// linkage, then this is not a declaration dependency. It would be
-  /// a definition dependency.
-  levitation::DependenciesMap LevitationDeclarationDependencies;
-
-  /// Set of dependencies definition depends on.
-  levitation::DependenciesMap LevitationDefinitionDependencies;
-
 public:
   enum struct LevitationVarSkipAction {
     None, Skip, SkipInit
   };
-
 
 private:
 
@@ -12416,16 +12398,6 @@ private:
   levitation::DeclASTMeta::FragmentsVectorTy LevitationSkippedFragments;
 
 public:
-
-  const levitation::DependenciesMap &getLevitationDeclarationDependencies() {
-    return LevitationDeclarationDependencies;
-  }
-
-  const levitation::DependenciesMap &getLevitationDefinitionDependencies() {
-    return LevitationDefinitionDependencies;
-  }
-
-  bool isLevitationFilePublic() const;
 
   /// Check whether levitation mode is on.
   /// \return
@@ -12451,22 +12423,6 @@ public:
   bool isLevitationStage(LangOptions::LevitationBuildStageKind Stage) const {
     return getLangOpts().getLevitationBuildStage() == Stage;
   }
-
-  /// Should be called for parse manual dependencies mode.
-  /// reads all #import directives from Preprocessor and puts them
-  /// into LevitationDependency form.
-  void ActOnLevitationManualDeps();
-
-  /// Called during manual dependencies parsing phase.
-  /// \param DepIdParts parts of identifier. Each except the last part is
-  ///   nested name specifier component.
-  /// \param IsBodyDependency indicates whether were dealing with body or declaration dependency.
-  /// \return
-  void HandleLevitationPackageDependency(
-      const SmallVectorImpl<StringRef> &DepIdParts,
-      bool IsBodyDependency,
-      const SourceRange &Loc
-  );
 
   bool levitationMayBeSkipVarDefinition(
         const Declarator &D,

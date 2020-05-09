@@ -20,14 +20,25 @@ class ASTImporter;
 class ASTImporterLookupTable;
 class TranslationUnitDecl;
 
+namespace levitation {
+  class LevitationPreprocessorConsumer;
+}
+
 // FIXME Levitation: move into levitation namespace
 // FIXME Levitation: move into Levitation directory
-class LevitationParseImportAction : public GeneratePCHAction {
-public:
-  std::unique_ptr<ASTConsumer> CreateASTConsumer(
-      CompilerInstance &CI,
-      StringRef InFile
-  ) override;
+
+class LevitationPreprocessorAction : public PreprocessOnlyAction {
+protected:
+  virtual std::unique_ptr<levitation::LevitationPreprocessorConsumer>
+      CreatePreprocessorConsumer() = 0;
+
+  void EndSourceFileAction() override;
+};
+
+class LevitationParseImportAction : public LevitationPreprocessorAction {
+protected:
+  std::unique_ptr<levitation::LevitationPreprocessorConsumer>
+      CreatePreprocessorConsumer() override;
 };
 
 class LevitationBuildPreambleAction : public GeneratePCHAction {

@@ -22,6 +22,7 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TokenKinds.h"
+#include "clang/Levitation/Dependencies.h"
 #include "clang/Levitation/DeclASTMeta/DeclASTMeta.h"
 #include "clang/Lex/Lexer.h"
 #include "clang/Lex/MacroInfo.h"
@@ -33,6 +34,7 @@
 #include "clang/Lex/TokenLexer.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/FunctionExtras.h"
 #include "llvm/ADT/None.h"
@@ -2268,18 +2270,12 @@ private:
   //===--------------------------------------------------------------------===//
   // C++ Levitation Mode
   //
-public:
-  typedef SmallVector<StringRef, 16> PPLevitationDepIdParts;
-  typedef std::pair<PPLevitationDepIdParts, SourceRange> PPLevitationDep;
-  typedef SmallVector<PPLevitationDep, 16> PPLevitationDepsVector;
 private:
+  typedef SmallVector<StringRef, 16> PPLevitationDepIdParts;
   typedef SmallString<32> PPLevitationPartBuff;
   SmallVector<PPLevitationPartBuff, 64> PPLevitationDepIdBuffs;
 
-  PPLevitationDepsVector PPLevitationDeclDeps;
-  PPLevitationDepsVector PPLevitationBodyDeps;
-
-  bool PPLevitationPublic = false;
+  levitation::PackageDependencies LevitationDependencies;
 
   levitation::DeclASTMeta::FragmentsVectorTy PPLevitationSkippedFragments;
 
@@ -2301,9 +2297,9 @@ public:
   void HandleLevitationImportDirective(SourceLocation HashLoc, Token &Tok);
   void HandleLevitationPublicDirective(SourceLocation HashLoc, Token &Tok);
   void HandleLevitationBodyDirective(SourceLocation HashLoc, Token &Tok);
-  const PPLevitationDepsVector& getLevitationDeclDeps() const;
-  const PPLevitationDepsVector& getLevitationBodyDeps() const;
-  bool isLevitationPublic() const { return PPLevitationPublic; }
+
+  levitation::PackageDependencies& accessLevitationDependencies();
+
   levitation::DeclASTMeta::FragmentsVectorTy& getLevitationSkippedFragments() {
     return PPLevitationSkippedFragments;
   }

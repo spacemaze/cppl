@@ -32,52 +32,6 @@ using namespace sema;
 // Helpers
 //
 
-template<typename T>
-using ReversedVectorItems = llvm::iterator_range<typename SmallVectorImpl<T>::reverse_iterator>;
-
-template<typename T>
-ReversedVectorItems<T> reverse(SmallVectorImpl<T>& Vector) {
-  typedef SmallVectorImpl<T> VectorTy;
-  return llvm::iterator_range<typename VectorTy::reverse_iterator>(Vector.rbegin(), Vector.rend());
-}
-
-levitation::PackageDependency makePackageDependency(
-    const SmallVectorImpl<llvm::StringRef> &DepIdParts,
-    const SourceRange &Loc
-) {
-  levitation::PackageDependencyBuilder DependencyBuilder;
-  for (const auto &Component : DepIdParts) {
-    DependencyBuilder.addComponent(Component);
-  }
-
-  DependencyBuilder.setImportLoc(Loc);
-
-  return std::move(DependencyBuilder.getDependency());
-}
-
-void Sema::HandleLevitationPackageDependency(
-    const SmallVectorImpl<llvm::StringRef> &DepIdParts,
-    bool IsBodyDependency,
-    const SourceRange &Loc) {
-  auto Dependency = makePackageDependency(DepIdParts, Loc);
-  if (IsBodyDependency)
-    LevitationDefinitionDependencies.mergeDependency(std::move(Dependency));
-  else
-    LevitationDeclarationDependencies.mergeDependency(std::move(Dependency));
-}
-
-bool Sema::isLevitationFilePublic() const {
-  return PP.isLevitationPublic();
-}
-
-void Sema::ActOnLevitationManualDeps() {
-  for (const auto &DepParts : PP.getLevitationDeclDeps())
-    HandleLevitationPackageDependency(DepParts.first, false, DepParts.second);
-
-  for (const auto &DepParts : PP.getLevitationBodyDeps())
-    HandleLevitationPackageDependency(DepParts.first, true, DepParts.second);
-}
-
 std::pair<unsigned, unsigned> levitationGetDeclaratorID(const Declarator &D) {
   const auto &SR = D.getSourceRange();
   return {
@@ -289,22 +243,25 @@ void Sema::levitationInsertExternForHeader(
       "Position to insert should belong to main file"
   );
 
-  assert(
-      LevitationSkippedFragments.size() &&
-      "Fragments merging applied for non empty "
-      "LevitationSkippedFragments collection only"
-  );
-
   // Lookup for first fragment to be replaced
-  size_t InsertAfter = LevitationSkippedFragments.size();
-  size_t InsertPos;
-  while (InsertAfter)
-  {
+  size_t NumSkippedFragments = LevitationSkippedFragments.size();
+  size_t InsertAfter = NumSkippedFragments;
+  size_t InsertPos = NumSkippedFragments;
+
+  // Note, if LevitationSkippedFragments.size() is 0, then we skip this
+  // loop, and insert extern to the end of skipped fragments collection.
+  while (InsertAfter) {
     InsertPos = InsertAfter;
     --InsertAfter;
     if (LevitationSkippedFragments[InsertAfter].End <= StartOffset)
       break;
   }
+
+  assert(
+    !InsertPos ||
+    LevitationSkippedFragments[InsertPos-1].End <= StartOffset &&
+    "'extern' is about to be inserted at wrong place"
+  );
 
   LevitationSkippedFragments.insert(
       LevitationSkippedFragments.begin() + InsertPos,

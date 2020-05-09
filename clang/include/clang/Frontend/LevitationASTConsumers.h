@@ -11,16 +11,37 @@
 
 #include "clang/Basic/LLVM.h"
 #include <memory>
+#include <vector>
 
 namespace clang {
 
 class ASTConsumer;
 class CompilerInstance;
+class Preprocessor;
 struct PCHBuffer;
 
 namespace levitation {
 
-std::unique_ptr<ASTConsumer> CreateDependenciesASTProcessor(
+  class LevitationPreprocessorConsumer {
+  public:
+    virtual void HandlePreprocessor(Preprocessor &PP) = 0;
+    virtual ~LevitationPreprocessorConsumer() = default;
+  };
+
+  class LevitationMultiplexPreprocessorConsumer : public LevitationPreprocessorConsumer{
+    std::vector<std::unique_ptr<LevitationPreprocessorConsumer>> Consumers;
+  public:
+    LevitationMultiplexPreprocessorConsumer(
+        std::vector<std::unique_ptr<LevitationPreprocessorConsumer>> &&consumers
+    ) :
+      Consumers(std::move(consumers))
+    {}
+
+    void HandlePreprocessor(Preprocessor &PP) override;
+  };
+
+
+std::unique_ptr<LevitationPreprocessorConsumer> CreateDependenciesASTProcessor(
     CompilerInstance &CI,
     StringRef InFile
 );

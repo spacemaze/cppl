@@ -32,6 +32,9 @@
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Lex/Token.h"
 #include "clang/Lex/VariadicMacroSupport.h"
+#include "clang/Levitation/FileExtensions.h"
+#include "clang/Levitation/Common/Path.h"
+#include "clang/Levitation/Common/StringBuilder.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
@@ -2367,13 +2370,34 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
 
   auto IdentifierParts = LexLevitationImportIdentifier(NextTok);
 
-  const auto &Loc = IdentifierParts.second;
   auto &Parts = IdentifierParts.first;
 
+  StringRef SourcesRoot = PPOpts->LevitationSourcesRootDir;
+
+  levitation::Path::Builder PathBuilderAbs(SourcesRoot);
+  levitation::Path::Builder PathBuilderRel;
+
+  for (const auto &Comp : Parts) {
+    PathBuilderAbs.addComponent(Comp);
+    PathBuilderRel.addComponent(Comp);
+  }
+
+  levitation::StringBuilder StrPathAbs, StrPathRel;
+
+  StrPathAbs
+  << PathBuilderAbs.str()
+  << "." << levitation::FileExtensions::SourceCode;
+
+  StrPathRel
+  << PathBuilderRel.str()
+  << "." << levitation::FileExtensions::SourceCode;
+
+  const auto &DependencyPath = StrPathRel.str();
+
   if (!BodyDep)
-    PPLevitationDeclDeps.emplace_back(std::move(Parts), Loc);
+    LevitationDependencies.addDeclarationPath(DependencyPath);
   else
-    PPLevitationBodyDeps.emplace_back(std::move(Parts), Loc);
+    LevitationDependencies.addDefinitionPath(DependencyPath);
 }
 
 /// Handles C++ Levitation #public directive
@@ -2390,7 +2414,7 @@ void Preprocessor::HandleLevitationPublicDirective(SourceLocation HashLoc, Token
     return;
   }
 
-  PPLevitationPublic = true;
+  LevitationDependencies.IsPublic = true;
 
   DiscardUntilEndOfDirective();
 
@@ -2456,6 +2480,9 @@ void Preprocessor::HandleLevitationBodyDirective(SourceLocation HashLoc, Token &
     LexUnexpandedToken(Tmp);
 }
 
+levitation::PackageDependencies& Preprocessor::accessLevitationDependencies() {
+  return LevitationDependencies;
+}
 
 bool Preprocessor::TryLexLevitationBodyDepAttr(const Token &FirstToken) {
   if (FirstToken.getKind() != tok::l_square)
@@ -2571,18 +2598,6 @@ std::pair<SmallVector<StringRef, 16>, SourceRange> Preprocessor::LexLevitationIm
   DepParts.push_back(PPLevitationDepIdBuffs.back());
 
   return Res;
-}
-
-const Preprocessor::PPLevitationDepsVector&
-    Preprocessor::getLevitationDeclDeps() const
-{
-  return PPLevitationDeclDeps;
-}
-
-const Preprocessor::PPLevitationDepsVector&
-    Preprocessor::getLevitationBodyDeps() const
-{
-  return PPLevitationBodyDeps;
 }
 
 void Preprocessor::levitationAddSkippedSourceFragment(

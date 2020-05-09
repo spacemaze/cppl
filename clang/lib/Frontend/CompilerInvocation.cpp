@@ -3422,7 +3422,6 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::RunAnalysis:
   case frontend::TemplightDump:
   case frontend::MigrateSource:
-  case frontend::LevitationParseImport:
   case frontend::LevitationBuildPreamble:
     return false;
 
@@ -3435,6 +3434,8 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::RewriteMacros:
   case frontend::RunPreprocessorOnly:
   case frontend::PrintDependencyDirectivesSourceMinimizerOutput:
+  case frontend::LevitationParseImport:
+
     return true;
   }
   llvm_unreachable("invalid frontend action");
@@ -3605,7 +3606,7 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
 static void parseLevitationManualImportArgs(
   LangOptions &LangOpts,
   const FrontendOptions &FrontendOpts,
-  const PreprocessorOptions &PreprocessorOpts,
+  PreprocessorOptions &PreprocessorOpts,
   DiagnosticsEngine &Diags
 ) {
   const char* Stage = "C++ Levitation parse #import directives";
@@ -3642,6 +3643,9 @@ static void parseLevitationManualImportArgs(
 
   LangOpts.LevitationMode = 1;
   LangOpts.setLevitationBuildStage(LangOptions::LBSK_ParseManualDeps);
+
+  PreprocessorOpts.LevitationSourcesRootDir =
+      FrontendOpts.LevitationSourcesRootDir;
 }
 
 static void parseLevitationBuildPreambleArgs(

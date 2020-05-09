@@ -167,6 +167,12 @@ public:
     }
   };
 
+  // C++ Levitation
+
+  std::string LevitationSourcesRootDir;
+
+  // end of C++ Levitation
+
   /// The set of modules that failed to build.
   ///
   /// This pointer will be shared among all of the compiler instances created

@@ -14,6 +14,9 @@
 #ifndef LLVM_CLANG_LEVITATION_PATH_H
 #define LLVM_CLANG_LEVITATION_PATH_H
 
+#include "clang/Levitation/Common/StringsPool.h"
+#include "clang/Levitation/Common/StringBuilder.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -126,6 +129,44 @@ using namespace llvm;
       auto Parent = llvm::sys::path::parent_path(FilePath);
       llvm::sys::fs::create_directories(Parent);
     }
+
+    class Builder {
+      SinglePath Result;
+      bool Done = false;
+      public:
+        Builder(StringRef Prefix = "") : Result(Prefix) {}
+
+        Builder& addComponent(StringRef Component) {
+          // FIXME Levitation: support absolute paths
+          //     support windows absolute paths.
+          assert(!Done);
+          llvm::sys::path::append(Result, Component);
+          return *this;
+        }
+
+        const SinglePath& str() {
+          assert(!Done);
+          Done = true;
+          return Result;
+        }
+
+        void done() {
+          Done = true;
+        }
+
+        void done(SinglePath &Dest) {
+          assert(!Done);
+          Done = true;
+          Dest.swap(Result);
+          Result.clear();
+        }
+
+        Builder& replaceExtension(StringRef Extension) {
+          assert(!Done);
+          Result = Path::replaceExtension<SinglePath>(Result, Extension);
+          return *this;
+        }
+    };
   };
 }
 }

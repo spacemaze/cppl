@@ -57,16 +57,19 @@ struct OutputFileHandle {
   bool isInvalid() const { return !(bool)OutputStream; };
 };
 
-class MultiplexConsumerBuilder {
+template<class MultiplexT, class ItemT>
+class MultiplexBuilder {
 
   bool Successful = true;
-  std::vector<std::unique_ptr<ASTConsumer>> Consumers;
+
+  typedef std::unique_ptr<ItemT> PtrTy;
+  std::vector<PtrTy> Consumers;
 
 public:
 
-  using BuilderTy = MultiplexConsumerBuilder;
+  using BuilderTy = MultiplexBuilder;
 
-  BuilderTy &addRequired(std::unique_ptr<ASTConsumer> &&Consumer) {
+  BuilderTy &addRequired(PtrTy &&Consumer) {
     if (Successful && Consumer)
       Consumers.push_back(std::move(Consumer));
     else
@@ -74,28 +77,36 @@ public:
     return *this;
   }
 
-  BuilderTy &addNotNull(std::unique_ptr<ASTConsumer> &&Consumer) {
+  BuilderTy &addNotNull(PtrTy &&Consumer) {
     assert(Consumer && "Consumer must be non-null pointer");
     return addRequired(std::move(Consumer));
   }
 
-  BuilderTy &addOptional(std::unique_ptr<ASTConsumer> &&Consumer) {
+  BuilderTy &addOptional(PtrTy &&Consumer) {
     if (Consumer)
       addRequired(std::move(Consumer));
 
     return *this;
   }
 
-  std::unique_ptr<ASTConsumer> done() {
+  PtrTy done() {
     if (!Successful)
       return nullptr;
 
     if (Consumers.size() == 1)
       return std::move(Consumers[0]);
 
-    return std::make_unique<MultiplexConsumer>(std::move(Consumers));
+    return std::make_unique<MultiplexT>(std::move(Consumers));
   }
 };
+
+
+typedef MultiplexBuilder<MultiplexConsumer, ASTConsumer> MultiplexConsumerBuilder;
+
+typedef MultiplexBuilder<
+    levitation::LevitationMultiplexPreprocessorConsumer,
+    levitation::LevitationPreprocessorConsumer
+> MultiplexPPConsumerBuilder;
 
 void diagMetaFileIOIssues(
     DiagnosticsEngine &Diag,
@@ -174,6 +185,21 @@ void CreateMetaWrapper(
 
 namespace clang {
 
+// Public classes implementation
+
+void LevitationPreprocessorAction::EndSourceFileAction() {
+  auto &PP = getCompilerInstance().getPreprocessor();
+
+  auto Consumer = CreatePreprocessorConsumer();
+  Consumer->HandlePreprocessor(PP);
+
+  FrontendAction::EndSourceFileAction();
+}
+
+// Action implementations
+
+// This class in friends of ASTReader, so it can't be
+// allocated in anonymous namespace
 class LevitationModulesReader : public ASTReader {
   StringRef MainFile;
   int MainFileChainIndex = -1;
@@ -344,19 +370,21 @@ private:
 void LevitationBuildPreambleAction::EndSourceFileAction() {
   CreateMetaWrapper(*this, [&] { GeneratePCHAction::EndSourceFileAction(); });
 }
+
+std::unique_ptr<levitation::LevitationPreprocessorConsumer>
+LevitationParseImportAction::CreatePreprocessorConsumer() {
+  return MultiplexPPConsumerBuilder()
+    .addRequired(levitation::CreateDependenciesASTProcessor(
+         getCompilerInstance(),
+         getCurrentFile()
+     ))
+  .done();
+}
+
 } // end of namespace clang
 
 //==============================================================================
 // Frontend Actions
-
-std::unique_ptr<ASTConsumer> LevitationParseImportAction::CreateASTConsumer(
-    clang::CompilerInstance &CI,
-    llvm::StringRef InFile
-) {
-  return MultiplexConsumerBuilder()
-      .addRequired(levitation::CreateDependenciesASTProcessor(CI, InFile))
-  .done();
-}
 
 void LevitationBuildObjectAction::ExecuteAction() {
   // ASTFrontendAction is used as source
