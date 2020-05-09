@@ -34,123 +34,58 @@ namespace clang {
 
 namespace levitation {
 
-  /// Implements package dependency metadata
-  typedef ArrayRef<StringRef> DependencyComponentsArrRef;
-  typedef SmallVector<StringRef, 16> DependencyComponentsVector;
-
-  class PackageDependencyBuilder;
-
-  /// Describes particular dependency used
-  /// in given package.
-  class PackageDependency {
-  protected:
-
-    /// Location of #import directive
-    SourceRange ImportLocation;
-
-    /// Dependency components. E.g. for global::A::B
-    /// components vector will store {A, B}
-    DependencyComponentsVector Components;
-
-    /// Stores path to dependency file.
-    /// This value is set during validation process or
-    /// in case of manual dependencies declaration (not implemented yet)
-    SinglePath Path;
-
-    PackageDependency() {};
-
-  public:
-    friend class PackageDependencyBuilder;
-
-    PackageDependency(DependencyComponentsVector &&components)
-    : Components(components) {}
-
-    PackageDependency(PackageDependency &&dying)
-    : ImportLocation(dying.ImportLocation),
-      Components(std::move(dying.Components)),
-      Path(std::move(dying.Path)) {}
-
-    void setImportLoc(const SourceRange &Loc) { ImportLocation = Loc; }
-
-    const SourceRange &getImportLoc() const { return ImportLocation; }
-
-    DependencyComponentsArrRef getComponents() const {
-      return Components;
-    }
-
-    void setPath(SinglePath &&path) {
-      Path.swap(path);
-    }
-
-    StringRef getPath() const {
-      return StringRef(Path.begin(), Path.size());
-    }
-
-    void print(llvm::raw_ostream &out) const;
-  };
-
-  class PackageDependencyBuilder {
-    PackageDependency Dependency;
-  public:
-    void addComponent(const StringRef& Component) {
-      Dependency.Components.push_back(Component);
-    }
-
-    void setImportLoc(const SourceRange &Loc) {
-      Dependency.setImportLoc(Loc);
-    }
-
-    PackageDependency& getDependency() {
-      return Dependency;
-    }
-  };
-
-  /// Dependencies map.
-  /// Implements indexing of package dependency by its component.
-  /// E.g. for 'class C { global::A::D d; };' it will add
-  /// dependency "A::D".
-  class DependenciesMap : public llvm::DenseMap<
-  // FIXME Levitation: this is very unstable definition,
-  // Key is a ref to PackageDependency's components SmallVector,
-  // after the first internal DenseMap::moveFromOldBuckets call
-  // PackageDependency will be destroyed safe it is moved first
-  // into the new allocated value place, so vector data won't
-  // be destroyed in this case, unless you're using
-  // PackageDependency + SmallVector with implemented move constructor
-  // on both sides. This is why it is unstable.
-          DependencyComponentsArrRef, PackageDependency> {
-  public:
-      // Note: we rely on implicitly defined move constructor here.
-      // FIXME Levitation: we don't need it for manual import.
-      void mergeDependency(PackageDependency &&Dep);
-  };
-
-  /// Almost same as DependenciesMap, but also adds information
-  /// about dependency file whenever it is possible.
-  class ValidatedDependenciesMap : public DependenciesMap {
-    bool HasMissingDependencies = false;
-  public:
-    void setHasMissingDependencies() { HasMissingDependencies = true; }
-    bool hasMissingDependencies() { return HasMissingDependencies; }
-  };
-
   /// Describes whole set of dependencies used by
   /// given package.
   struct PackageDependencies {
-    ValidatedDependenciesMap DeclarationDependencies;
-    ValidatedDependenciesMap DefinitionDependencies;
-    StringRef PackageFilePath;
+    PathsPoolTy PathsPool;
+
+    /**
+     * Declaration dependencies.
+     * Set of dependencies declaration depends on.
+     * If dependency is met only in function body whith external
+     * linkage, then this is not a declaration dependency. It would be
+     * a definition dependency.
+     */
+    PathIDsSet DeclarationDependencies;
+
+    /**
+     * Set of dependencies definition depends on.
+     */
+    PathIDsSet DefinitionDependencies;
+
+    /**
+     * Current package file ID
+     */
+    StringID PackageFilePathID;
+
+    /**
+     * Indicates, that current file is to be published
+     * during C++ Levitation library creation.
+     */
     bool IsPublic;
-    bool hasMissingDependencies() {
-      return DeclarationDependencies.hasMissingDependencies() ||
-             DefinitionDependencies.hasMissingDependencies();
+
+    /**
+     * Unifies access to PathsPool
+     * @return
+     */
+    PathsPoolTy& accessPathsPool() {
+      return PathsPool;
+    }
+
+    void addDeclarationPath(StringRef Path) {
+      auto ID = accessPathsPool().addItem(Path);
+      DeclarationDependencies.insert(ID);
+    }
+
+    void addDefinitionPath(StringRef Path) {
+      auto ID = accessPathsPool().addItem(Path);
+      DefinitionDependencies.insert(ID);
+    }
+
+    void setPackageFilePathID(const SinglePath &Path) {
+      PackageFilePathID = accessPathsPool().addItem(Path);
     }
   };
-
-  const DiagnosticBuilder &operator<<(
-      const DiagnosticBuilder &DB,
-      const PackageDependency &V
-  );
 }
 }
 

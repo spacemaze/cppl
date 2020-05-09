@@ -5,7 +5,6 @@ set(LLVM_LINK_COMPONENTS
 add_clang_library(
   clangLevitation
 
-  Dependencies.cpp
   FileExtensions.cpp
   Serialization.cpp
 
