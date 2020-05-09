@@ -82,6 +82,8 @@ namespace levitation {
     std::unique_ptr<DependenciesStringsPool> Strings;
     bool OwnStringsPool = true;
 
+    // TODO Levitation: remove this field.
+    //   Whenever we pick LDeps file, we also know PackageID it corresponds to.
     DependenciesStringsPool::key_type PackageFilePathID;
 
     DeclarationsBlock DeclarationDependencies;

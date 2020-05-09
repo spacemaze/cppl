@@ -53,6 +53,7 @@ public:
     DependenciesSolver::BuildRoot = BuildRoot;
   }
 
+  // TODO Levitation: pass <PackageID, LDepPath> instead.
   std::shared_ptr<SolvedDependenciesInfo> solve(const Paths &LDepsFiles);
 
   bool solve();

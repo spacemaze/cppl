@@ -59,6 +59,7 @@ class DependenciesSolverContext {
 
   const Paths &LDepsFiles;
 
+
   std::shared_ptr<ParsedDependencies> ParsedDeps;
   std::shared_ptr<DependenciesGraph> DepsGraph;
   std::shared_ptr<SolvedDependenciesInfo> SolvedDepsInfo;
@@ -531,6 +532,7 @@ std::shared_ptr<SolvedDependenciesInfo>
 DependenciesSolver::solve(const Paths &LDepsFiles) {
   auto &Log = log::Logger::get();
 
+  // TODO Levitation: pass <PackageID, LDepPath> instead.
   DependenciesSolverContext Context(*this, LDepsFiles);
   DependenciesSolverImpl Impl(Context);
 

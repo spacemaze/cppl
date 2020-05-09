@@ -54,6 +54,8 @@ namespace levitation {
      */
     PathIDsSet DefinitionDependencies;
 
+    // TODO Levitation: remove this field.
+    //   Whenever we pick LDeps file, we also know PackageID it corresponds to.
     /**
      * Current package file ID
      */
