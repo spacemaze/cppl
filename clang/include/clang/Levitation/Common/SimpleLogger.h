@@ -25,7 +25,8 @@ enum class Level {
   Error,
   Warning,
   Info,
-  Verbose
+  Verbose,
+  Trace
 };
 
 using manipulator_t = std::function<void(llvm::raw_ostream &out)>;
@@ -99,8 +100,22 @@ public:
     return getStream(Level::Verbose);
   }
 
+  llvm::raw_ostream &trace() {
+    return getStream(Level::Trace);
+  }
+
   std::unique_lock<std::mutex> lock() {
     return std::unique_lock<std::mutex>(Locker);
+  }
+
+  template <typename ...ArgsT>
+  void log(Level level, ArgsT&&...args) {
+    logImpl(level, std::forward<ArgsT>(args)...);
+  }
+
+  template <typename ...ArgsT>
+  void log_trace(ArgsT&&...args) {
+    logImpl(Level::Trace, std::forward<ArgsT>(args)...);
   }
 
   template <typename ...ArgsT>
