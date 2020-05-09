@@ -67,6 +67,22 @@ namespace {
 
     SinglePath DeclAST;
     SinglePath Object;
+
+    void dump(log::Logger &Log, log::Level Level, unsigned indent = 0) {
+
+      std::string StrIndent(indent, ' ');
+
+      Log.log(Level, StrIndent, "Source: ", Source);
+      Log.log(Level, StrIndent, "Header: ", Header);
+      Log.log(Level, StrIndent, "LDeps: ", LDeps);
+      Log.log(Level, StrIndent, "LDepsMeta: ", LDepsMeta);
+      Log.log(Level, StrIndent, "DeclASTMetaFile: ", DeclASTMetaFile);
+      Log.log(Level, StrIndent, "ObjMetaFile: ", ObjMetaFile);
+      Log.log(Level, StrIndent, "DeclAST: ", DeclAST);
+      Log.log(Level, StrIndent, "Object: ", Object);
+
+    }
+
   };
 
   struct RunContext {
@@ -1147,7 +1163,7 @@ void LevitationDriverImpl::buildPreamble() {
     Context.Driver.PreambleOutputMeta,
     Context.Driver.StdLib,
     Context.Driver.ExtraPreambleArgs,
-    Context.Driver.Verbose,
+    Context.Driver.isVerbose(),
     Context.Driver.DryRun
   );
 
@@ -1185,7 +1201,7 @@ void LevitationDriverImpl::runParseImport() {
           Files.Source,
           Context.Driver.SourcesRoot,
           Context.Driver.ExtraParseImportArgs,
-          Context.Driver.Verbose,
+          Context.Driver.isVerbose(),
           Context.Driver.DryRun
       );
     });
@@ -1205,7 +1221,9 @@ void LevitationDriverImpl::solveDependencies() {
   DependenciesSolver Solver;
   Solver.setSourcesRoot(Context.Driver.SourcesRoot);
   Solver.setBuildRoot(Context.Driver.BuildRoot);
-  Solver.setVerbose(Context.Driver.Verbose);
+  Solver.setVerbose(Context.Driver.isVerbose());
+
+  // Get all discovered project LDep files
 
   Paths LDepsFiles;
   for (auto &PackagePath : Context.Packages) {
@@ -1257,7 +1275,7 @@ void LevitationDriverImpl::runLinker() {
       ObjectFiles,
       Context.Driver.StdLib,
       Context.Driver.ExtraLinkerArgs,
-      Context.Driver.Verbose,
+      Context.Driver.isVerbose(),
       Context.Driver.DryRun,
       Context.Driver.CanUseLibStdCppForLinker
   );
@@ -1445,7 +1463,7 @@ bool LevitationDriverImpl::processDefinition(
     Context.Driver.StdLib,
     Context.Driver.ExtraParseArgs,
     Context.Driver.ExtraCodeGenArgs,
-    Context.Driver.Verbose,
+    Context.Driver.isVerbose(),
     Context.Driver.DryRun
   );
 }
@@ -1479,7 +1497,7 @@ bool LevitationDriverImpl::processDeclaration(
       fullDependencies,
       Context.Driver.StdLib,
       Context.Driver.ExtraParseArgs,
-      Context.Driver.Verbose,
+      Context.Driver.isVerbose(),
       Context.Driver.DryRun
   );
 
@@ -1507,7 +1525,7 @@ bool LevitationDriverImpl::processDeclaration(
         N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
         Includes,
         Meta.getFragmentsToSkip(),
-        Context.Driver.Verbose,
+        Context.Driver.isVerbose(),
         Context.Driver.DryRun
     )
     .execute();
@@ -1723,10 +1741,20 @@ void LevitationDriver::initParameters() {
         DriverDefaults::OUTPUT_OBJECTS_DIR;
   }
 
-  if (Verbose) {
-    log::Logger::get().setLogLevel(log::Level::Verbose);
-    dumpParameters();
+  switch (Verbose) {
+    case VerboseLevel0:
+      log::Logger::get().setLogLevel(log::Level::Info);
+      break;
+    case VerboseLevel1:
+      log::Logger::get().setLogLevel(log::Level::Verbose);
+      break;
+    case VerboseLevel2:
+      log::Logger::get().setLogLevel(log::Level::Trace);
+      break;
   }
+
+  if (isVerbose())
+    dumpParameters();
 }
 
 void LevitationDriver::dumpParameters() {

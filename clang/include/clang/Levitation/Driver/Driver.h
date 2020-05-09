@@ -33,7 +33,13 @@ namespace clang { namespace levitation { namespace tools {
     using Args = llvm::SmallVector<StringOrRef, 8>;
   private:
 
-    bool Verbose = false;
+    enum VerboseLevel {
+      VerboseLevel0, // No verbose messages
+      VerboseLevel1, // Only verbose messages
+      VerboseLevel2, // Trace messages
+    };
+
+    VerboseLevel Verbose = VerboseLevel0;
 
     levitation::SinglePath BinDir;
     llvm::StringRef SourcesRoot = DriverDefaults::SOURCES_ROOT;
@@ -67,11 +73,15 @@ namespace clang { namespace levitation { namespace tools {
     LevitationDriver(llvm::StringRef CommandPath);
 
     bool isVerbose() const {
-      return Verbose;
+      return Verbose > VerboseLevel0;
     }
 
-    void setVerbose(bool Verbose) {
-      LevitationDriver::Verbose = Verbose;
+    void setVerbose() {
+      Verbose = VerboseLevel1;
+    }
+
+    void setTrace() {
+      Verbose = VerboseLevel2;
     }
 
     llvm::StringRef getSourcesRoot() const {
