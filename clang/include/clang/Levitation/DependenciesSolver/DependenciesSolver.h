@@ -56,7 +56,8 @@ public:
 
   // TODO Levitation: pass <PackageID, LDepPath> instead.
   std::shared_ptr<SolvedDependenciesInfo> solve(
-      const tools::FilesMapTy& Files
+      const PathIDsSet &ExternalPackages,
+      const tools::FilesMapTy &Files
   );
 
   bool solve();

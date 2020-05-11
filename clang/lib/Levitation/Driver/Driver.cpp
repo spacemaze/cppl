@@ -1208,7 +1208,10 @@ void LevitationDriverImpl::solveDependencies() {
   Solver.setBuildRoot(Context.Driver.BuildRoot);
   Solver.setVerbose(Context.Driver.isVerbose());
 
-  Context.DependenciesInfo = Solver.solve(Context.Files);
+  Context.DependenciesInfo = Solver.solve(
+      Context.ExternalPackages,
+      Context.Files
+  );
 
   Status.inheritResult(Solver, "Dependencies solver: ");
 }

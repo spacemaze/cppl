@@ -88,10 +88,6 @@ namespace levitation {
     /// Whether this file should publish its interface
     bool IsPublic;
 
-    /// If this is an external package or include file
-    /// In this case we don't need to create .o file.
-    bool IsExternal = false;
-
     DependenciesData()
     : Strings(new DependenciesStringsPool),
       OwnStringsPool(true)

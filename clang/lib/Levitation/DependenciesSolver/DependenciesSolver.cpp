@@ -57,7 +57,8 @@ class DependenciesSolverContext {
   // TODO Levitation: make it singleton?
   DependenciesStringsPool &StringsPool;
 
-  const tools::FilesMapTy &LDepsFiles;
+  const PathIDsSet &ExternalPackages;
+  const tools::FilesMapTy &Files;
 
 
   std::shared_ptr<ParsedDependencies> ParsedDeps;
@@ -70,11 +71,13 @@ public:
 
   DependenciesSolverContext(
       DependenciesSolver &Solver,
-      const tools::FilesMapTy &ldepsFiles
+      const PathIDsSet &externalPackages,
+      const tools::FilesMapTy &files
   )
   : Solver(Solver),
     StringsPool(CreatableSingleton<DependenciesStringsPool >::get()),
-    LDepsFiles(ldepsFiles)
+    ExternalPackages(externalPackages),
+    Files(files)
   {}
 
   DependenciesStringsPool &getStringsPool() {
@@ -97,9 +100,14 @@ public:
     return std::move(SolvedDepsInfo);
   }
 
+  // TODO Levitation: Deprecated
   const SolvedDependenciesInfo &getSolvedDependenciesInfo() const {
     assert(SolvedDepsInfo && "SolvedDependenciesInfo should be set");
     return *SolvedDepsInfo;
+  }
+
+  const PathIDsSet &getExternalPackages() const {
+    return ExternalPackages;
   }
 };
 
@@ -151,6 +159,7 @@ public:
     }
   }
 
+  // TODO Levitation: Deprecated
   static Paths collectLDepsFiles(llvm::StringRef BuildRoot) {
 
     Paths LDepsFiles;
@@ -190,7 +199,7 @@ public:
   }
 
   void collectParsedDependencies() {
-    loadDependencies(Context.LDepsFiles);
+    loadDependencies(Context.Files);
 
     Log.verbose()
     << "Loaded dependencies:\n";
@@ -270,7 +279,7 @@ public:
     for (const auto &kv : Dest) {
 
       const auto &PackageStr = *Context.getStringsPool().getItem(kv.first);
-      const auto &PackageSource = Context.LDepsFiles[kv.first].Source;
+      const auto &PackageSource = Context.Files[kv.first].Source;
 
       Log.log_trace("Checking package '", PackageStr, "'...");
 
@@ -286,7 +295,7 @@ public:
         for (const auto &Dep : kv.second->DeclarationDependencies) {
 
           const auto &DepStr = *Context.getStringsPool().getItem(Dep.FilePathID);
-          const auto &DepSource = Context.LDepsFiles[Dep.FilePathID].Source;
+          const auto &DepSource = Context.Files[Dep.FilePathID].Source;
 
           Log.log_trace("  -- checking decl dep '", DepStr, "'...");
 
@@ -301,7 +310,7 @@ public:
         for (const auto &Dep : kv.second->DefinitionDependencies) {
 
           const auto &DepStr = *Context.getStringsPool().getItem(Dep.FilePathID);
-          const auto &DepSource = Context.LDepsFiles[Dep.FilePathID].Source;
+          const auto &DepSource = Context.Files[Dep.FilePathID].Source;
 
           Log.log_trace("  -- checking def dep '", DepStr, "'...");
 
@@ -352,7 +361,10 @@ public:
     if (!Solver->isValid())
       return;
 
-    auto DGraph = DependenciesGraph::build(Context.getParsedDependencies());
+    auto DGraph = DependenciesGraph::build(
+        Context.getParsedDependencies(),
+        Context.getExternalPackages()
+    );
 
     Context.DepsGraph = DGraph;
 
@@ -551,11 +563,13 @@ public:
 };
 
 std::shared_ptr<SolvedDependenciesInfo>
-DependenciesSolver::solve(const tools::FilesMapTy &LDepsFiles) {
+DependenciesSolver::solve(
+    const PathIDsSet &ExternalPackages,
+    const tools::FilesMapTy &Files
+) {
   auto &Log = log::Logger::get();
 
-  // TODO Levitation: pass <PackageID, LDepPath> instead.
-  DependenciesSolverContext Context(*this, LDepsFiles);
+  DependenciesSolverContext Context(*this, ExternalPackages, Files);
   DependenciesSolverImpl Impl(Context);
 
   Impl.solve();

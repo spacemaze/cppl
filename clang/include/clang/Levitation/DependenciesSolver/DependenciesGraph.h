@@ -140,7 +140,8 @@ private:
 public:
 
   static std::shared_ptr<DependenciesGraph> build(
-      const ParsedDependencies &ParsedDeps
+      const ParsedDependencies &ParsedDeps,
+      const DenseSet<StringID> &ExternalPackages
   ) {
     auto DGraphPtr = std::make_shared<DependenciesGraph>();
     auto &Log = DGraphPtr->Log;
@@ -151,12 +152,13 @@ public:
 
       auto PackagePathID = PackageDeps.first;
       DependenciesData &PackageDependencies = *PackageDeps.second;
+      bool IsExternal = ExternalPackages.count(PackagePathID);
+
 
       Log.log_trace("Creating package for Package #", PackagePathID);
 
       PackageInfo &Package = DGraphPtr->createPackageInfo(
-        PackagePathID,
-        PackageDependencies.IsExternal
+        PackagePathID, IsExternal
       );
 
       // If node has no dependencies we add it into the Roots
@@ -170,9 +172,8 @@ public:
         // Additionally if relevant definition doesn't depent on anything too,
         // then make it root as well.
         if (
-          PackageDependencies.DefinitionDependencies.empty() &&
-          !PackageDependencies.IsExternal
-          ) {
+          PackageDependencies.DefinitionDependencies.empty() && !IsExternal
+        ) {
           assert(Package.Definition);
           DGraphPtr->Roots.insert(Package.Definition->ID);
         }
@@ -183,7 +184,7 @@ public:
           PackageDependencies.DeclarationDependencies
       );
 
-      if (!PackageDependencies.IsExternal) {
+      if (!IsExternal) {
         // For definition we have to add both declaration and definition
         // dependencies.
 
@@ -201,7 +202,7 @@ public:
       if (PackageDependencies.IsPublic)
         DGraphPtr->setPublic(Package.Declaration->ID);
 
-      if (PackageDependencies.IsExternal)
+      if (IsExternal)
         DGraphPtr->setExternal(Package.Declaration->ID);
     }
 
