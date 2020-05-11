@@ -42,10 +42,21 @@ public:
   static void collectFiles(
       FilesVectorTy &Files,
       llvm::StringRef Root,
-      llvm::StringRef Extension
+      llvm::StringRef Extension,
+      std::initializer_list<StringRef> IgnoreDirs = {},
+      bool IgnoreHidden = false
   ) {
     auto &FM = CreatableSingleton<FileManager>::get();
     auto &FS = FM.getVirtualFileSystem();
+
+    SmallVector<SinglePath, 2> IgnoreDirsAbsVec;
+    DenseSet<StringRef> IgnoreDirsAbs;
+
+    for (auto IgnoreDir : IgnoreDirs) {
+      auto IgnoreDirAbs = Path::makeAbsolute<SinglePath>(IgnoreDir);
+      IgnoreDirsAbsVec.push_back(std::move(IgnoreDirAbs));
+      IgnoreDirsAbs.insert(IgnoreDirsAbsVec.back().str());
+    }
 
     Paths SubDirs;
     SubDirs.push_back(Root);
@@ -57,6 +68,12 @@ public:
     while (SubDirs.size()) {
       NewSubDirs.clear();
       for (llvm::StringRef CurDir : SubDirs) {
+        if (!IgnoreDirsAbs.empty()) {
+          auto CurDirAbs = Path::makeAbsolute<SinglePath>(CurDir);
+          if (IgnoreDirsAbs.count(CurDirAbs))
+            continue;
+        }
+
         collectFilesWithExtension(
             Files,
             NewSubDirs,
