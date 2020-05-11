@@ -967,9 +967,6 @@ let Flags = [CC1Option] in {
 def levitation_dependencies_output_file
 : Joined<["-"], "levitation-deps-output-file=">,
 HelpText<"Levitation dependencies output file.">;
-def levitation_sources_root_dir
-: Joined<["-"], "levitation-sources-root-dir=">,
-HelpText<"Levitation sources root directory. Required if 'levitation-deps-output-file' is specified.">;
 
 // TODO Levitation: Consider it to move into Driver options.
 def flevitation_build_object

@@ -1930,8 +1930,6 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   Opts.LevitationDependenciesOutputFile = std::string(
           Args.getLastArgValue(OPT_levitation_dependencies_output_file)
   );
-  Opts.LevitationSourcesRootDir =
-          std::string(Args.getLastArgValue(OPT_levitation_sources_root_dir));
   Opts.LevitationDeclASTMeta =
           std::string(Args.getLastArgValue(OPT_levitation_decl_ast_meta));
   Opts.LevitationASTPrint =
@@ -3620,18 +3618,6 @@ static void parseLevitationManualImportArgs(
     << "-levitation-dependency" << Stage;
   }
 
-  if (!FrontendOpts.LevitationDependenciesOutputFile.empty()) {
-    if (FrontendOpts.LevitationSourcesRootDir.empty()) {
-      Diags.Report(diag::err_fe_levitation_missed_option)
-      << "-levitation-sources-root-dir" << Stage;
-    }
-  } else {
-    if (!FrontendOpts.LevitationSourcesRootDir.empty()) {
-      Diags.Report(diag::err_fe_levitation_wrong_option)
-      << "-levitation-sources-root-dir" << Stage;
-    }
-  }
-
   if (FrontendOpts.LevitationBuildObject) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-flevitation-build-object" << Stage;
@@ -3643,9 +3629,6 @@ static void parseLevitationManualImportArgs(
 
   LangOpts.LevitationMode = 1;
   LangOpts.setLevitationBuildStage(LangOptions::LBSK_ParseManualDeps);
-
-  PreprocessorOpts.LevitationSourcesRootDir =
-      FrontendOpts.LevitationSourcesRootDir;
 }
 
 static void parseLevitationBuildPreambleArgs(
@@ -3663,10 +3646,6 @@ static void parseLevitationBuildPreambleArgs(
   if (!FrontendOpts.LevitationDependencyDeclASTs.empty()) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-dependency" << Stage;
-  }
-  if (!FrontendOpts.LevitationSourcesRootDir.empty()) {
-    Diags.Report(diag::err_fe_levitation_wrong_option)
-    << "-levitation-sources-root-dir" << Stage;
   }
   if (FrontendOpts.LevitationBuildObject) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
@@ -3705,10 +3684,6 @@ static void parseLevitationBuildObjectArgs(
   if (!FrontendOpts.LevitationDependenciesOutputFile.empty()) {
     Diags.Report(diag::err_fe_levitation_wrong_option)
     << "-levitation-deps-output-file=" << Stage;
-  }
-  if (!FrontendOpts.LevitationSourcesRootDir.empty()) {
-    Diags.Report(diag::err_fe_levitation_wrong_option)
-    << "-levitation-sources-root-dir" << Stage;
   }
   if (!FrontendOpts.ASTMergeFiles.empty()) {
     Diags.Report(diag::err_fe_levitation_wrong_option)

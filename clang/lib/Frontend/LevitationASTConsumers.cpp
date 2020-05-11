@@ -131,19 +131,10 @@ namespace levitation {
   };
 
 std::unique_ptr<LevitationPreprocessorConsumer> CreateDependenciesASTProcessor(
-    CompilerInstance &CI,
-    StringRef InFile
+    CompilerInstance &CI
 ) {
   if (CI.getFrontendOpts().LevitationDependenciesOutputFile.empty())
     return nullptr;
-
-  // TODO Levitation: remove this field.
-  //   We only need this for PackagePathID, we we don't need latter anymore.
-  //   Whenever we pick LDeps file, we also know PackageID it corresponds to.
-  auto InFileRel = levitation::Path::makeRelative<SinglePath>(
-      InFile,
-      CI.getFrontendOpts().LevitationSourcesRootDir
-  );
 
   return std::make_unique<ASTDependenciesProcessor>(CI);
 }

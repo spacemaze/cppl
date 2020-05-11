@@ -167,12 +167,6 @@ public:
     }
   };
 
-  // C++ Levitation
-  // TODO Levitation: remove this field.
-  //   We only need this for PackagePathID, we we don't need latter anymore.
-  //   Whenever we pick LDeps file, we also know PackageID it corresponds to.
-  std::string LevitationSourcesRootDir;
-
   // end of C++ Levitation
 
   /// The set of modules that failed to build.

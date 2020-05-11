@@ -375,8 +375,7 @@ std::unique_ptr<levitation::LevitationPreprocessorConsumer>
 LevitationParseImportAction::CreatePreprocessorConsumer() {
   return MultiplexPPConsumerBuilder()
     .addRequired(levitation::CreateDependenciesASTProcessor(
-         getCompilerInstance(),
-         getCurrentFile()
+         getCompilerInstance()
      ))
   .done();
 }

@@ -42,8 +42,7 @@ namespace levitation {
 
 
 std::unique_ptr<LevitationPreprocessorConsumer> CreateDependenciesASTProcessor(
-    CompilerInstance &CI,
-    StringRef InFile
+    CompilerInstance &CI
 );
 
 } // end of namespace levitation

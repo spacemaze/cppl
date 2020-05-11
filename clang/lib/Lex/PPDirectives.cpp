@@ -2372,25 +2372,12 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
 
   auto &Parts = IdentifierParts.first;
 
-  // TODO Levitation: remove this field.
-  //   We only need this for PackagePathID, we we don't need latter anymore.
-  //   Whenever we pick LDeps file, we also know PackageID it corresponds to.
-  StringRef SourcesRoot = PPOpts->LevitationSourcesRootDir;
-
-  levitation::Path::Builder PathBuilderAbs(SourcesRoot);
   levitation::Path::Builder PathBuilderRel;
 
-  for (const auto &Comp : Parts) {
-    PathBuilderAbs.addComponent(Comp);
+  for (const auto &Comp : Parts)
     PathBuilderRel.addComponent(Comp);
-  }
 
-  levitation::StringBuilder StrPathAbs, StrPathRel;
-
-  // TODO Levitation: remove it
-  StrPathAbs
-  << PathBuilderAbs.str()
-  << "." << levitation::FileExtensions::SourceCode;
+  levitation::StringBuilder StrPathRel;
 
   StrPathRel
   << PathBuilderRel.str()

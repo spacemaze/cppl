@@ -22,7 +22,7 @@
 # Example of command, used 'enums' test as a source
 #    // RUN:  %clang -cc1 -std=c++17 -xc++ -levitation-build-preamble %S/../preamble.hpp -o %t-preamble.pch
 #    // Parsing 'Inputs/A'...
-#    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -xc++ -levitation-build-ast -levitation-sources-root-dir=. -levitation-deps-output-file=%t-Inputs_A.ldeps %S/Inputs/A.cppl -o %t-Inputs_A.ast
+#    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -xc++ -levitation-build-ast -levitation-deps-output-file=%t-Inputs_A.ldeps %S/Inputs/A.cppl -o %t-Inputs_A.ast
 #    // Instantiating 'Inputs/A'...
 #    // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%t-preamble.pch -flevitation-build-decl -emit-pch %t-Inputs_A.ast -o %t-Inputs_A.decl-ast
 #    // Compiling 'Inputs/A'...
@@ -605,7 +605,6 @@ function parseImport {
     MODULE=$1
 
     BUILD_AST_FLAGS="-xc++ -levitation-parse-import"
-    BUILD_AST_FLAGS="$BUILD_AST_FLAGS -levitation-sources-root-dir=$(getSourceRootCommandLineParam)"
 
     setupFlags "$2" "$BUILD_AST_FLAGS"
 

@@ -4285,10 +4285,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
             << "PARSE";
 
       CmdArgs.push_back(Args.MakeArgString(
-          Twine("-levitation-sources-root-dir=") + SrcRoot
-      ));
-
-      CmdArgs.push_back(Args.MakeArgString(
           Twine("-levitation-deps-output-file=") + DepsOutput
       ));
 
