@@ -37,6 +37,9 @@ class HeaderGenerator {
   const DeclASTMeta::FragmentsVectorTy& SkippedBytes;
   bool Verbose;
   bool DryRun;
+
+  bool CreateDecl;
+
   log::Logger &Log;
 
 public:
@@ -47,7 +50,8 @@ public:
       const Paths &Includes,
       const DeclASTMeta::FragmentsVectorTy &SkippedBytes,
       bool Verbose,
-      bool DryRun
+      bool DryRun,
+      bool CreateDecl = false
   )
   : OutputFile(OutputFile),
     SourceFile(SourceFile),
@@ -56,6 +60,7 @@ public:
     SkippedBytes(SkippedBytes),
     Verbose(Verbose),
     DryRun(DryRun),
+    CreateDecl(CreateDecl),
     Log(log::Logger::get())
   {}
 
@@ -90,7 +95,7 @@ public:
 
         emitHeadComment(out);
 
-        emitIncludes(out);
+        emitHeader(out);
 
         emitAfterIncludesComment(out);
 
@@ -253,8 +258,7 @@ protected:
         << " file contents.\n\n";
   }
 
-  void emitIncludes(llvm::raw_ostream &out) {
-
+  void emitHeader(llvm::raw_ostream &out) {
     if (Includes.empty() && Preamble.empty())
       return;
 
@@ -266,10 +270,42 @@ protected:
     if (Includes.empty())
       return;
 
+    if (!CreateDecl)
+      emitIncludes(out);
+    else
+      emitImports(out);
+
+    out << "\n";
+  }
+
+  void emitIncludes(llvm::raw_ostream &out) {
+
+    assert(!Includes.empty());
+
     out << "// C++ Levitation: below are #include directives for all dependencies\n\n";
 
     for (const auto &inc : Includes) {
       out << "#include \"" << inc << "\"\n";
+    }
+
+    out << "\n";
+  }
+
+  void emitImports(llvm::raw_ostream &out) {
+
+    assert(!Includes.empty());
+
+    out << "// C++ Levitation: below are #import directives for all dependencies\n\n";
+
+    for (const auto &inc : Includes) {
+      SmallVector<StringRef, 16> Components;
+      inc.str().split(Components, llvm::sys::path::get_separator());
+
+      out << "#import ";
+      for (size_t i = 0, e = Components.size() - 1; i != e; ++i) {
+        out << Components[i] << "::";
+      }
+      out << Components.back() << ";\n";
     }
 
     out << "\n";
@@ -282,9 +318,14 @@ protected:
   }
 
   void dump(llvm::raw_ostream &out) {
-    DriverPhaseDump::action(
-        out, OutputFile, SourceFile, Includes, "GEN HEADER", ".h"
-    );
+    if (!CreateDecl)
+      DriverPhaseDump::action(
+          out, OutputFile, SourceFile, Includes, "GEN HEADER", ".h"
+      );
+    else
+      DriverPhaseDump::action(
+          out, OutputFile, SourceFile, Includes, "GEN IMPORT", ".cppl"
+      );
   }
 };
 

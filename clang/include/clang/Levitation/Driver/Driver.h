@@ -54,6 +54,10 @@ namespace clang { namespace levitation { namespace tools {
 
     bool OutputHeadersDirDefault = true;
     levitation::SinglePath OutputHeadersDir;
+
+    bool OutputDeclsDirDefault = true;
+    levitation::SinglePath OutputDeclsDir;
+
     llvm::StringRef Output;
 
     bool LinkPhaseEnabled = true;
@@ -99,6 +103,11 @@ namespace clang { namespace levitation { namespace tools {
         OutputHeadersDir = levitation::Path::getPath<SinglePath>(
             BuildRoot, DriverDefaults::HEADER_DIR_SUFFIX
         );
+
+      if (OutputDeclsDirDefault)
+        OutputDeclsDir = levitation::Path::getPath<SinglePath>(
+            BuildRoot, DriverDefaults::DECLS_DIR_SUFFIX
+        );
     }
 
     llvm::StringRef getPreambleSource() const {
@@ -142,8 +151,17 @@ namespace clang { namespace levitation { namespace tools {
       OutputHeadersDirDefault = false;
     }
 
+    void setOutputDeclsDir(llvm::StringRef h) {
+      OutputDeclsDir = h;
+      OutputDeclsDirDefault = false;
+    }
+
     llvm::StringRef getOutputHeadersDir() const {
       return OutputHeadersDir;
+    }
+
+    llvm::StringRef getOutputDeclsDir() const {
+      return OutputDeclsDir;
     }
 
     llvm::StringRef getLevitationLibrariesSubDir() const {
@@ -151,6 +169,10 @@ namespace clang { namespace levitation { namespace tools {
     }
 
     bool shouldCreateHeaders() const {
+      return !LinkPhaseEnabled;
+    }
+
+    bool shouldCreateDecls() const {
       return !LinkPhaseEnabled;
     }
 

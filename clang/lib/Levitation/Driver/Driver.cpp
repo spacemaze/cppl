@@ -168,6 +168,10 @@ private:
       const DependenciesGraph &Graph
   ) const;
 
+  Paths getImportSources(
+      const DependenciesGraph::Node &N,
+      const DependenciesGraph &Graph
+  ) const;
 };
 
 /*static*/
@@ -1316,6 +1320,12 @@ void LevitationDriverImpl::collectProjectSources() {
         FileExtensions::Header
     );
 
+    Files.Decl = Path::getPath<SinglePath>(
+        Context.Driver.getOutputDeclsDir(),
+        PackagePath,
+        FileExtensions::SourceCode
+    );
+
     SinglePath OutputTemplate = Path::getPath<SinglePath>(
         Context.Driver.BuildRoot,
         PackagePath
@@ -1387,6 +1397,9 @@ void LevitationDriverImpl::collectLibrariesSources() {
         .addComponent(PackagePath)
         .replaceExtension(FileExtensions::Header)
         .done(Files.Header);
+
+      // Note, we don't generate decl .cpp files for levitation libraries.
+      // Source file itself is a decl file.
 
       SinglePath OutputTemplate;
 
@@ -1513,6 +1526,20 @@ Paths LevitationDriverImpl::getIncludeSources(
   return Includes;
 }
 
+Paths LevitationDriverImpl::getImportSources(
+    const DependenciesGraph::Node &N,
+    const DependenciesGraph &Graph
+) const {
+  Paths Imports;
+  for (auto DepNID : N.Dependencies) {
+    auto &DNode = Graph.getNode(DepNID);
+    auto DepPackage = *Strings.getItem(DNode.PackageInfo->PackagePath);
+
+    Imports.push_back(DepPackage);
+  }
+  return Imports;
+}
+
 bool LevitationDriverImpl::processDefinition(
     const DependenciesGraph::Node &N
 ) {
@@ -1583,7 +1610,10 @@ bool LevitationDriverImpl::processDeclaration(
       Context.Driver.shouldCreateHeaders() &&
       Graph.isPublic(N.ID);
 
-  auto IncludeSources = getIncludeSources(N, Graph);
+  bool MustGenerateDecl =
+      Context.Driver.shouldCreateDecls() &&
+      Graph.isPublic(N.ID) &&
+      !Graph.isExternal(N.ID);
 
   DeclASTMeta Meta;
   if (!DeclASTMetaLoader::fromFile(
@@ -1594,6 +1624,10 @@ bool LevitationDriverImpl::processDeclaration(
   bool Success = true;
 
   if (MustGenerateHeaders) {
+
+    assert(!Files.Header.empty());
+
+    auto IncludeSources = getIncludeSources(N, Graph);
     Success = HeaderGenerator(
         Files.Header,
         Files.Source,
@@ -1602,6 +1636,25 @@ bool LevitationDriverImpl::processDeclaration(
         Meta.getFragmentsToSkip(),
         Context.Driver.isVerbose(),
         Context.Driver.DryRun
+    )
+    .execute();
+  }
+
+  if (MustGenerateDecl) {
+
+    assert(!Files.Decl.empty());
+
+    auto DeclSources = getImportSources(N, Graph);
+
+    Success = HeaderGenerator(
+        Files.Decl,
+        Files.Source,
+        N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
+        DeclSources,
+        Meta.getFragmentsToSkip(),
+        Context.Driver.isVerbose(),
+        Context.Driver.DryRun,
+        /*import*/true
     )
     .execute();
   }
@@ -1756,6 +1809,10 @@ LevitationDriver::LevitationDriver(StringRef CommandPath)
   OutputHeadersDir = levitation::Path::getPath<SinglePath>(
       BuildRoot, DriverDefaults::HEADER_DIR_SUFFIX
   );
+
+  OutputDeclsDir = levitation::Path::getPath<SinglePath>(
+      BuildRoot, DriverDefaults::DECLS_DIR_SUFFIX
+  );
 }
 
 void LevitationDriver::setExtraPreambleArgs(StringRef Args) {
@@ -1845,6 +1902,7 @@ void LevitationDriver::dumpParameters() {
   << "    JobsNumber (including main thread): " << JobsNumber << "\n"
   << "    Output: " << Output << "\n"
   << "    OutputHeadersDir: " << (isLinkPhaseEnabled() ? "<n/a>" : OutputHeadersDir.c_str()) << "\n"
+  << "    OutputDeclsDir: " << (isLinkPhaseEnabled() ? "<n/a>" : OutputDeclsDir.c_str()) << "\n"
   << "    DryRun: " << (DryRun ? "yes" : "no") << "\n"
   << "\n";
 

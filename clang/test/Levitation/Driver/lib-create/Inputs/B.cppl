@@ -1,4 +1,10 @@
-// RUN: FileCheck -input-file=%T/include/B.h %s
+// Due to dependencies graph B depends only on C
+// there is no direct preamble dependency.
+
 // CHECK: {{^\s*[^/]*}}#include "Inputs/C.h"
+// IMPORT-CHECK: {{^\s*[^/]*}}#import Inputs::C
+
 // CHECK-NOT: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"
+// IMPORT-CHECK-NOT: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"
+
 #import Inputs::C

@@ -27,6 +27,7 @@ namespace clang { namespace levitation { namespace tools {
 
     SinglePath Source;
     SinglePath Header;
+    SinglePath Decl;
     SinglePath LDeps;
     SinglePath LDepsMeta;
     SinglePath DeclASTMetaFile;

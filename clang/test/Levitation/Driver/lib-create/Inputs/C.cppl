@@ -1,2 +1,4 @@
-// RUN: FileCheck -input-file=%T/include/C.h %s
+// Due to dependencies graph C depends on preamble only.
+
 // CHECK: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"
+// IMPORT-CHECK: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"

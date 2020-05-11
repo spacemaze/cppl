@@ -82,6 +82,12 @@ int levitation_driver_main(int argc, char **argv) {
           [&](StringRef v) { Driver.setOutputHeadersDir(v); }
       )
       .optional(
+          "-decl-out", "<path>",
+          "Path to declarations root directory. If specified, then declarations "
+          "generation stage will be added to the compilation pipeline.",
+          [&](StringRef v) { Driver.setOutputDeclsDir(v); }
+      )
+      .optional(
           "-stdlib", "<std lib name>",
           "Name of standard library, usually 'libc++' or 'stdlibc++'.",
           [&](StringRef v) { Driver.setStdLib(v); }
