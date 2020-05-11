@@ -2373,9 +2373,9 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
   auto &Parts = IdentifierParts.first;
 
   levitation::Path::Builder PathBuilderRel;
-
   for (const auto &Comp : Parts)
     PathBuilderRel.addComponent(Comp);
+  PathBuilderRel.done();
 
   levitation::StringBuilder StrPathRel;
 

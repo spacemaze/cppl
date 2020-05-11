@@ -172,8 +172,7 @@ using namespace llvm;
         }
 
         const SinglePath& str() {
-          assert(!Done);
-          Done = true;
+          assert(Done);
           return Result;
         }
 

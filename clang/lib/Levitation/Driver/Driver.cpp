@@ -1342,7 +1342,13 @@ void LevitationDriverImpl::collectLibrariesSources() {
 
   for (auto &CollectedExtLib : Context.Driver.LevitationLibs) {
 
-    auto ExtLibAbsPath = Path::makeAbsolute<SinglePath>(CollectedExtLib);
+    Path::Builder ExtLibPath;
+    ExtLibPath
+      .addComponent(Context.Driver.SourcesRoot)
+      .addComponent(CollectedExtLib)
+      .done();
+
+    auto ExtLibAbsPath = Path::makeAbsolute<SinglePath>(ExtLibPath.str());
 
     Log.log_verbose("  Checking dir '", CollectedExtLib, "'...");
     Paths ExternalPackages;
