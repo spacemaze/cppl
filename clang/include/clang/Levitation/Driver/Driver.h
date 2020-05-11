@@ -110,6 +110,10 @@ namespace clang { namespace levitation { namespace tools {
         );
     }
 
+    StringRef getBuildRoot() const {
+      return BuildRoot;
+    }
+
     llvm::StringRef getPreambleSource() const {
       return PreambleSource;
     }
