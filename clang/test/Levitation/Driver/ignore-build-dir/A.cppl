@@ -1,0 +1,8 @@
+// RUN: rm -Rf %T/*
+// RUN: not cppl -root=%S -buildRoot=%S/Inputs -lit --verbose -### | \
+// RUN: FileCheck %s --check-prefix=DRIVER-CHECK
+
+// DRIVER-CHECK-NOT: PARSE IMP {{.*}}B.cppl
+// DRIVER-CHECK-DAG: PARSE IMP {{.*}}A.cppl
+
+#import Inputs::B

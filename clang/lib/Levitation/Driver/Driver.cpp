@@ -1284,7 +1284,8 @@ void LevitationDriverImpl::collectProjectSources() {
   FileSystem::collectFiles(
       ProjectPackages,
       Context.Driver.SourcesRoot,
-      FileExtensions::SourceCode
+      FileExtensions::SourceCode,
+      /*ignore dirs*/ { Context.Driver.getBuildRoot() }
   );
 
   // Normalize all paths to project .cppl files and register them.
@@ -1365,7 +1366,8 @@ void LevitationDriverImpl::collectLibrariesSources() {
     FileSystem::collectFiles(
         ExternalPackages,
         ExtLibAbsPath,
-        FileExtensions::SourceCode
+        FileExtensions::SourceCode,
+        /*ignore dirs*/ { Context.Driver.getBuildRoot() }
     );
 
     for (const auto &CollectedPath : ExternalPackages) {
@@ -1901,6 +1903,7 @@ void LevitationDriver::dumpParameters() {
   << "  Running driver with following parameters:\n\n"
   << "    BinaryDir: " << BinDir << "\n"
   << "    SourcesRoot: " << SourcesRoot << "\n"
+  << "    BuildRoot: " << BuildRoot << "\n"
   << "    PreambleSource: " << (PreambleSource.empty() ? "<preamble compilation not requested>" : PreambleSource) << "\n"
   << "    JobsNumber (including main thread): " << JobsNumber << "\n"
   << "    Output: " << Output << "\n"
