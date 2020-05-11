@@ -24,6 +24,7 @@
 #include "clang/Levitation/DependenciesSolver/DependenciesSolver.h"
 #include "clang/Levitation/DependenciesSolver/SolvedDependenciesInfo.h"
 #include "clang/Levitation/Driver/Driver.h"
+#include "clang/Levitation/Driver/PackageFiles.h"
 #include "clang/Levitation/Driver/HeaderGenerator.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
@@ -53,37 +54,6 @@ namespace {
   // If something is required for particular step only it should
   // be out of context.
 
-  struct FilesInfo {
-    SinglePath Source;
-    SinglePath Header;
-    SinglePath LDeps;
-    SinglePath LDepsMeta;
-    SinglePath DeclASTMetaFile;
-    SinglePath ObjMetaFile;
-
-    // FIXME Levitation: deprecated
-    SinglePath AST;
-
-    SinglePath DeclAST;
-    SinglePath Object;
-
-    void dump(log::Logger &Log, log::Level Level, unsigned indent = 0) {
-
-      std::string StrIndent(indent, ' ');
-
-      Log.log(Level, StrIndent, "Source: ", Source);
-      Log.log(Level, StrIndent, "Header: ", Header);
-      Log.log(Level, StrIndent, "LDeps: ", LDeps);
-      Log.log(Level, StrIndent, "LDepsMeta: ", LDepsMeta);
-      Log.log(Level, StrIndent, "DeclASTMetaFile: ", DeclASTMetaFile);
-      Log.log(Level, StrIndent, "ObjMetaFile: ", ObjMetaFile);
-      Log.log(Level, StrIndent, "DeclAST: ", DeclAST);
-      Log.log(Level, StrIndent, "Object: ", Object);
-
-    }
-
-  };
-
   struct RunContext {
 
     // TODO Levitation: Introduce LevitationDriverOpts and use here
@@ -95,7 +65,7 @@ namespace {
     PathIDsSet ProjectPackages;
     PathIDsSet ExternalPackages;
 
-    llvm::DenseMap<StringID, FilesInfo> Files;
+    FilesMapTy Files;
 
     std::shared_ptr<SolvedDependenciesInfo> DependenciesInfo;
 
@@ -148,8 +118,10 @@ private:
       bool SetObjectRelatedInfo
   );
 
+  // TODO Levitation: deprecated
   void addMainFileInfo();
 
+  // TODO Levitation: deprecated
   bool processDependencyNodeDeprecated(
       const DependenciesGraph::Node &N
   );
@@ -1192,7 +1164,7 @@ void LevitationDriverImpl::runParseImport() {
 
   for (auto PackagePath : Context.AllPackages) {
 
-    auto Files = Context.Files[PackagePath];
+    auto &Files = Context.Files[PackagePath];
 
     DeclASTMeta ldepsMeta;
 
@@ -1236,15 +1208,7 @@ void LevitationDriverImpl::solveDependencies() {
   Solver.setBuildRoot(Context.Driver.BuildRoot);
   Solver.setVerbose(Context.Driver.isVerbose());
 
-  // Get all discovered project LDep files
-
-  DependenciesSolver::LDepFilesTy LDepsFiles;
-  for (auto &PackagePath : Context.AllPackages) {
-    assert(Context.Files.count(PackagePath));
-    LDepsFiles.try_emplace(PackagePath, Context.Files[PackagePath].LDeps);
-  }
-
-  Context.DependenciesInfo = Solver.solve(LDepsFiles);
+  Context.DependenciesInfo = Solver.solve(Context.Files);
 
   Status.inheritResult(Solver, "Dependencies solver: ");
 }
@@ -1333,7 +1297,7 @@ void LevitationDriverImpl::collectProjectSources() {
 
     Log.log_trace("  Generating paths for '", PackagePath, "'...");
 
-    FilesInfo Files;
+    auto &Files = Context.Files.create(PackageID);
 
     // In current implementation package path is equal to relative source path.
 
@@ -1356,11 +1320,7 @@ void LevitationDriverImpl::collectProjectSources() {
 
     setOutputFilesInfo(Files, OutputTemplate, true);
 
-    auto Res = Context.Files.insert({ PackageID, Files });
-
     Files.dump(Log, log::Level::Trace, 4);
-
-    assert(Res.second);
   }
 
   Log.verbose()
@@ -1402,7 +1362,7 @@ void LevitationDriverImpl::collectLibrariesSources() {
           "Checking lib package '", Package, "' -> '", PackagePath, "'..."
       );
 
-      FilesInfo Files;
+      auto &Files = Context.Files.create(PackageID);
 
       // For libraries sources keep absolute source paths
 
@@ -1430,11 +1390,7 @@ void LevitationDriverImpl::collectLibrariesSources() {
 
       setOutputFilesInfo(Files, OutputTemplate, false);
 
-      auto Res = Context.Files.insert({ PackageID, Files });
-
       Files.dump(Log, log::Level::Trace, 4);
-
-      assert(Res.second);
     }
   }
 
@@ -1498,8 +1454,8 @@ bool LevitationDriverImpl::processDependencyNode(
 const FilesInfo& LevitationDriverImpl::getFilesInfoFor(
     const DependenciesGraph::Node &N
 ) const {
-  auto FoundFiles = Context.Files.find(N.PackageInfo->PackagePath);
-  if(FoundFiles == Context.Files.end()) {
+  auto *FoundFiles = Context.Files.tryGet(N.PackageInfo->PackagePath);
+  if(!FoundFiles) {
     const auto &SrcRel = *Strings.getItem(N.PackageInfo->PackagePath);
     Log.log_error(
         "Package '",
@@ -1508,8 +1464,7 @@ const FilesInfo& LevitationDriverImpl::getFilesInfoFor(
     );
     llvm_unreachable("Package not found");
   }
-
-  return FoundFiles->second;
+  return *FoundFiles;
 }
 
 Paths LevitationDriverImpl::getFullDependencies(

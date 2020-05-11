@@ -16,6 +16,7 @@
 
 #include "clang/Levitation/Common/Failable.h"
 #include "clang/Levitation/Common/Path.h"
+#include "clang/Levitation/Driver/PackageFiles.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallString.h"
@@ -41,8 +42,6 @@ class DependenciesSolver : public Failable {
   bool Verbose = false;
 public:
 
-  using LDepFilesTy = DenseMap<StringID, StringRef>;
-
   void setVerbose(bool Verbose) {
     DependenciesSolver::Verbose = Verbose;
   }
@@ -56,7 +55,9 @@ public:
   }
 
   // TODO Levitation: pass <PackageID, LDepPath> instead.
-  std::shared_ptr<SolvedDependenciesInfo> solve(const LDepFilesTy &LDepsFiles);
+  std::shared_ptr<SolvedDependenciesInfo> solve(
+      const tools::FilesMapTy& Files
+  );
 
   bool solve();
 

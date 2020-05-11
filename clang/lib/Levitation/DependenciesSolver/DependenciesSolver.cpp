@@ -57,7 +57,7 @@ class DependenciesSolverContext {
   // TODO Levitation: make it singleton?
   DependenciesStringsPool &StringsPool;
 
-  const DependenciesSolver::LDepFilesTy &LDepsFiles;
+  const tools::FilesMapTy &LDepsFiles;
 
 
   std::shared_ptr<ParsedDependencies> ParsedDeps;
@@ -70,7 +70,7 @@ public:
 
   DependenciesSolverContext(
       DependenciesSolver &Solver,
-      const DependenciesSolver::LDepFilesTy &ldepsFiles
+      const tools::FilesMapTy &ldepsFiles
   )
   : Solver(Solver),
     StringsPool(CreatableSingleton<DependenciesStringsPool >::get()),
@@ -233,7 +233,7 @@ public:
     return true;
   }
 
-  void loadDependencies(const DependenciesSolver::LDepFilesTy &ParsedDepFiles) {
+  void loadDependencies(const tools::FilesMapTy &ParsedDepFiles) {
     Context.ParsedDeps = std::make_shared<ParsedDependencies>(
         Context.getStringsPool()
     );
@@ -243,9 +243,9 @@ public:
 
     auto &FM = CreatableSingleton<FileManager>::get();
 
-    for (auto &kv : ParsedDepFiles) {
+    for (auto &kv : ParsedDepFiles.getUniquePtrMap()) {
       StringID PackageID = kv.first;
-      StringRef LDepPath = kv.second;
+      StringRef LDepPath = kv.second->LDeps;
 
       if (auto Buffer = FM.getBufferForFile(LDepPath)) {
 
@@ -270,17 +270,27 @@ public:
     for (const auto &kv : Dest) {
 
       const auto &PackageStr = *Context.getStringsPool().getItem(kv.first);
+      const auto &PackageSource = Context.LDepsFiles[kv.first].Source;
 
       Log.log_trace("Checking package '", PackageStr, "'...");
 
-      if (!sourceExists(PackageStr)) {
-        Log.log_error("Missed package: '", PackageStr, "'");
+      if (!sourceExists(PackageSource)) {
+        Log.log_error(
+            "Missed package: '",
+            PackageStr,
+            "', source doesn't exists: '",
+            PackageSource,"'"
+        );
         FoundMissedDependencies = true;
       } else {
         for (const auto &Dep : kv.second->DeclarationDependencies) {
+
           const auto &DepStr = *Context.getStringsPool().getItem(Dep.FilePathID);
+          const auto &DepSource = Context.LDepsFiles[Dep.FilePathID].Source;
+
           Log.log_trace("  -- checking decl dep '", DepStr, "'...");
-          if (!sourceExists(DepStr)) {
+
+          if (!sourceExists(DepSource)) {
             Log.log_error(
                 "Missed declaration dependency: '", DepStr,
                 "', used by '", PackageStr, "'"
@@ -289,9 +299,13 @@ public:
           }
         }
         for (const auto &Dep : kv.second->DefinitionDependencies) {
+
           const auto &DepStr = *Context.getStringsPool().getItem(Dep.FilePathID);
+          const auto &DepSource = Context.LDepsFiles[Dep.FilePathID].Source;
+
           Log.log_trace("  -- checking def dep '", DepStr, "'...");
-          if (!sourceExists(DepStr)) {
+
+          if (!sourceExists(DepSource)) {
             Log.log_error(
                 "Missed declaration dependency: '", DepStr,
                 "', used by '", PackageStr, "'"
@@ -456,6 +470,7 @@ public:
     llvm::sys::fs::make_absolute(SourcePath);
   }
 
+  // TODO Levitation: Deprecated
   DependenciesPaths buildDirectDependencies(
     StringRef DepsRoot,
     const DependenciesStringsPool &Strings,
@@ -492,6 +507,7 @@ public:
     return Paths;
   }
 
+  // TODO Levitation: Deprecated
   bool writeDependenciesFile(
       DependenciesSolver &Solver,
       StringRef Extension,
@@ -535,7 +551,7 @@ public:
 };
 
 std::shared_ptr<SolvedDependenciesInfo>
-DependenciesSolver::solve(const LDepFilesTy &LDepsFiles) {
+DependenciesSolver::solve(const tools::FilesMapTy &LDepsFiles) {
   auto &Log = log::Logger::get();
 
   // TODO Levitation: pass <PackageID, LDepPath> instead.
