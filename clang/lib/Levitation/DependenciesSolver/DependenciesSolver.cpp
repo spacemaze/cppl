@@ -276,51 +276,51 @@ public:
 
     bool FoundMissedDependencies = false;
 
+    auto checkSource = [&] (StringID PackageID, StringRef CheckName, StringRef SourceType) {
+      const auto &PackageStr = *Context.getStringsPool().getItem(PackageID);
+
+      auto *PackageFile = Context.Files.tryGet(PackageID);
+
+      Log.log_trace(CheckName, " '", PackageStr, "'...");
+
+      if (!PackageFile) {
+        Log.log_error(
+            "Missed ", SourceType,
+            " '", PackageStr, "'"
+        );
+        return false;
+      }
+
+      if (!sourceExists(PackageFile->Source)) {
+        Log.log_error(
+            "Missed ", SourceType, " '",
+            PackageStr,
+            "' -> '",
+            PackageFile, "' : it was found, but then disappeared."
+        );
+        llvm_unreachable("Fatal unexpected source kidnapping.");
+      }
+      return true;
+    };
+
     for (const auto &kv : Dest) {
 
-      const auto &PackageStr = *Context.getStringsPool().getItem(kv.first);
-      const auto &PackageSource = Context.Files[kv.first].Source;
-
-      Log.log_trace("Checking package '", PackageStr, "'...");
-
-      if (!sourceExists(PackageSource)) {
-        Log.log_error(
-            "Missed package: '",
-            PackageStr,
-            "', source doesn't exists: '",
-            PackageSource,"'"
-        );
+      if (!checkSource(kv.first, "Checking package", "package")) {
         FoundMissedDependencies = true;
       } else {
         for (const auto &Dep : kv.second->DeclarationDependencies) {
-
-          const auto &DepStr = *Context.getStringsPool().getItem(Dep.FilePathID);
-          const auto &DepSource = Context.Files[Dep.FilePathID].Source;
-
-          Log.log_trace("  -- checking decl dep '", DepStr, "'...");
-
-          if (!sourceExists(DepSource)) {
-            Log.log_error(
-                "Missed declaration dependency: '", DepStr,
-                "', used by '", PackageStr, "'"
-            );
-            FoundMissedDependencies = true;
-          }
+          FoundMissedDependencies |= !checkSource(
+              Dep.FilePathID,
+              "  -- checking decl dep",
+              "declaration dependency"
+          );
         }
         for (const auto &Dep : kv.second->DefinitionDependencies) {
-
-          const auto &DepStr = *Context.getStringsPool().getItem(Dep.FilePathID);
-          const auto &DepSource = Context.Files[Dep.FilePathID].Source;
-
-          Log.log_trace("  -- checking def dep '", DepStr, "'...");
-
-          if (!sourceExists(DepSource)) {
-            Log.log_error(
-                "Missed declaration dependency: '", DepStr,
-                "', used by '", PackageStr, "'"
-            );
-            FoundMissedDependencies = true;
-          }
+          FoundMissedDependencies |= !checkSource(
+              Dep.FilePathID,
+              "  -- checking def dep",
+              "definition dependency"
+          );
         }
       }
     }
