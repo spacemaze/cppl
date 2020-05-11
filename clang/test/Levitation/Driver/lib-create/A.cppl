@@ -30,7 +30,8 @@
 #public
 
 // CHECK: {{^\s*[^/]*}}#include "Inputs/B.h"
-// IMPORT-CHECK: {{^\s*[^/]*}}#import Inputs::B
+// IMPORT-CHECK-NOT: {{^\s*[^/]*}}#import Inputs::B{{.+}}
+// IMPORT-CHECK:     {{^\s*[^/]*}}#import Inputs::B
 
 // CHECK-NOT: {{^\s*[^/]*}}#include "Inputs/C.h"
 // IMPORT-CHECK-NOT: {{^\s*[^/]*}}#import Inputs::C

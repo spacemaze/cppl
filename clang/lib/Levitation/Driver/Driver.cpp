@@ -1535,6 +1535,9 @@ Paths LevitationDriverImpl::getImportSources(
     auto &DNode = Graph.getNode(DepNID);
     auto DepPackage = *Strings.getItem(DNode.PackageInfo->PackagePath);
 
+    // Remove extension, A/B/C.cppl -> A/B/C
+    DepPackage = Path::replaceExtension<SinglePath>(DepPackage, "");
+
     Imports.push_back(DepPackage);
   }
   return Imports;

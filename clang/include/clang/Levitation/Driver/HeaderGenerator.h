@@ -305,7 +305,7 @@ protected:
       for (size_t i = 0, e = Components.size() - 1; i != e; ++i) {
         out << Components[i] << "::";
       }
-      out << Components.back() << ";\n";
+      out << Components.back() << "\n";
     }
 
     out << "\n";
