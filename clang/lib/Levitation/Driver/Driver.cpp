@@ -1238,10 +1238,10 @@ void LevitationDriverImpl::solveDependencies() {
 
   // Get all discovered project LDep files
 
-  Paths LDepsFiles;
+  DependenciesSolver::LDepFilesTy LDepsFiles;
   for (auto &PackagePath : Context.AllPackages) {
     assert(Context.Files.count(PackagePath));
-    LDepsFiles.push_back(Context.Files[PackagePath].LDeps);
+    LDepsFiles.try_emplace(PackagePath, Context.Files[PackagePath].LDeps);
   }
 
   Context.DependenciesInfo = Solver.solve(LDepsFiles);

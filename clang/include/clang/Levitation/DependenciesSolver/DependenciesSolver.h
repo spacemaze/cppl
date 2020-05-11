@@ -41,6 +41,8 @@ class DependenciesSolver : public Failable {
   bool Verbose = false;
 public:
 
+  using LDepFilesTy = DenseMap<StringID, StringRef>;
+
   void setVerbose(bool Verbose) {
     DependenciesSolver::Verbose = Verbose;
   }
@@ -54,7 +56,7 @@ public:
   }
 
   // TODO Levitation: pass <PackageID, LDepPath> instead.
-  std::shared_ptr<SolvedDependenciesInfo> solve(const Paths &LDepsFiles);
+  std::shared_ptr<SolvedDependenciesInfo> solve(const LDepFilesTy &LDepsFiles);
 
   bool solve();
 

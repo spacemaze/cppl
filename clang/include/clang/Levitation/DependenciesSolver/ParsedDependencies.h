@@ -29,11 +29,11 @@ public:
 
   ParsedDependencies(DependenciesStringsPool &Strings) : Strings(Strings) {}
 
-  void add(const DependenciesData &Deps) {
+  void add(StringID PackageID, const DependenciesData &Deps) {
 
     auto OldToNew = makeOldToNew(*Deps.Strings);
 
-    auto LevitationPackage = createPackageFor(OldToNew[Deps.PackageFilePathID]);
+    auto LevitationPackage = createPackageFor(PackageID);
 
     LevitationPackage->IsPublic = Deps.IsPublic;
 
@@ -47,10 +47,7 @@ public:
       LevitationPackage->DefinitionDependencies.insert(Declaration(NewDepID));
     }
 
-    auto InsertionRes = Map.insert({
-      LevitationPackage->PackageFilePathID,
-      std::move(LevitationPackage)
-    });
+    auto InsertionRes = Map.insert({PackageID, std::move(LevitationPackage)});
 
     assert(
         InsertionRes.second && "Loaded dependencies has been already added"
@@ -79,7 +76,7 @@ private:
       std::function<bool(PathsPoolTy::key_type)>&& addIfPredicate = nullptr
   ) {
     if (addIfPredicate == nullptr || addIfPredicate(NewPackageID))
-      return std::make_unique<DependenciesData>(&Strings, NewPackageID);
+      return std::make_unique<DependenciesData>(&Strings);
 
     return nullptr;
   }

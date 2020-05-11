@@ -340,8 +340,6 @@ namespace levitation {
           Dependencies.DefinitionDependencies
       );
 
-      Data.PackageFilePathID = Dependencies.PackageFilePathID;
-
       Data.IsPublic = Dependencies.IsPublic;
       return Data;
     }
@@ -361,10 +359,7 @@ namespace levitation {
 
         writeStrings(*Data.Strings);
 
-        writePackageTopLevelFields(
-            Data.PackageFilePathID,
-            Data.IsPublic
-        );
+        writePackageTopLevelFields(Data.IsPublic);
 
         writeDeclarations(
                 DEPS_DECLARATION_DEPENDENCIES_BLOCK_ID,
@@ -400,10 +395,8 @@ namespace levitation {
       }
     }
 
-    void writePackageTopLevelFields(
-        StringID PathID, bool IsPublic
-    ) {
-      RecordData::value_type Record[] { PathID, (uint64_t)IsPublic };
+    void writePackageTopLevelFields(bool IsPublic) {
+      RecordData::value_type Record[] { (uint64_t)IsPublic };
       Writer.EmitRecord(DEPS_PACKAGE_TOP_LEVEL_FIELDS_RECORD_ID, Record);
     }
 
@@ -1030,11 +1023,7 @@ namespace levitation {
     bool readPackageTopLevelFields(
       DependenciesData &Data, const RecordTy &Record
     ) {
-      Data.PackageFilePathID = normalizeIfNeeded(
-          *Data.Strings, (StringID)Record[0]
-      );
-      Data.IsPublic = (bool)Record[1];
-
+      Data.IsPublic = (bool)Record[0];
       return true;
     }
 

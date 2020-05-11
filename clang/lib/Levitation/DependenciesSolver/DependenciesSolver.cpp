@@ -57,7 +57,7 @@ class DependenciesSolverContext {
   // TODO Levitation: make it singleton?
   DependenciesStringsPool &StringsPool;
 
-  const Paths &LDepsFiles;
+  const DependenciesSolver::LDepFilesTy &LDepsFiles;
 
 
   std::shared_ptr<ParsedDependencies> ParsedDeps;
@@ -70,7 +70,7 @@ public:
 
   DependenciesSolverContext(
       DependenciesSolver &Solver,
-      const Paths &ldepsFiles
+      const DependenciesSolver::LDepFilesTy &ldepsFiles
   )
   : Solver(Solver),
     StringsPool(CreatableSingleton<DependenciesStringsPool >::get()),
@@ -209,6 +209,7 @@ public:
   }
 
   bool loadFromBuffer(
+      StringID PackageID,
       ParsedDependencies &Dest,
       const llvm::MemoryBuffer &MemBuf
   ) {
@@ -227,12 +228,12 @@ public:
       Log.warning() << Reader->getStatus().getWarningMessage() << "\n";
     }
 
-    Dest.add(PackageData);
+    Dest.add(PackageID, PackageData);
 
     return true;
   }
 
-  void loadDependencies(const Paths &ParsedDepFiles) {
+  void loadDependencies(const DependenciesSolver::LDepFilesTy &ParsedDepFiles) {
     Context.ParsedDeps = std::make_shared<ParsedDependencies>(
         Context.getStringsPool()
     );
@@ -242,20 +243,23 @@ public:
 
     auto &FM = CreatableSingleton<FileManager>::get();
 
-    for (StringRef PackagePath : ParsedDepFiles) {
-      if (auto Buffer = FM.getBufferForFile(PackagePath)) {
+    for (auto &kv : ParsedDepFiles) {
+      StringID PackageID = kv.first;
+      StringRef LDepPath = kv.second;
 
-        Log.log_trace("  Reading '", PackagePath, "'...");
+      if (auto Buffer = FM.getBufferForFile(LDepPath)) {
+
+        Log.log_trace("  Reading '", LDepPath, "'...");
 
         llvm::MemoryBuffer &MemBuf = *Buffer.get();
 
-        if (!loadFromBuffer(Dest, MemBuf)) {
+        if (!loadFromBuffer(PackageID, Dest, MemBuf)) {
           Solver->setFailure("Failed to read dependencies");
-          Log.log_error("Failed to read dependencies for '", PackagePath, "'");
+          Log.log_error("Failed to read dependencies for '", LDepPath, "'");
         }
       } else {
        Solver->setFailure("Failed to open one of dependency files");
-       Log.log_error("Failed to open file '", PackagePath, "'\n");
+       Log.log_error("Failed to open file '", LDepPath, "'\n");
       }
     }
 
@@ -306,12 +310,14 @@ public:
 
   static void dump(llvm::raw_ostream &out, const ParsedDependencies &ParsedDependencies) {
     for (auto &PackageDependencies : ParsedDependencies) {
+      StringID PackageID = PackageDependencies.first;
       DependenciesData &Data = *PackageDependencies.second;
+
       auto &Strings = *Data.Strings;
 
       out
-      << "Package #" << Data.PackageFilePathID
-      << ": " << *Strings.getItem(Data.PackageFilePathID) << "\n";
+      << "Package #" << PackageID
+      << ": " << *Strings.getItem(PackageID) << "\n";
 
       if (
         Data.DeclarationDependencies.empty() &&
@@ -529,7 +535,7 @@ public:
 };
 
 std::shared_ptr<SolvedDependenciesInfo>
-DependenciesSolver::solve(const Paths &LDepsFiles) {
+DependenciesSolver::solve(const LDepFilesTy &LDepsFiles) {
   auto &Log = log::Logger::get();
 
   // TODO Levitation: pass <PackageID, LDepPath> instead.
