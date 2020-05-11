@@ -183,6 +183,7 @@ int levitation_driver_main(int argc, char **argv) {
           .action([&](StringRef v) { Driver.setExtraLinkerArgs(v); })
       .done()
       .optional()
+          .multi()
           .name("+I")
           .valueHint("<path>")
           .description(

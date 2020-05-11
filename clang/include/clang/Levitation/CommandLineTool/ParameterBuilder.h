@@ -47,6 +47,11 @@ namespace clang { namespace levitation { namespace command_line_tool {
       return *this;
     }
 
+    ParameterBuilder &multi() {
+      P->AllowMultiple = true;
+      return *this;
+    }
+
     ParameterBuilder &flag() {
       P->IsFlag = true;
       return *this;

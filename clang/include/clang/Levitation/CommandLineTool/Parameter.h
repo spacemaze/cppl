@@ -30,6 +30,7 @@ namespace clang { namespace levitation { namespace command_line_tool {
 
     bool Optional = false;
     bool IsFlag = false;
+    bool AllowMultiple = false;
 
     ParameterValueHandling::HandleStrFn Handler;
 

@@ -211,12 +211,13 @@ namespace clang { namespace levitation { namespace command_line_tool {
         for (int va = Offset; va != NewOffset; ++va)
           Ctx.VisitedArguments.insert(va);
 
-        Offset = NewOffset;
+        bool VisitedFirstTime = Ctx.VisitedParameters.insert(Name).second;
+        bool Apply = P.AllowMultiple || VisitedFirstTime;
 
-        if (!Ctx.VisitedParameters.insert(Name).second)
-          return false;
-
-        return true;
+        if (Apply) {
+          Offset = NewOffset;
+          return true;
+        }
       }
       return false;
     }
