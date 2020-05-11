@@ -49,40 +49,14 @@ namespace levitation {
       ConsumerPP->HandlePreprocessor(PP);
   }
 
-  class LevitationInputFileProcessor {
-  protected:
+  class ASTDependenciesProcessor : public LevitationPreprocessorConsumer {
     const CompilerInstance &CI;
-    SinglePath CurrentInputFileRel;
-
-    LevitationInputFileProcessor(
-        const CompilerInstance &ci,
-        SinglePath&& currentInputFileRel
-    )
-    : CI(ci),
-      CurrentInputFileRel(std::move(currentInputFileRel))
-    {
-      if (llvm::sys::path::is_absolute(CurrentInputFileRel)) {
-        llvm::errs()
-        << "Invalid path:\n"
-        << "    " << CurrentInputFileRel.str() << "\n";
-        llvm_unreachable("Input file path should be relative (to source dir parameter)");
-      }
-    }
-  };
-
-  class ASTDependenciesProcessor :
-      public LevitationInputFileProcessor,
-      public LevitationPreprocessorConsumer {
   public:
-    ASTDependenciesProcessor(
-        const CompilerInstance &ci, SinglePath&& currentInputFileRel
-    )
-    : LevitationInputFileProcessor(ci, std::move(currentInputFileRel)) {}
+    ASTDependenciesProcessor(const CompilerInstance &ci) : CI(ci) {}
 
     void HandlePreprocessor(Preprocessor &PP) override {
 
       PackageDependencies& Dependencies = PP.accessLevitationDependencies();
-      Dependencies.setPackageFilePathID(CurrentInputFileRel);
 
       auto F = createFile();
 
@@ -171,7 +145,7 @@ std::unique_ptr<LevitationPreprocessorConsumer> CreateDependenciesASTProcessor(
       CI.getFrontendOpts().LevitationSourcesRootDir
   );
 
-  return std::make_unique<ASTDependenciesProcessor>(CI, std::move(InFileRel));
+  return std::make_unique<ASTDependenciesProcessor>(CI);
 }
 
 }}

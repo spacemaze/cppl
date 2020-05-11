@@ -54,13 +54,6 @@ namespace levitation {
      */
     PathIDsSet DefinitionDependencies;
 
-    // TODO Levitation: remove this field.
-    //   Whenever we pick LDeps file, we also know PackageID it corresponds to.
-    /**
-     * Current package file ID
-     */
-    StringID PackageFilePathID;
-
     /**
      * Indicates, that current file is to be published
      * during C++ Levitation library creation.
@@ -83,10 +76,6 @@ namespace levitation {
     void addDefinitionPath(StringRef Path) {
       auto ID = accessPathsPool().addItem(Path);
       DefinitionDependencies.insert(ID);
-    }
-
-    void setPackageFilePathID(const SinglePath &Path) {
-      PackageFilePathID = accessPathsPool().addItem(Path);
     }
   };
 }
