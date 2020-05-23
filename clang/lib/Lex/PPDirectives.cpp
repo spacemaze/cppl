@@ -2442,7 +2442,7 @@ void Preprocessor::HandleLevitationBodyDirective(SourceLocation HashLoc, Token &
   // it indicates that current file has no declaration part.
   if (
       getLangOpts().isLevitationMode(LangOptions::LBSK_ParseManualDeps) &&
-      !PPLevitationFirstIncludeMet && !NumDefined
+      !PPLevitationFirstIncludeMet && !LevitationFirstMetDefine
   )
     LevitationDependencies.IsBodyOnly = true;
 
@@ -3106,6 +3106,9 @@ MacroInfo *Preprocessor::ReadOptionalMacroParameterListAndBody(
 void Preprocessor::HandleDefineDirective(
     Token &DefineTok, const bool ImmediatelyAfterHeaderGuard) {
   ++NumDefined;
+
+  if (getSourceManager().isWrittenInMainFile(DefineTok.getLocation()))
+    LevitationFirstMetDefine = true;
 
   Token MacroNameTok;
   bool MacroShadowsKeyword;

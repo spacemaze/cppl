@@ -1,0 +1,7 @@
+#import Inputs::A
+
+class C {};
+
+#body
+
+#import Inputs::B

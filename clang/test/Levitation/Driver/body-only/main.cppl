@@ -1,0 +1,31 @@
+// RUN: rm -Rf %T/*
+// RUN: cppl -root=%S \
+// RUN:   +I../Inputs/libs/test-lib-a \
+// RUN:   +I../Inputs/libs/test-lib-b \
+// RUN:   -buildRoot=%T -lit --verbose -o %T/a.out > %t
+// RUN: FileCheck --check-prefix=DAG --input-file %t %s
+// RUN: FileCheck --input-file %t %s
+// RUN: %T/a.out
+
+// CHECK-NOT: BUILD DECL {{.*}}main.cppl
+
+// DAG-DAG: BUILD DECL {{.*}}A.cppl
+// DAG-DAG: BUILD OBJ {{.*}}A.cppl
+
+// DAG-DAG: BUILD DECL {{.*}}B.cppl
+// DAG-DAG: BUILD OBJ {{.*}}B.cppl
+
+// DAG-DAG: BUILD DECL {{.*}}C.cppl, deps: ({{.*}}A.decl-ast) ->
+// DAG-DAG: BUILD OBJ {{.*}}C.cppl, deps: ({{.*}}A.decl-ast, {{.*}}B.decl-ast)
+
+// DAG-DAG: BUILD OBJ {{.*}}main.cppl, deps: ({{.*}}A.decl-ast, {{.*}}B.decl-ast) ->
+
+// DAG-DAG: LINK objects
+
+#import Inputs::A
+
+#body
+
+#import Inputs::B
+
+int main() { return 0; }
