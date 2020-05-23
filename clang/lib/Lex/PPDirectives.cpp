@@ -2385,7 +2385,7 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
 
   const auto &DependencyPath = StrPathRel.str();
 
-  if (!BodyDep)
+  if (!BodyDep && !LevitationBodyDirectiveHandled)
     LevitationDependencies.addDeclarationPath(DependencyPath);
   else
     LevitationDependencies.addDefinitionPath(DependencyPath);
@@ -2436,15 +2436,34 @@ void Preprocessor::HandleLevitationBodyDirective(SourceLocation HashLoc, Token &
     return;
   }
 
-  // If we're building object file, we should parse whole file, so
+  // For 'parse import' stage,
+  // check whether #body comes as a very first directive in file.
+  // If it goes before any #include or #define directives, then
+  // it indicates that current file has no declaration part.
+  if (
+      getLangOpts().isLevitationMode(LangOptions::LBSK_ParseManualDeps) &&
+      !PPLevitationFirstIncludeMet && !NumDefined
+  )
+    LevitationDependencies.IsBodyOnly = true;
+
+  LevitationBodyDirectiveHandled = true;
+
+  // 1. If we're building object file, we should parse whole file, so
   // eat #body and continue work.
 
-  if (getLangOpts().isLevitationMode(LangOptions::LBSK_BuildObjectFile)) {
+  // 2. If we're in 'parse import' stage also eat #body and continue to
+  // check other directives.
+
+  if (getLangOpts().isLevitationMode(
+      LangOptions::LBSK_BuildObjectFile,
+      LangOptions::LBSK_ParseManualDeps
+  )) {
     DiscardUntilEndOfDirective();
     return;
   }
 
-  // If we're building .decl-ast file, ignore contents below #body directive.
+  // 3. Otherwise,
+  // if we're building .decl-ast file, ignore contents below #body directive.
 
   // Discard until end of file.
 

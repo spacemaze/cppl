@@ -153,13 +153,18 @@ public:
       auto PackagePathID = PackageDeps.first;
       DependenciesData &PackageDependencies = *PackageDeps.second;
       bool IsExternal = ExternalPackages.count(PackagePathID);
+      bool IsBodyOnly = PackageDependencies.IsBodyOnly;
 
 
       Log.log_trace("Creating package for Package #", PackagePathID);
 
       PackageInfo &Package = DGraphPtr->createPackageInfo(
-        PackagePathID, IsExternal
+        PackagePathID, IsExternal, IsBodyOnly
       );
+
+      // Make sure previous function created correct package
+      assert((!IsBodyOnly) == (bool)Package.Declaration);
+      assert((!IsExternal) == (bool)Package.Definition);
 
       // If node has no dependencies we add it into the Roots
       // collection.
@@ -167,31 +172,34 @@ public:
       if (PackageDependencies.DeclarationDependencies.empty()) {
 
         // If declaration doesn't depend on anything, then make it root.
-        DGraphPtr->Roots.insert(Package.Declaration->ID);
+        if (!IsBodyOnly)
+          DGraphPtr->Roots.insert(Package.Declaration->ID);
 
         // Additionally if relevant definition doesn't depent on anything too,
         // then make it root as well.
         if (
           PackageDependencies.DefinitionDependencies.empty() && !IsExternal
-        ) {
-          assert(Package.Definition);
+        )
           DGraphPtr->Roots.insert(Package.Definition->ID);
-        }
       }
 
-      DGraphPtr->addDependenciesTo(
-          *Package.Declaration,
-          PackageDependencies.DeclarationDependencies
-      );
+      if (!IsBodyOnly) {
+        DGraphPtr->addDependenciesTo(
+            *Package.Declaration,
+            PackageDependencies.DeclarationDependencies
+        );
+      }
 
       if (!IsExternal) {
         // For definition we have to add both declaration and definition
         // dependencies.
 
-        DGraphPtr->addDependenciesTo(
-          *Package.Definition,
-          PackageDependencies.DeclarationDependencies
-        );
+        if (!IsBodyOnly) {
+          DGraphPtr->addDependenciesTo(
+              *Package.Definition,
+              PackageDependencies.DeclarationDependencies
+          );
+        }
 
         DGraphPtr->addDependenciesTo(
           *Package.Definition,
@@ -594,7 +602,11 @@ protected:
     }
   }
 
-  PackageInfo &createPackageInfo(StringID PackagePathID, bool IsExternal) {
+  PackageInfo &createPackageInfo(
+      StringID PackagePathID,
+      bool IsExternal,
+      bool IsBodyOnly
+  ) {
 
     auto PackageRes = PackageInfos.insert({
       PackagePathID, std::make_unique<PackageInfo>()
@@ -607,17 +619,14 @@ protected:
         "Only one package can be created for particular PackagePathID"
     );
 
-    Node &DeclNode = getOrCreateNode(NodeKind::Declaration, PackagePathID);
-
-    // Note, that we don't make definition node to be dependent on
-    // declaration node, the reason is how we build definition:
-    // per current implementation we compile whole source again,
-    // so no need to preload declaration AST.
-
-    DeclNode.PackageInfo = &Package;
-
     Package.PackagePath = PackagePathID;
-    Package.Declaration = &DeclNode;
+
+    if (!IsBodyOnly) {
+      Node &DeclNode = getOrCreateNode(NodeKind::Declaration, PackagePathID);
+
+      DeclNode.PackageInfo = &Package;
+      Package.Declaration = &DeclNode;
+    }
 
     if (!IsExternal) {
       Node &DefNode = getOrCreateNode(NodeKind::Definition, PackagePathID);
@@ -625,6 +634,10 @@ protected:
       Package.Definition = &DefNode;
     }
 
+    // Note, that we don't make definition node to be dependent on
+    // declaration node, the reason is how we build definition:
+    // per current implementation we compile whole source again,
+    // so no need to preload declaration AST.
 
     return Package;
   }

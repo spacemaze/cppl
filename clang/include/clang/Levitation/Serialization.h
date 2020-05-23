@@ -88,6 +88,9 @@ namespace levitation {
     /// Whether this file should publish its interface
     bool IsPublic;
 
+    /// Whether we don't have declaration part
+    bool IsBodyOnly;
+
     DependenciesData()
     : Strings(new DependenciesStringsPool),
       OwnStringsPool(true)

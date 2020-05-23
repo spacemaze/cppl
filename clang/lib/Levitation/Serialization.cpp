@@ -341,6 +341,7 @@ namespace levitation {
       );
 
       Data.IsPublic = Dependencies.IsPublic;
+      Data.IsBodyOnly = Dependencies.IsBodyOnly;
       return Data;
     }
 
@@ -359,7 +360,7 @@ namespace levitation {
 
         writeStrings(*Data.Strings);
 
-        writePackageTopLevelFields(Data.IsPublic);
+        writePackageTopLevelFields(Data.IsPublic, Data.IsBodyOnly);
 
         writeDeclarations(
                 DEPS_DECLARATION_DEPENDENCIES_BLOCK_ID,
@@ -395,8 +396,8 @@ namespace levitation {
       }
     }
 
-    void writePackageTopLevelFields(bool IsPublic) {
-      RecordData::value_type Record[] { (uint64_t)IsPublic };
+    void writePackageTopLevelFields(bool IsPublic, bool IsBodyOnly) {
+      RecordData::value_type Record[] { (uint64_t)IsPublic, (uint64_t) IsBodyOnly };
       Writer.EmitRecord(DEPS_PACKAGE_TOP_LEVEL_FIELDS_RECORD_ID, Record);
     }
 
@@ -1024,6 +1025,7 @@ namespace levitation {
       DependenciesData &Data, const RecordTy &Record
     ) {
       Data.IsPublic = (bool)Record[0];
+      Data.IsBodyOnly = (bool)Record[1];
       return true;
     }
 

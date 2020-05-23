@@ -61,6 +61,12 @@ namespace levitation {
     bool IsPublic;
 
     /**
+     * Indicates, that current file has no declaration part,
+     * so no need to produce .decl-ast file, only .o file.
+     */
+    bool IsBodyOnly;
+
+    /**
      * Unifies access to PathsPool
      * @return
      */

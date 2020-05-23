@@ -36,6 +36,7 @@ public:
     auto LevitationPackage = createPackageFor(PackageID);
 
     LevitationPackage->IsPublic = Deps.IsPublic;
+    LevitationPackage->IsBodyOnly = Deps.IsBodyOnly;
 
     for (auto &DeclDep : Deps.DeclarationDependencies) {
       auto NewDepID = OldToNew[DeclDep.FilePathID];
