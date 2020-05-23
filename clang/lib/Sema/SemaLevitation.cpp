@@ -245,16 +245,14 @@ void Sema::levitationInsertExternForHeader(
 
   // Lookup for first fragment to be replaced
   size_t NumSkippedFragments = LevitationSkippedFragments.size();
-  size_t InsertAfter = NumSkippedFragments;
   size_t InsertPos = NumSkippedFragments;
 
   // Note, if LevitationSkippedFragments.size() is 0, then we skip this
   // loop, and insert extern to the end of skipped fragments collection.
-  while (InsertAfter) {
-    InsertPos = InsertAfter;
-    --InsertAfter;
-    if (LevitationSkippedFragments[InsertAfter].End <= StartOffset)
+  for (size_t i = NumSkippedFragments; i;) { --i;
+    if (LevitationSkippedFragments[i].End <= StartOffset)
       break;
+    InsertPos = i;
   }
 
   assert(
