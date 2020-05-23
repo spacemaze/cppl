@@ -2280,6 +2280,7 @@ private:
   levitation::DeclASTMeta::FragmentsVectorTy PPLevitationSkippedFragments;
 
   bool PPLevitationFirstIncludeMet = false;
+  bool LevitationIsFirstDirective = true;
   bool LevitationFirstMetDefine = false;
   bool LevitationBodyDirectiveHandled = false;
 

@@ -911,6 +911,17 @@ void Preprocessor::HandleDirective(Token &Result) {
 
   ++NumDirectives;
 
+  // C++ Levitation
+  auto _ = llvm::make_scope_exit([&, Result] {
+    if (
+        getLangOpts().isLevitationMode(LangOptions::LBSK_ParseManualDeps) &&
+        getSourceManager().isWrittenInMainFile(Result.getLocation())
+    )
+      LevitationIsFirstDirective = false;
+  });
+  // end of C++ Levitation
+
+
   // We are about to read a token.  For the multiple-include optimization FA to
   // work, we have to remember if we had read any tokens *before* this
   // pp-directive.
@@ -2418,6 +2429,8 @@ void Preprocessor::HandleLevitationPublicDirective(SourceLocation HashLoc, Token
 /// This directive is used whenever we want to indicate that
 /// contents following after #body shouldn't be part of declaration
 /// and belongs to definition only.
+/// If directive is first non-comment token in file, then
+/// file declaration creation is discarded.
 ///
 /// \param HashLoc location of '#' symbol
 /// \param Tok reference to 'import' token next to '#' symbol
@@ -2442,7 +2455,7 @@ void Preprocessor::HandleLevitationBodyDirective(SourceLocation HashLoc, Token &
   // it indicates that current file has no declaration part.
   if (
       getLangOpts().isLevitationMode(LangOptions::LBSK_ParseManualDeps) &&
-      !PPLevitationFirstIncludeMet && !LevitationFirstMetDefine
+      LevitationIsFirstDirective && !TokenCount
   )
     LevitationDependencies.IsBodyOnly = true;
 
