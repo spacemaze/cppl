@@ -1,0 +1,21 @@
+// RUN: rm -Rf %T/*
+// RUN: cppl -root=%S  -buildRoot=%T -lit --verbose -o %T/a.out > %t
+// RUN: FileCheck --check-prefix=DAG --input-file %t %s
+// RUN: %T/a.out
+
+
+// DAG-DAG: BUILD DECL {{.*}}A.cppl, deps: <empty> -> decl-ast
+// DAG-DAG: BUILD OBJ {{.*}}A.cppl, deps: <empty> -> object
+
+// DAG-DAG: BUILD DECL {{.*}}main.cppl, deps: <empty> -> decl-ast
+// DAG-DAG: BUILD OBJ {{.*}}main.cppl, deps: ({{.*}}A.decl-ast) -> object
+
+// DAG-DAG: LINK objects
+
+int a = 5;
+
+#body
+
+#import Inputs::A
+
+int main() { return 0; }
