@@ -34,7 +34,7 @@
 #include "clang/Lex/VariadicMacroSupport.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/Common/Path.h"
-#include "clang/Levitation/Common/StringBuilder.h"
+#include "clang/Levitation/UnitID.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
@@ -2372,23 +2372,12 @@ void Preprocessor::HandleLevitationImportDirective(SourceLocation HashLoc, Token
 
   auto &Parts = IdentifierParts.first;
 
-  levitation::Path::Builder PathBuilderRel;
-  for (const auto &Comp : Parts)
-    PathBuilderRel.addComponent(Comp);
-  PathBuilderRel.done();
-
-  levitation::StringBuilder StrPathRel;
-
-  StrPathRel
-  << PathBuilderRel.str()
-  << "." << levitation::FileExtensions::SourceCode;
-
-  const auto &DependencyPath = StrPathRel.str();
+  auto UnitID = levitation::UnitIDUtils::fromComponents(Parts);
 
   if (!BodyDep)
-    LevitationDependencies.addDeclarationPath(DependencyPath);
+    LevitationDependencies.addDeclarationPath(UnitID);
   else
-    LevitationDependencies.addDefinitionPath(DependencyPath);
+    LevitationDependencies.addDefinitionPath(UnitID);
 }
 
 /// Handles C++ Levitation #public directive
