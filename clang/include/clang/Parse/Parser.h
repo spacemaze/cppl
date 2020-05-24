@@ -2854,6 +2854,7 @@ private:
                            unsigned int index, SourceLocation &InlineLoc,
                            ParsedAttributes &attrs,
                            BalancedDelimiterTracker &Tracker);
+
   Decl *ParseLinkage(ParsingDeclSpec &DS, DeclaratorContext Context);
   Decl *ParseExportDeclaration();
   DeclGroupPtrTy ParseUsingDirectiveOrDeclaration(
@@ -3292,6 +3293,42 @@ private:
   bool isGNUAsmQualifier(const Token &TokAfterAsm) const;
   GNUAsmQualifiers::AQ getGNUAsmQualifier(const Token &Tok) const;
   bool parseGNUAsmQualifierListOpt(GNUAsmQualifiers &AQ);
+
+  // ===========================================================================
+  // C++ Levitation
+private:
+
+  SmallVector<StringRef, 8> LevitationUnitID;
+
+  struct LevitationUnitScopeItem {
+    std::unique_ptr<ParseScope> Scope;
+    NamespaceDecl* Namespace = nullptr;
+
+    explicit LevitationUnitScopeItem(Parser* parser)
+    : Scope(new ParseScope(parser, Scope::DeclScope)) {}
+  };
+
+  SmallVector<LevitationUnitScopeItem, 8> LevitationUnitScopes;
+
+  void LevitationEnterUnit(
+      SourceLocation Start = SourceLocation(),
+      SourceLocation End = SourceLocation()
+  );
+
+  void LevitationLeaveUnit(
+      SourceLocation Start = SourceLocation(),
+      SourceLocation End = SourceLocation()
+  );
+
+  bool ParseLevitationGlobal();
+
+public:
+
+  void LevitationOnParseStart();
+  void LevitationOnParseEnd();
+
+  // end of C++ Levitation
+  // ===========================================================================
 };
 
 }  // end namespace clang

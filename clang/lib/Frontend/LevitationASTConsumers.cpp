@@ -130,6 +130,30 @@ namespace levitation {
     }
   };
 
+  class LevitationUnitNamespaceVerifier : public SemaConsumer {
+  private:
+    Sema *SemaObj;
+  public:
+    LevitationUnitNamespaceVerifier(CompilerInstance &CI) {};
+
+    void InitializeSema(Sema &S) override {
+      SemaConsumer::InitializeSema(S);
+      SemaObj = &S;
+    }
+
+    void ForgetSema() override {
+      SemaConsumer::ForgetSema();
+      SemaObj = nullptr;
+    }
+
+    void HandleTranslationUnit(ASTContext &Ctx) override {
+      ASTConsumer::HandleTranslationUnit(Ctx);
+      if (!SemaObj->levitationEnteredUnitAtLeastOnce()) {
+        Ctx.getDiagnostics().Report(diag::warn_levitation_unit_decls);
+      }
+    }
+  };
+
 std::unique_ptr<LevitationPreprocessorConsumer> CreateDependenciesASTProcessor(
     CompilerInstance &CI
 ) {
@@ -137,6 +161,12 @@ std::unique_ptr<LevitationPreprocessorConsumer> CreateDependenciesASTProcessor(
     return nullptr;
 
   return std::make_unique<ASTDependenciesProcessor>(CI);
+}
+
+std::unique_ptr<ASTConsumer> CreateUnitNamespaceVerifier(
+    CompilerInstance &CI
+) {
+  return std::make_unique<LevitationUnitNamespaceVerifier>(CI);
 }
 
 }}

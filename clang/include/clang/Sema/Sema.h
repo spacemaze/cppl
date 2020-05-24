@@ -12440,6 +12440,14 @@ private:
   /// variable definitions).
   levitation::DeclASTMeta::FragmentsVectorTy LevitationSkippedFragments;
 public:
+
+  void levitationAddSourceFragmentAction(
+      const SourceLocation &Start,
+      const SourceLocation &End,
+      levitation::SourceFragmentAction Action
+  );
+
+  // FIXME Levitation: unify with levitationAddSourceFragmentAction
   void levitationAddSkippedSourceFragment(
       const SourceLocation &Start,
       const SourceLocation &End,
@@ -12454,6 +12462,24 @@ public:
   void levitationInsertExternForHeader(const SourceLocation Start);
 
   levitation::DeclASTMeta::FragmentsVectorTy levitationGetSourceFragments() const;
+
+  // C++ Levitation Unit
+
+private:
+  int LevitationNumUnitEnters = false;
+
+public:
+  void levitationActOnEnterUnit(
+      const SourceLocation &StartLoc,
+      const SourceLocation &EndLoc
+  );
+
+  void levitationActOnLeaveUnit(
+      const SourceLocation &LeaveLoc,
+      const SourceLocation &EndLoc
+  );
+
+  bool levitationEnteredUnitAtLeastOnce() const;
 
   //
   // end of C++ Levitation Mode

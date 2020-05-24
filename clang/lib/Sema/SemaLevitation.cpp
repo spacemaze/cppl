@@ -190,6 +190,48 @@ StringRef sourceFragmentActionToStr(levitation::SourceFragmentAction Action) {
   }
 }
 
+void Sema::levitationAddSourceFragmentAction(
+    const clang::SourceLocation &Start,
+    const clang::SourceLocation &End,
+    levitation::SourceFragmentAction Action
+) {
+
+  auto StartSLoc = getSourceManager().getDecomposedLoc(Start);
+  auto EndSLoc = getSourceManager().getDecomposedLoc(End);
+
+  if(
+    !getSourceManager().isWrittenInMainFile(Start) ||
+    !getSourceManager().isWrittenInMainFile(End)
+  )
+    llvm_unreachable("Source fragment should be in main file");
+
+  if (
+     !LevitationSkippedFragments.empty() &&
+     LevitationSkippedFragments.back().End >= StartSLoc.second
+  )
+    llvm_unreachable("Currently fragments merging is not supported.");
+
+  LevitationSkippedFragments.push_back({
+    StartSLoc.second,
+    EndSLoc.second,
+    Action
+  });
+
+#if 0
+  llvm::errs() << "Added source fragment: "
+               << sourceFragmentActionToStr(Action) : ":\n";
+
+  llvm::errs() << "Bytes: 0x";
+  llvm::errs().write_hex(StartSLoc.second) << " : 0x";
+  llvm::errs().write_hex(EndSLoc.second) << "\n";
+
+  Start.dump(getSourceManager());
+  End.dump(getSourceManager());
+
+  llvm::errs() << "\n";
+#endif
+}
+
 void Sema::levitationReplaceLastSkippedSourceFragments(
     const clang::SourceLocation &Start,
     const clang::SourceLocation &End
@@ -317,4 +359,29 @@ Sema::levitationGetSourceFragments() const {
   );
 
   return Fragments;
+}
+
+// C++ Levitation Unit
+
+void Sema::levitationActOnEnterUnit(
+    const SourceLocation &StartLoc,
+    const SourceLocation &EndLoc
+) {
+  ++LevitationNumUnitEnters;
+  levitationAddSourceFragmentAction(
+      StartLoc, EndLoc, levitation::SourceFragmentAction::StartUnit
+  );
+}
+
+void Sema::levitationActOnLeaveUnit(
+    const SourceLocation &StartLoc,
+    const SourceLocation &EndLoc
+) {
+  levitationAddSourceFragmentAction(
+      StartLoc, EndLoc, levitation::SourceFragmentAction::EndUnit
+  );
+}
+
+bool Sema::levitationEnteredUnitAtLeastOnce() const {
+  return LevitationNumUnitEnters > 0;
 }

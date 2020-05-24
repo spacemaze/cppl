@@ -167,6 +167,10 @@ public:
     }
   };
 
+  // C++ Levitation
+
+  std::string LevitationUnitID;
+
   // end of C++ Levitation
 
   /// The set of modules that failed to build.

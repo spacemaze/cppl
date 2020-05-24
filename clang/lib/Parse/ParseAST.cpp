@@ -153,6 +153,24 @@ void clang::ParseAST(Sema &S, bool PrintStats, bool SkipFunctionBodies) {
   if (HaveLexer) {
     llvm::TimeTraceScope TimeScope("Frontend");
     P.Initialize();
+
+    // C++ Levitation
+
+    std::function<void()> LevitationOnParseEndCb = nullptr;
+    auto LevitationOnParseEnd = llvm::make_scope_exit([&] {
+      if (LevitationOnParseEndCb)
+        LevitationOnParseEndCb();
+    });
+
+    if (P.getLangOpts().isLevitationMode(
+        LangOptions::LBSK_BuildObjectFile, LangOptions::LBSK_BuildDeclAST
+    )) {
+      P.LevitationOnParseStart();
+      LevitationOnParseEndCb = [&] { P.LevitationOnParseEnd(); };
+    }
+
+    // end of C++ Levitation
+
     Parser::DeclGroupPtrTy ADecl;
     for (bool AtEOF = P.ParseFirstTopLevelDecl(ADecl); !AtEOF;
          AtEOF = P.ParseTopLevelDecl(ADecl)) {

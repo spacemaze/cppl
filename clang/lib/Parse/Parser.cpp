@@ -665,6 +665,10 @@ bool Parser::ParseTopLevelDecl(DeclGroupPtrTy &Result, bool IsFirstDecl) {
     //else don't tell Sema that we ended parsing: more input might come.
     return true;
 
+  case tok::kw___levitation_global:
+    ParseLevitationGlobal();
+    return Tok.is(tok::eof);
+
   case tok::identifier:
     // C++2a [basic.link]p3:
     //   A token sequence beginning with 'export[opt] module' or
