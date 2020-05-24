@@ -10,6 +10,7 @@
 
 #include "clang/Parse/Parser.h"
 
+#include "clang/Levitation/UnitID.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
@@ -32,7 +33,10 @@ void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
   StringRef UnitIDStr = getPreprocessor().getPreprocessorOpts().LevitationUnitID;
 
   if (LevitationUnitID.empty())
-    UnitIDStr.split(LevitationUnitID, "::");
+    UnitIDStr.split(
+        LevitationUnitID,
+        levitation::UnitIDUtils::getComponentSeparator()
+    );
 
   // As long as final unit component is a file name,
   // it can't be empty.
