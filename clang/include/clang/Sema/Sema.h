@@ -12392,11 +12392,6 @@ private:
   using DeclaratorID = std::pair<unsigned, unsigned>;
   llvm::DenseMap<DeclaratorID, LevitationVarSkipAction> LevitationVarSkipActions;
 
-  /// For decl-ast creation mode,
-  /// holds bytes skipped during parsing (skipped function bodies and
-  /// variable definitions).
-  levitation::DeclASTMeta::FragmentsVectorTy LevitationSkippedFragments;
-
 public:
 
   /// Check whether levitation mode is on.
@@ -12437,6 +12432,14 @@ public:
 
   LevitationVarSkipAction levitationGetSkipActionFor(const Declarator &D);
 
+  // C++ Levitation Source Fragments
+private:
+
+  /// For decl-ast creation mode,
+  /// holds bytes skipped during parsing (skipped function bodies and
+  /// variable definitions).
+  levitation::DeclASTMeta::FragmentsVectorTy LevitationSkippedFragments;
+public:
   void levitationAddSkippedSourceFragment(
       const SourceLocation &Start,
       const SourceLocation &End,

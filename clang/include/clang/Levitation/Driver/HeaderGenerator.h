@@ -146,7 +146,7 @@ public:
 
           out.write(KeepPtr, KeepWriteCount);
 
-          if (skippedRange.ReplaceWithSemicolon)
+          if (skippedRange.Action == SourceFragmentAction::ReplaceWithSemicolon)
             out << ";";
 
           Start = skippedRange.End;
@@ -193,7 +193,7 @@ public:
             out.indent((unsigned)AfterKeepSpaces);
           }
 
-          if (skippedRange.PrefixWithExtern)
+          if (skippedRange.Action == SourceFragmentAction::PutExtern)
             out << "extern ";
         }
 

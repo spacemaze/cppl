@@ -115,6 +115,10 @@ void Sema::levitationAddSkippedSourceFragment(
     bool ReplaceWithSemicolon
 ) {
 
+  levitation::SourceFragmentAction Action = ReplaceWithSemicolon ?
+      levitation::SourceFragmentAction::ReplaceWithSemicolon :
+      levitation::SourceFragmentAction::Skip;
+
   auto StartSLoc = getSourceManager().getDecomposedLoc(Start);
   auto EndSLoc = getSourceManager().getDecomposedLoc(End);
 
@@ -128,7 +132,7 @@ void Sema::levitationAddSkippedSourceFragment(
     auto &Last = LevitationSkippedFragments.back();
     if (Last.End >= StartSLoc.second) {
       Last.End = EndSLoc.second;
-      Last.ReplaceWithSemicolon = ReplaceWithSemicolon;
+      Last.Action = Action;
 
       #if 0
         llvm::errs() << "Extended skipped fragment "
@@ -153,8 +157,7 @@ void Sema::levitationAddSkippedSourceFragment(
   LevitationSkippedFragments.push_back({
     StartSLoc.second,
     EndSLoc.second,
-    ReplaceWithSemicolon,
-    /* prefix with extern */ false
+    Action
   });
 
 #if 0
@@ -170,6 +173,21 @@ void Sema::levitationAddSkippedSourceFragment(
 
   llvm::errs() << "\n";
 #endif
+}
+
+StringRef sourceFragmentActionToStr(levitation::SourceFragmentAction Action) {
+  switch (Action) {
+    case levitation::SourceFragmentAction::Skip:
+      return "Skip";
+    case levitation::SourceFragmentAction::ReplaceWithSemicolon:
+      return "ReplaceWithSemicolon";
+    case levitation::SourceFragmentAction::PutExtern:
+      return "PutExtern";
+    case levitation::SourceFragmentAction::StartUnit:
+      return "StartUnit";
+    case levitation::SourceFragmentAction::EndUnit:
+      return "EndUnit";
+  }
 }
 
 void Sema::levitationReplaceLastSkippedSourceFragments(
@@ -210,7 +228,9 @@ void Sema::levitationReplaceLastSkippedSourceFragments(
 
   LevitationSkippedFragments.resize(RemainSize);
 
-  LevitationSkippedFragments.push_back({StartOffset, EndOffset, false, false});
+  LevitationSkippedFragments.push_back({
+    StartOffset, EndOffset, levitation::SourceFragmentAction::Skip
+  });
 
 #if 0
   llvm::errs() << "Merged skipped fragment\n"
@@ -266,9 +286,7 @@ void Sema::levitationInsertExternForHeader(
   LevitationSkippedFragments.insert(
       LevitationSkippedFragments.begin() + InsertPos,
       {
-        StartOffset, StartOffset,
-        /* burn with ; */ false,
-        /* prefix with extern keyword */ true
+        StartOffset, StartOffset, levitation::SourceFragmentAction::PutExtern
       }
   );
 

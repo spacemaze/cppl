@@ -2609,8 +2609,7 @@ void Preprocessor::levitationAddSkippedSourceFragment(
   PPLevitationSkippedFragments.push_back({
     StartSLoc.second,
     EndSLoc.second,
-    /* ReplaceWithSemicolon */ false,
-    /* prefix with extern */ false
+    levitation::SourceFragmentAction::Skip
   });
 
 #if 0

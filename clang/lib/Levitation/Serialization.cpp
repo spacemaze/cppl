@@ -209,6 +209,12 @@ namespace levitation {
     return *this;
   }
 
+  template <>
+  AbbrevsBuilder& AbbrevsBuilder::addFieldType<SourceFragmentAction>() {
+    Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 8));
+    return *this;
+  }
+
   template<>
   AbbrevsBuilder &
   AbbrevsBuilder::addRecordFieldTypes<DeclASTMeta::FragmentTy>() {
@@ -217,8 +223,7 @@ namespace levitation {
 
     addFieldType<decltype(std::declval<FragmentTy>().Start)>();
     addFieldType<decltype(std::declval<FragmentTy>().End)>();
-    addFieldType<decltype(std::declval<FragmentTy>().ReplaceWithSemicolon)>();
-    addFieldType<decltype(std::declval<FragmentTy>().PrefixWithExtern)>();
+    addFieldType<decltype(std::declval<FragmentTy>().Action)>();
 
     return *this;
   }
@@ -1169,8 +1174,7 @@ namespace levitation {
           RecordWriter(Writer, META_SKIPPED_FRAGMENT_RECORD_ID, FragmentAbb)
             .emitField(Fragment.Start)
             .emitField(Fragment.End)
-            .emitField(Fragment.ReplaceWithSemicolon)
-            .emitField(Fragment.PrefixWithExtern)
+            .emitField((unsigned)Fragment.Action)
           .done();
         }
       }
@@ -1236,8 +1240,7 @@ namespace levitation {
               RecordReader<RecordTy>(Record)
                 .read(Fragment.Start)
                 .read(Fragment.End)
-                .read(Fragment.ReplaceWithSemicolon)
-                .read(Fragment.PrefixWithExtern)
+                .readcb([&](unsigned v) {Fragment.Action = (SourceFragmentAction)v; })
                 .done();
 
               Meta.addSkippedFragment(Fragment);
