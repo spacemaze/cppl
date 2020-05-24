@@ -989,6 +989,10 @@ def levitation_decl_ast_meta
 : Joined<["-"], "levitation-decl-ast-meta=">,
 HelpText<"Levitation Decl AST Meta output file name. Required if 'flevitation-build-decl' is specified.">;
 
+def levitation_unit_id
+: Joined<["-"], "levitation-unit-id=">,
+HelpText<"Levitation Unit ID. Required if 'flevitation-build-decl' or 'flevitation-build-obj' is specified.">;
+
 def flevitation_ast_print
 : Flag<["-"], "flevitation-ast-print">,
 HelpText<"Instructs compiler to print AST into output.">;

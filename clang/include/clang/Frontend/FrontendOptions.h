@@ -458,6 +458,8 @@ public:
 
   std::string LevitationDependenciesOutputFile;
   std::string LevitationDeclASTMeta;
+  std::string LevitationUnitID;
+
   bool LevitationASTPrint;
 
   std::string LevitationPreambleFileName;

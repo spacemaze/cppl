@@ -1934,6 +1934,8 @@ static InputKind ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
           std::string(Args.getLastArgValue(OPT_levitation_decl_ast_meta));
   Opts.LevitationASTPrint =
           Args.hasArg(OPT_flevitation_ast_print);
+  Opts.LevitationUnitID =
+          std::string(Args.getLastArgValue(OPT_levitation_unit_id));
 
   if (const Arg *A = Args.getLastArg(OPT_arcmt_check,
                                      OPT_arcmt_modify,
@@ -3676,6 +3678,7 @@ static void parseLevitationBuildPreambleArgs(
 static void parseLevitationBuildObjectArgs(
   LangOptions &LangOpts,
   FrontendOptions &FrontendOpts,
+  PreprocessorOptions &PreprocessorOpts,
   DiagnosticsEngine &Diags
 ) {
 
@@ -3700,8 +3703,15 @@ static void parseLevitationBuildObjectArgs(
     Diags.Report(diag::err_fe_levitation_missed_option)
     << "-levitation-decl-ast-meta" << Stage;
   }
+  if (FrontendOpts.LevitationUnitID.empty()) {
+    Diags.Report(diag::err_fe_levitation_missed_option)
+    << "-levitation-unit-id" << Stage;
+  }
 
   LangOpts.LevitationMode = 1;
+
+  PreprocessorOpts.LevitationUnitID.swap(FrontendOpts.LevitationUnitID);
+
   if (FrontendOpts.LevitationBuildDeclaration) {
     LangOpts.setLevitationBuildStage(LangOptions::LBSK_BuildDeclAST);
   } else
@@ -3839,7 +3849,12 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
           Diags
       );
     }
-    parseLevitationBuildObjectArgs(LangOpts, Res.getFrontendOpts(), Diags);
+    parseLevitationBuildObjectArgs(
+        LangOpts,
+        Res.getFrontendOpts(),
+        Res.getPreprocessorOpts(),
+        Diags
+    );
   }
 
   //

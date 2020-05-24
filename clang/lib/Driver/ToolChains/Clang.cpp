@@ -3976,6 +3976,21 @@ void levitationSetMeta(
   ));
 }
 
+void levitationSetUnitID(
+    const Driver &D, ArgStringList &CmdArgs, const ArgList &Args
+) {
+  StringRef UnitID = Args.getLastArgValue(options::OPT_cppl_unit_id_EQ);
+
+  if (UnitID.empty())
+    D.Diag(diag::err_drv_missed_cppl_value)
+        << "-cppl-unit-id="
+        << "PARSE";
+
+  CmdArgs.push_back(Args.MakeArgString(
+      Twine("-levitation-unit-id=") + UnitID
+  ));
+}
+
 void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                          const InputInfo &Output, const InputInfoList &Inputs,
                          const ArgList &Args, const char *LinkingOutput) const {
@@ -4199,6 +4214,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       levitationParseIncludePreamble(CmdArgs, Args);
       levitationParseIncludeDeps(CmdArgs, Args);
       levitationSetMeta(D, CmdArgs, Args);
+      levitationSetUnitID(D, CmdArgs, Args);
     }
 
     // end of C++ Levitation
@@ -4305,6 +4321,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       levitationParseIncludePreamble(CmdArgs, Args);
       levitationParseIncludeDeps(CmdArgs, Args);
       levitationSetMeta(D, CmdArgs, Args);
+      levitationSetUnitID(D, CmdArgs, Args);
     }
 
     // end of C++ Levitation
