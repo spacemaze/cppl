@@ -190,6 +190,17 @@ StringRef sourceFragmentActionToStr(levitation::SourceFragmentAction Action) {
   }
 }
 
+static bool areAntonymActions(
+    levitation::SourceFragmentAction Target,
+    levitation::SourceFragmentAction New
+) {
+  if (Target == levitation::SourceFragmentAction::EndUnit)
+    return New == levitation::SourceFragmentAction::StartUnit;
+  if (Target == levitation::SourceFragmentAction::StartUnit)
+    return New == levitation::SourceFragmentAction::EndUnit;
+  return false;
+}
+
 void Sema::levitationAddSourceFragmentAction(
     const clang::SourceLocation &Start,
     const clang::SourceLocation &End,
@@ -205,11 +216,18 @@ void Sema::levitationAddSourceFragmentAction(
   )
     llvm_unreachable("Source fragment should be in main file");
 
-  if (
-     !LevitationSkippedFragments.empty() &&
-     LevitationSkippedFragments.back().End >= StartSLoc.second
-  )
-    llvm_unreachable("Currently fragments merging is not supported.");
+  if (!LevitationSkippedFragments.empty()) {
+    const auto &LastFragment = LevitationSkippedFragments.back();
+    if (
+        LastFragment.End == StartSLoc.second &&
+        areAntonymActions(LastFragment.Action, Action)
+    ) {
+      LevitationSkippedFragments.pop_back();
+      return;
+    }
+    if (LastFragment.End > StartSLoc.second)
+      llvm_unreachable("Can't handle overlapping actions");
+  }
 
   LevitationSkippedFragments.push_back({
     StartSLoc.second,

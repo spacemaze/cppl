@@ -30,6 +30,12 @@ using namespace clang;
 /// By default whenever we parse C++ Levitation files,
 /// we're in unit's namespace.
 void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
+
+  if (Start.isInvalid())
+    Start = Tok.getLocation();
+  if (End.isInvalid())
+    End = Start;
+
   StringRef UnitIDStr = getPreprocessor().getPreprocessorOpts().LevitationUnitID;
 
   if (LevitationUnitID.empty())
@@ -77,6 +83,12 @@ void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
 }
 
 void Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
+
+  if (Start.isInvalid())
+    Start = Tok.getLocation();
+  if (End.isInvalid())
+    End = Start;
+
   if (LevitationUnitScopes.empty())
     llvm_unreachable("Unit Scope items info should not be empty.");
 
@@ -107,6 +119,11 @@ void Parser::LevitationOnParseEnd() {
 
 bool Parser::ParseLevitationGlobal() {
 
+  SourceLocation GlobalLoc = ConsumeToken();
+
+  SourceLocation LBraceStart = Tok.getLocation();
+  SourceLocation LBraceEnd = Tok.getEndLoc();
+
   BalancedDelimiterTracker T(*this, tok::l_brace);
   if (T.consumeOpen()) {
     Diag(Tok, diag::err_expected) << tok::l_brace;
@@ -114,7 +131,7 @@ bool Parser::ParseLevitationGlobal() {
   }
 
   if (!LevitationUnitScopes.empty())
-    LevitationLeaveUnit(Tok.getLocation(), Tok.getEndLoc());
+    LevitationLeaveUnit(LBraceStart, LBraceEnd);
 
   while (!tryParseMisplacedModuleImport() && Tok.isNot(tok::r_brace) &&
          Tok.isNot(tok::eof)) {
@@ -125,11 +142,13 @@ bool Parser::ParseLevitationGlobal() {
 
   // The caller is what called check -- we are simply calling
   // the close for it.
+  SourceLocation RBraceStart = Tok.getLocation();
+  SourceLocation RBraceEnd = Tok.getEndLoc();
   T.consumeClose();
 
   if (Tok.isNot(tok::eof)) {
     if (Tok.isNot(tok::kw___levitation_global))
-      LevitationEnterUnit(Tok.getLocation(), Tok.getEndLoc());
+      LevitationEnterUnit(RBraceStart, RBraceEnd);
     else
       Diag(Tok, diag::warn_levitation_two_sibling_globals);
   }

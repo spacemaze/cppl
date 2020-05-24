@@ -552,6 +552,7 @@ bool Parser::ParseFirstTopLevelDecl(DeclGroupPtrTy &Result) {
   // C++ Levitation
   if (Actions.getLangOpts().isLevitationMode(LangOptions::LBSK_ParseManualDeps))
     llvm_unreachable("it is preprocessor only action");
+  // end of C++ Levitation
 
   // C11 6.9p1 says translation units must have at least one top-level
   // declaration. C++ doesn't have this restriction. We also don't want to

@@ -2437,8 +2437,6 @@ void Preprocessor::HandleLevitationBodyDirective(SourceLocation HashLoc, Token &
 
   // Discard until end of file.
 
-  Token Tmp;
-
   // By default incrementaProcessing is off.
   // Meanwhile, if it's off, and if lexer met eof, it perfoms
   // unrecoverable self-destruction actions, resets links between
@@ -2455,9 +2453,10 @@ void Preprocessor::HandleLevitationBodyDirective(SourceLocation HashLoc, Token &
   enableIncrementalProcessing(true);
   auto _ = llvm::make_scope_exit([&] {enableIncrementalProcessing(oldIncPr);});
 
-  LexUnexpandedToken(Tmp);
-  while (Tmp.isNot(tok::eof))
-    LexUnexpandedToken(Tmp);
+  LexUnexpandedToken(Tok);
+  while (Tok.isNot(tok::eof))
+    LexUnexpandedToken(Tok);
+  Tok.setLocation(HashLoc);
 }
 
 levitation::PackageDependencies& Preprocessor::accessLevitationDependencies() {
