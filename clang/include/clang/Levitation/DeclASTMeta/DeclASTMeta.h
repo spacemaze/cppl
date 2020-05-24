@@ -29,7 +29,9 @@ namespace clang { namespace levitation {
     ReplaceWithSemicolon,
     PutExtern,
     StartUnit,
-    EndUnit
+    StartUnitFirstDecl,
+    EndUnit,
+    EndUnitEOF
   };
 
 

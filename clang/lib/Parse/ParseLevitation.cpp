@@ -31,9 +31,12 @@ using namespace clang;
 /// we're in unit's namespace.
 void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
 
-  if (Start.isInvalid())
+  bool AtTUBounds = false;
+
+  if (Start.isInvalid()) {
+    AtTUBounds = true;
     Start = Tok.getLocation();
-  if (End.isInvalid())
+  } if (End.isInvalid())
     End = Start;
 
   StringRef UnitIDStr = getPreprocessor().getPreprocessorOpts().LevitationUnitID;
@@ -79,14 +82,17 @@ void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
     );
   }
 
-  Actions.levitationActOnEnterUnit(Start, End);
+  Actions.levitationActOnEnterUnit(Start, End, AtTUBounds);
 }
 
 void Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
 
-  if (Start.isInvalid())
+  bool AtTUBounds = false;
+
+  if (Start.isInvalid()) {
+    AtTUBounds = true;
     Start = Tok.getLocation();
-  if (End.isInvalid())
+  } if (End.isInvalid())
     End = Start;
 
   if (LevitationUnitScopes.empty())
@@ -104,7 +110,7 @@ void Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
     LevitationUnitScopes.pop_back();
   }
 
-  Actions.levitationActOnLeaveUnit(Start, End);
+  Actions.levitationActOnLeaveUnit(Start, End, AtTUBounds);
 }
 
 void Parser::LevitationOnParseStart() {
@@ -131,7 +137,7 @@ bool Parser::ParseLevitationGlobal() {
   }
 
   if (!LevitationUnitScopes.empty())
-    LevitationLeaveUnit(LBraceStart, LBraceEnd);
+    LevitationLeaveUnit(GlobalLoc, LBraceEnd);
 
   while (!tryParseMisplacedModuleImport() && Tok.isNot(tok::r_brace) &&
          Tok.isNot(tok::eof)) {

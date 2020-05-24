@@ -194,11 +194,18 @@ static bool areAntonymActions(
     levitation::SourceFragmentAction Target,
     levitation::SourceFragmentAction New
 ) {
-  if (Target == levitation::SourceFragmentAction::EndUnit)
-    return New == levitation::SourceFragmentAction::StartUnit;
-  if (Target == levitation::SourceFragmentAction::StartUnit)
-    return New == levitation::SourceFragmentAction::EndUnit;
-  return false;
+  switch (Target) {
+    case levitation::SourceFragmentAction::EndUnit:
+      return New == levitation::SourceFragmentAction::StartUnit;
+
+    case levitation::SourceFragmentAction::StartUnit:
+    case levitation::SourceFragmentAction::StartUnitFirstDecl:
+      return
+        New == levitation::SourceFragmentAction::EndUnit ||
+        New == levitation::SourceFragmentAction::EndUnitEOF;
+    default:
+      return false;
+  }
 }
 
 void Sema::levitationAddSourceFragmentAction(
@@ -383,20 +390,28 @@ Sema::levitationGetSourceFragments() const {
 
 void Sema::levitationActOnEnterUnit(
     const SourceLocation &StartLoc,
-    const SourceLocation &EndLoc
+    const SourceLocation &EndLoc,
+    bool AtTUBounds
 ) {
   ++LevitationNumUnitEnters;
   levitationAddSourceFragmentAction(
-      StartLoc, EndLoc, levitation::SourceFragmentAction::StartUnit
+      StartLoc, EndLoc,
+      AtTUBounds ?
+        levitation::SourceFragmentAction::StartUnitFirstDecl :
+        levitation::SourceFragmentAction::StartUnit
   );
 }
 
 void Sema::levitationActOnLeaveUnit(
     const SourceLocation &StartLoc,
-    const SourceLocation &EndLoc
+    const SourceLocation &EndLoc,
+    bool AtTUBounds
 ) {
   levitationAddSourceFragmentAction(
-      StartLoc, EndLoc, levitation::SourceFragmentAction::EndUnit
+      StartLoc, EndLoc,
+      AtTUBounds ?
+        levitation::SourceFragmentAction::EndUnitEOF :
+        levitation::SourceFragmentAction::EndUnit
   );
 }
 

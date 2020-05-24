@@ -28,6 +28,8 @@
 namespace clang { namespace levitation { namespace tools {
 
 class HeaderGenerator {
+  llvm::StringRef UnitID;
+
   llvm::StringRef OutputFile;
   llvm::StringRef SourceFile;
   llvm::StringRef Preamble;
@@ -44,6 +46,7 @@ class HeaderGenerator {
 
 public:
   HeaderGenerator(
+      llvm::StringRef UnitID,
       llvm::StringRef OutputFile,
       const llvm::StringRef &SourceFile,
       StringRef Preamble,
@@ -53,7 +56,8 @@ public:
       bool DryRun,
       bool CreateDecl = false
   )
-  : OutputFile(OutputFile),
+  : UnitID(UnitID),
+    OutputFile(OutputFile),
     SourceFile(SourceFile),
     Preamble(Preamble),
     Includes(Includes),
@@ -146,8 +150,29 @@ public:
 
           out.write(KeepPtr, KeepWriteCount);
 
-          if (skippedRange.Action == SourceFragmentAction::ReplaceWithSemicolon)
-            out << ";";
+          switch (skippedRange.Action) {
+            case SourceFragmentAction::ReplaceWithSemicolon:
+              out << ";";
+              break;
+            case SourceFragmentAction::StartUnit:
+            case SourceFragmentAction::StartUnitFirstDecl:
+              if (!CreateDecl) {
+                out << "namespace " << UnitID << " {";
+                if (skippedRange.Action == SourceFragmentAction::StartUnitFirstDecl)
+                  out << "\n";
+              }
+              break;
+            case SourceFragmentAction::EndUnit:
+            case SourceFragmentAction::EndUnitEOF:
+              if (!CreateDecl) {
+                if (skippedRange.Action == SourceFragmentAction::EndUnitEOF)
+                  out << "\n";
+                out << "}";
+              }
+              break;
+            default:
+              break;
+          }
 
           Start = skippedRange.End;
 

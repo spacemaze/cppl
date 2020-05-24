@@ -12471,12 +12471,14 @@ private:
 public:
   void levitationActOnEnterUnit(
       const SourceLocation &StartLoc,
-      const SourceLocation &EndLoc
+      const SourceLocation &EndLoc,
+      bool AtTUBounds
   );
 
   void levitationActOnLeaveUnit(
       const SourceLocation &LeaveLoc,
-      const SourceLocation &EndLoc
+      const SourceLocation &EndLoc,
+      bool AtTUBounds
   );
 
   bool levitationEnteredUnitAtLeastOnce() const;

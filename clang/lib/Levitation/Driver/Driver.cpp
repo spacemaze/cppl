@@ -1653,6 +1653,7 @@ bool LevitationDriverImpl::processDeclaration(
 
     auto IncludeSources = getIncludeSources(N, Graph);
     Success = HeaderGenerator(
+        *Strings.getItem(N.PackageInfo->PackagePath),
         Files.Header,
         Files.Source,
         N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
@@ -1671,6 +1672,7 @@ bool LevitationDriverImpl::processDeclaration(
     auto DeclSources = getImportSources(N, Graph);
 
     Success = HeaderGenerator(
+        *Strings.getItem(N.PackageInfo->PackagePath),
         Files.Decl,
         Files.Source,
         N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
