@@ -38,12 +38,12 @@ public:
     LevitationPackage->IsPublic = Deps.IsPublic;
 
     for (auto &DeclDep : Deps.DeclarationDependencies) {
-      auto NewDepID = OldToNew[DeclDep.FilePathID];
+      auto NewDepID = OldToNew[DeclDep.UnitIdentifier];
       LevitationPackage->DeclarationDependencies.insert(Declaration(NewDepID));
     }
 
     for (auto &DeclDep : Deps.DefinitionDependencies) {
-      auto NewDepID = OldToNew[DeclDep.FilePathID];
+      auto NewDepID = OldToNew[DeclDep.UnitIdentifier];
       LevitationPackage->DefinitionDependencies.insert(Declaration(NewDepID));
     }
 

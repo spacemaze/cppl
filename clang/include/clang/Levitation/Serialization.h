@@ -33,11 +33,11 @@ namespace llvm {
 namespace clang {
 namespace levitation {
   struct Declaration {
-    explicit Declaration(PathsPoolTy::key_type filePathID)
-    : FilePathID(filePathID) {}
+    explicit Declaration(PathsPoolTy::key_type unitIdentifier)
+    : UnitIdentifier(unitIdentifier) {}
 
     // So far, only one field
-    StringID FilePathID;
+    StringID UnitIdentifier;
 
     // TODO Levitation: add location info
   };
@@ -56,14 +56,14 @@ struct DenseMapInfo<clang::levitation::Declaration> {
   }
 
   static unsigned getHashValue(const clang::levitation::Declaration &Val) {
-    return (unsigned) (Val.FilePathID * 37U);
+    return (unsigned) (Val.UnitIdentifier * 37U);
   }
 
   static bool isEqual(
       const clang::levitation::Declaration &LHS,
       const clang::levitation::Declaration &RHS
   ) {
-    return LHS.FilePathID == RHS.FilePathID;
+    return LHS.UnitIdentifier == RHS.UnitIdentifier;
   }
 };
 

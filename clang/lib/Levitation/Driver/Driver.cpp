@@ -1301,8 +1301,8 @@ void LevitationDriverImpl::collectProjectSources() {
         Src, Context.Driver.SourcesRoot
     );
 
-    auto UnitIDStr = UnitIDUtils::fromRelPath(Rel);
-    auto UnitID = Strings.addItem(StringRef(UnitIDStr));
+    auto UnitIdentifier = UnitIDUtils::fromRelPath(Rel);
+    auto UnitID = Strings.addItem(StringRef(UnitIdentifier));
     RelPaths.try_emplace(UnitID, Rel);
 
     Context.ProjectPackages.insert(UnitID);
@@ -1385,15 +1385,15 @@ void LevitationDriverImpl::collectLibrariesSources() {
     for (const auto &CollectedPath : ExternalPackages) {
       auto PackagePath = Path::makeAbsolute<SinglePath>(CollectedPath);
       auto Package = Path::makeRelative<SinglePath>(PackagePath, ExtLibAbsPath);
-      auto UnitIDStr = UnitIDUtils::fromRelPath(Package);
+      auto UnitIdentifier = UnitIDUtils::fromRelPath(Package);
 
-      auto UnitID = Strings.addItem(StringRef(UnitIDStr));
+      auto UnitID = Strings.addItem(StringRef(UnitIdentifier));
 
       Context.ExternalPackages.insert(UnitID);
       Context.AllPackages.insert(UnitID);
 
       Log.log_trace(
-          "Checking lib package '", UnitIDStr, "' -> '", PackagePath, "'..."
+          "Checking lib package '", UnitIdentifier, "' -> '", PackagePath, "'..."
       );
 
       auto &Files = Context.Files.create(UnitID);

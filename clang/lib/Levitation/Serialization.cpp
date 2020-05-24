@@ -204,7 +204,7 @@ namespace levitation {
   AbbrevsBuilder::addRecordFieldTypes<Declaration>() {
     using Declaration = Declaration;
 
-    addFieldType<decltype(std::declval<Declaration>().FilePathID)>();
+    addFieldType<decltype(std::declval<Declaration>().UnitIdentifier)>();
 
     return *this;
   }
@@ -412,7 +412,7 @@ namespace levitation {
     ) {
       RecordData Record;
 
-      Record.push_back(Data.FilePathID);
+      Record.push_back(Data.UnitIdentifier);
 
       // TODO Levitation: add location info, see task #67
       //      Record.push_back(Data.LocationIDBegin);
