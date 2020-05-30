@@ -552,6 +552,13 @@ bool Parser::ParseFirstTopLevelDecl(DeclGroupPtrTy &Result) {
   // C++ Levitation
   if (Actions.getLangOpts().isLevitationMode(LangOptions::LBSK_ParseManualDeps))
     llvm_unreachable("it is preprocessor only action");
+
+  // FIXME Levitation
+  llvm_unreachable(
+      "FIXME: we should move this part into upcoming "
+      "ParseLevitationUnit method."
+  );
+
   // end of C++ Levitation
 
   // C11 6.9p1 says translation units must have at least one top-level

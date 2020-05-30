@@ -8,8 +8,8 @@
 //  This file implements additional parser methods for C++ Levitation mode.
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/ASTConsumer.h"
 #include "clang/Parse/Parser.h"
-
 #include "clang/Levitation/UnitID.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"
@@ -100,9 +100,12 @@ void Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
 
   SourceLocation LeaveUnitLoc = Tok.getLocation();
 
+  NamespaceDecl *OuterNS = nullptr;
+
   // Leave scope in reverse order.
   while (!LevitationUnitScopes.empty()) {
     auto &ScopeItem = LevitationUnitScopes.back();
+    OuterNS = ScopeItem.Namespace;
 
     ScopeItem.Scope->Exit();
     Actions.ActOnFinishNamespaceDef(ScopeItem.Namespace, LeaveUnitLoc);
@@ -110,7 +113,13 @@ void Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
     LevitationUnitScopes.pop_back();
   }
 
+  assert(OuterNS && "Unit Scope items info should not be empty.");
+
   Actions.levitationActOnLeaveUnit(Start, End, AtTUBounds);
+
+  Actions.getASTConsumer().HandleTopLevelDecl(
+      Actions.ConvertDeclToDeclGroup(OuterNS).get()
+  );
 }
 
 void Parser::LevitationOnParseStart() {
@@ -139,11 +148,13 @@ bool Parser::ParseLevitationGlobal() {
   if (!LevitationUnitScopes.empty())
     LevitationLeaveUnit(GlobalLoc, LBraceEnd);
 
-  while (!tryParseMisplacedModuleImport() && Tok.isNot(tok::r_brace) &&
-         Tok.isNot(tok::eof)) {
-    ParsedAttributesWithRange attrs(AttrFactory);
-    MaybeParseCXX11Attributes(attrs);
-    ParseExternalDeclaration(attrs);
+  auto &Consumer = Actions.getASTConsumer();
+  Parser::DeclGroupPtrTy ADecl;
+
+  while (Tok.isNot(tok::r_brace) && Tok.isNot(tok::eof)) {
+    ParseTopLevelDecl(ADecl);
+    if (ADecl && !Consumer.HandleTopLevelDecl(ADecl.get()))
+        return false;
   }
 
   // The caller is what called check -- we are simply calling

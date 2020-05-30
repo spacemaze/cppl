@@ -156,6 +156,29 @@ void clang::ParseAST(Sema &S, bool PrintStats, bool SkipFunctionBodies) {
 
     // C++ Levitation
 
+    // FIXME Levitation:
+    llvm_unreachable(
+        "FIXME Levitation: Introduce ParseLevitationUnit and call it here "
+        "instead of that 'for', which starts from ParseFirstTopLevelDecl. "
+        ""
+        "Because when parsing Unit, lexical top level decls are not top level "
+        "per semantic meaning, instead all of them belong to Unit namespace."
+        ""
+        "And opposite, decls which lexicaly belong to 'global' {...} scope, "
+        "are top level on semantic level. So we have to correct top-level loop:"
+        ""
+        "* When entering unit (LevitationOnParseStart), we should simulate"
+        "  'ParseFirstTopLevelDecl, namely we should call "
+        "  ActOnStartTranslationUnit."
+        "* When we met lexically top-level decls, we should call "
+        "  ParseExternalDecl (I believe)."
+        "* Inside ParseLevitationGlobal we should call ParseTopLevelDecl (done)"
+        "  we also should call HandleTopLevelDecl (done)"
+        "* When leaving unit we should call HandleTopLevelDecl (done) "
+        "* We should also call ActOnEndOfTranslationUnit in case if we parse"
+        "  'global' and met eof, or if we parse 'unit' and met eof."
+    );
+
     std::function<void()> LevitationOnParseEndCb = nullptr;
     auto LevitationOnParseEnd = llvm::make_scope_exit([&] {
       if (LevitationOnParseEndCb)
