@@ -39,6 +39,9 @@ CXX_GENERATE=%clang
 # CXX will be set during setBuildModeXXXX calls
 CXX=
 
+# Will be set during initialization
+SED_REPLACE_FLAG=
+
 LEVITATION_DEPS_EXECUTE=/Users/stepan/projects/shared/toolchains/llvm.git.darwin-debug-x86_64/bin/levitation-deps
 LEVITATION_DEPS_GENERATE=levitation-deps
 
@@ -642,6 +645,8 @@ function buildDecl {
     read MODULE DEPS <<< "$MODULE_WITH_DEPS"
     IFS=" "
 
+    UNIT_ID=$(printf $MODULE | sed $SED_REPLACE_FLAG "s/[\/]+/::/g")
+
     echoIfDebug "Building declaration for '$MODULE'..."
     dumpIfNotEmpty "Dependencies:" $DEPS
 
@@ -656,6 +661,7 @@ function buildDecl {
     done
 
     INSTANTIATE_FLAGS="-xc++ -flevitation-build-decl $DEP_FLAGS -emit-pch"
+    INSTANTIATE_FLAGS="$INSTANTIATE_FLAGS -levitation-unit-id=$UNIT_ID"
 
     setupFlags "$2" "$INSTANTIATE_FLAGS"
 
@@ -681,6 +687,8 @@ function buildObject {
     read MODULE DEPS <<< "$MODULE_WITH_DEPS"
     IFS=" "
 
+    UNIT_ID=$(printf $MODULE | sed  $SED_REPLACE_FLAG "s/[\/]+/::/g")
+
     echoIfDebug "Building object for '$MODULE'..."
     dumpIfNotEmpty "Dependencies:" $DEPS
 
@@ -695,6 +703,7 @@ function buildObject {
     done
 
     INSTANTIATE_FLAGS="-xc++ -flevitation-build-object $DEP_FLAGS -emit-obj"
+    INSTANTIATE_FLAGS="$INSTANTIATE_FLAGS -levitation-unit-id=$UNIT_ID"
 
     setupFlags "$2" "$INSTANTIATE_FLAGS"
 
@@ -786,7 +795,18 @@ function printResult {
     fi
 }
 
+function initPlatformDependent {
+    unameOut="$(uname -s)"
+    case "${unameOut}" in
+        Linux*)     SED_REPLACE_FLAG="-r";;
+        Darwin*)    SED_REPLACE_FLAG="-E";;
+        *)          SED_REPLACE_FLAG="-r"
+    esac
+}
+
 function initTests {
+
+  initPlatformDependent
 
   if [ "$#" == "0" ]; then
     echoIfError "initTests should accept at least two arguments: <mode> and <test name>"

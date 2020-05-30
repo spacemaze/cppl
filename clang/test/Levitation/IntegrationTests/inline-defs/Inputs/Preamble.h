@@ -13,7 +13,7 @@
 // CHECK-NOT: andThisInitYouSkip = 9090;
 // CHECK: 12323
 
-namespace Inputs {
+namespace Inputs::A {
 
 void thisSkip() { int a = 1; }
 

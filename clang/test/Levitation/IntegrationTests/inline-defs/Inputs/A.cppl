@@ -14,7 +14,6 @@
 // Because it can't go to definition part, and mergable just fine. So keep it.
 #public
 
-namespace Inputs {
   class A {
   public:
     static int thisSkip() { return 1111; }
@@ -74,5 +73,3 @@ namespace Inputs {
   {
     int a = 345345;
   }
-
-}

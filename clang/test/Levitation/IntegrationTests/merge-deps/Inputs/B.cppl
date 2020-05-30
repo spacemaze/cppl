@@ -1,9 +1,7 @@
 #import Inputs::A
 #public
 
-namespace Inputs {
   class B {
   public:
-    static int foo() { return Inputs::A<int>::foo(788); }
+    static int foo() { return Inputs::A::A<int>::foo(788); }
   };
-}

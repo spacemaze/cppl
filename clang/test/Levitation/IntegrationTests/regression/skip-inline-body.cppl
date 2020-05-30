@@ -1,5 +1,6 @@
 // RUN:  %clang -cc1 -std=c++17 -xc++ -levitation-decl-ast-meta=%T/meta \
 // RUN:    -flevitation-build-decl %s -o %T/A.decl-ast -emit-pch \
+// RUN:    -levitation-unit-id=skip_inline_body \
 // RUN:    -flevitation-ast-print | FileCheck %s
 
 class A {

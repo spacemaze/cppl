@@ -1,4 +1,5 @@
 #import Inputs::A
+global {
 
 int main() {
   with (
@@ -10,4 +11,6 @@ int main() {
         << Inputs::A::foo();
   }
   return levitation::Test::result();
+}
+
 }

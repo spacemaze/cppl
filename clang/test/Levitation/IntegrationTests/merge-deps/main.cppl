@@ -11,19 +11,19 @@
 // Parsing #import directives in 'Inputs/C'...
 // RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -levitation-parse-import -levitation-deps-output-file=%T/Inputs_C.ldeps  -levitation-decl-ast-meta=%T/Inputs_C.ldeps.meta %S/Inputs/C.cppl
 // Building declaration 'Inputs/A'...
-// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-decl -emit-pch %S/Inputs/A.cppl -levitation-decl-ast-meta=%T/Inputs_A.decl-ast-meta -o %T/Inputs_A.decl-ast
+// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-decl -emit-pch -levitation-unit-id=Inputs::A %S/Inputs/A.cppl -levitation-decl-ast-meta=%T/Inputs_A.decl-ast-meta -o %T/Inputs_A.decl-ast
 // Building object 'Inputs/A'...
-// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -emit-obj %S/Inputs/A.cppl -levitation-decl-ast-meta=%T/Inputs_A.decl-ast-meta -o %T/Inputs_A.o
+// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -emit-obj -levitation-unit-id=Inputs::A %S/Inputs/A.cppl -levitation-decl-ast-meta=%T/Inputs_A.decl-ast-meta -o %T/Inputs_A.o
 // Building declaration 'Inputs/B'...
-// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-decl -levitation-dependency=%T/Inputs_A.decl-ast -emit-pch %S/Inputs/B.cppl -levitation-decl-ast-meta=%T/Inputs_B.decl-ast-meta -o %T/Inputs_B.decl-ast
+// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-decl -levitation-dependency=%T/Inputs_A.decl-ast -emit-pch -levitation-unit-id=Inputs::B %S/Inputs/B.cppl -levitation-decl-ast-meta=%T/Inputs_B.decl-ast-meta -o %T/Inputs_B.decl-ast
 // Building object 'Inputs/B'...
-// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -levitation-dependency=%T/Inputs_A.decl-ast -emit-obj %S/Inputs/B.cppl -levitation-decl-ast-meta=%T/Inputs_B.decl-ast-meta -o %T/Inputs_B.o
+// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -levitation-dependency=%T/Inputs_A.decl-ast -emit-obj -levitation-unit-id=Inputs::B %S/Inputs/B.cppl -levitation-decl-ast-meta=%T/Inputs_B.decl-ast-meta -o %T/Inputs_B.o
 // Building declaration 'Inputs/C'...
-// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-decl -levitation-dependency=%T/Inputs_A.decl-ast -emit-pch %S/Inputs/C.cppl -levitation-decl-ast-meta=%T/Inputs_C.decl-ast-meta -o %T/Inputs_C.decl-ast
+// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-decl -levitation-dependency=%T/Inputs_A.decl-ast -emit-pch -levitation-unit-id=Inputs::C %S/Inputs/C.cppl -levitation-decl-ast-meta=%T/Inputs_C.decl-ast-meta -o %T/Inputs_C.decl-ast
 // Building object 'Inputs/C'...
-// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -levitation-dependency=%T/Inputs_A.decl-ast -emit-obj %S/Inputs/C.cppl -levitation-decl-ast-meta=%T/Inputs_C.decl-ast-meta -o %T/Inputs_C.o
+// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -levitation-dependency=%T/Inputs_A.decl-ast -emit-obj -levitation-unit-id=Inputs::C %S/Inputs/C.cppl -levitation-decl-ast-meta=%T/Inputs_C.decl-ast-meta -o %T/Inputs_C.o
 // Building object 'main'...
-// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -levitation-dependency=%T/Inputs_A.decl-ast -levitation-dependency=%T/Inputs_B.decl-ast -levitation-dependency=%T/Inputs_C.decl-ast -emit-obj %S/main.cppl -levitation-decl-ast-meta=%T/Inputs_C.decl-ast-meta -o %T/main.o
+// RUN:  %clang -cc1 -std=c++17 -levitation-preamble=%T/preamble.pch -xc++ -flevitation-build-object -levitation-dependency=%T/Inputs_A.decl-ast -levitation-dependency=%T/Inputs_B.decl-ast -levitation-dependency=%T/Inputs_C.decl-ast -emit-obj -levitation-unit-id=main %S/main.cppl -levitation-decl-ast-meta=%T/Inputs_C.decl-ast-meta -o %T/main.o
 // RUN:  %clangxx %T/main.o %T/Inputs_A.o %T/Inputs_B.o %T/Inputs_C.o -o %T/app.out
 // RUN:  %T/app.out
 #import Inputs::B
@@ -37,8 +37,8 @@ int main() {
     .open()
   ) {
     levitation::Test::context()
-        << Inputs::B::foo()
-        << Inputs::C::foo();
+        << Inputs::B::B::foo()
+        << Inputs::C::C::foo();
   }
   return levitation::Test::result();
 }
