@@ -35,9 +35,13 @@ void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
   bool AtTUBounds = false;
 
   if (Start.isInvalid()) {
+    auto &SM = Actions.getSourceManager();
+    auto MainFileID = SM.getMainFileID();
+    Start = SM.getLocForStartOfFile(MainFileID);
     AtTUBounds = true;
-    Start = Tok.getLocation();
-  } if (End.isInvalid())
+  }
+
+  if (End.isInvalid())
     End = Start;
 
   StringRef UnitIDStr = getPreprocessor().getPreprocessorOpts().LevitationUnitID;

@@ -387,6 +387,20 @@ Sema::levitationGetSourceFragments() const {
       LevitationSkippedFragments.end()
   );
 
+  using FragmentTy = levitation::DeclASTMeta::FragmentTy;
+
+  std::sort(
+    Fragments.begin(), Fragments.end(),
+    [] (const FragmentTy &LHS, const FragmentTy &RHS) {
+      bool Less = LHS.End <= RHS.Start;
+
+      if (!Less && (RHS.End > LHS.Start))
+        llvm_unreachable("Overlapping fragments detected.");
+
+      return Less;
+    }
+  );
+
   return Fragments;
 }
 
