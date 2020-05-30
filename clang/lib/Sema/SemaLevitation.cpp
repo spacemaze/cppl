@@ -387,19 +387,15 @@ Sema::levitationGetSourceFragments() const {
       LevitationSkippedFragments.end()
   );
 
-  using FragmentTy = levitation::DeclASTMeta::FragmentTy;
-
-  std::sort(
-    Fragments.begin(), Fragments.end(),
-    [] (const FragmentTy &LHS, const FragmentTy &RHS) {
-      bool Less = LHS.End <= RHS.Start;
-
-      if (!Less && (RHS.End > LHS.Start))
-        llvm_unreachable("Overlapping fragments detected.");
-
-      return Less;
+  // Make sure, that fragments are sorted.
+  if (!Fragments.empty()) {
+    for (size_t i = 1, e = Fragments.size(); i != e; ++i) {
+      const auto &LHS = Fragments[i - 1];
+      const auto &RHS = Fragments[i];
+      if (LHS.End > RHS.Start)
+        llvm_unreachable("Fragments are not sorted.");
     }
-  );
+  }
 
   return Fragments;
 }

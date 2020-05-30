@@ -27,6 +27,17 @@ namespace clang {
 using namespace llvm;
 using namespace clang;
 
+static SourceLocation getNextLoc(const Sema &Actions) {
+  auto AllFragments = Actions.levitationGetSourceFragments();
+  auto &SM = Actions.getSourceManager();
+  auto MainFileID = SM.getMainFileID();
+
+  if (AllFragments.empty())
+    return SM.getLocForStartOfFile(MainFileID);
+
+  const auto &LastFragment = AllFragments.back();
+  return SM.getLocForStartOfFile(MainFileID).getLocWithOffset((int)(LastFragment.End));
+}
 
 /// By default whenever we parse C++ Levitation files,
 /// we're in unit's namespace.
@@ -35,10 +46,8 @@ void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
   bool AtTUBounds = false;
 
   if (Start.isInvalid()) {
-    auto &SM = Actions.getSourceManager();
-    auto MainFileID = SM.getMainFileID();
-    Start = SM.getLocForStartOfFile(MainFileID);
     AtTUBounds = true;
+    Start = getNextLoc(Actions);
   }
 
   if (End.isInvalid())
@@ -96,8 +105,10 @@ bool Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
 
   if (Start.isInvalid()) {
     AtTUBounds = true;
-    Start = Tok.getLocation();
-  } if (End.isInvalid())
+    Start = getNextLoc(Actions);
+  }
+
+  if (End.isInvalid())
     End = Start;
 
   if (LevitationUnitScopes.empty())
