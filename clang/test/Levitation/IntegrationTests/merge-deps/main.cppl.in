@@ -1,6 +1,8 @@
 #import Inputs::B
 #import Inputs::C
 
+global {
+
 int main() {
   with (
     auto TestScope = levitation::Test::context()
@@ -13,4 +15,6 @@ int main() {
         << Inputs::C::C::foo();
   }
   return levitation::Test::result();
+}
+
 }

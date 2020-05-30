@@ -24,7 +24,7 @@ int main() {
     .open()
   ) {
     levitation::Test::context()
-        << Inputs::A::foo();
+        << Inputs::A::A::foo();
   }
   return levitation::Test::result();
 }

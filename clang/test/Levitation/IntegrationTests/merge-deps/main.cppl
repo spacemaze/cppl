@@ -29,16 +29,21 @@
 #import Inputs::B
 #import Inputs::C
 
+global {
+
 int main() {
-  with (
-    auto TestScope = levitation::Test::context()
-        .expect(788)
-        .expect(777)
-    .open()
+  with(
+      auto
+  TestScope = levitation::Test::context()
+      .expect(788)
+      .expect(777)
+      .open()
   ) {
     levitation::Test::context()
         << Inputs::B::B::foo()
         << Inputs::C::C::foo();
   }
   return levitation::Test::result();
+}
+
 }
