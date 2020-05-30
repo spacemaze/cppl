@@ -2,3 +2,13 @@
 
 // CHECK: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"
 // IMPORT-CHECK: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"
+
+// CHECK-NOT: {{^\s*[^/]*}}namespace
+// IMPORT-CHECK: {{^\s*[^/]*}}global {
+global {
+  int c;
+
+// Check end of unit scope '}'
+// CHECK-NOT: {{^\s*[^/]*}}}
+// IMPORT-CHECK: {{^\s*[^/]*}}}
+}

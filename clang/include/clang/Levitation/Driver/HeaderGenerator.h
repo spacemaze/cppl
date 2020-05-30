@@ -106,6 +106,13 @@ public:
         size_t Start = 0;
         StringRef NewLine("\n");
         for (const auto &skippedRange : SkippedBytes) {
+
+          if (
+            skippedRange.Action == SourceFragmentAction::SkipInHeaderOnly &&
+            CreateDecl
+          )
+            continue;
+
           // possible skip cases:
           //
           // Case 1:
@@ -141,7 +148,27 @@ public:
 
           StringRef Keep(KeepPtr, KeepWriteCountStripped);
 
-          if (Keep.endswith(NewLine)) {
+          // TODO Levitation: create action description class,
+          //   it should include flags we check for particular actions
+          //   subset below, like
+          //   * `StripNewLineBefore`
+          //   * `ReplaceWith` text
+          //   * etc.
+
+          bool StripNewLineBefore;
+          switch (skippedRange.Action) {
+            case SourceFragmentAction::StartUnit:
+            case SourceFragmentAction::StartUnitFirstDecl:
+            case SourceFragmentAction::EndUnit:
+            case SourceFragmentAction ::EndUnitEOF:
+              StripNewLineBefore = false;
+              break;
+            default:
+              StripNewLineBefore = true;
+              break;
+          };
+
+          if (StripNewLineBefore && Keep.endswith(NewLine)) {
             KeepWriteCountStripped -= NewLine.size();
             AfterKeepNewLine = true;
           }

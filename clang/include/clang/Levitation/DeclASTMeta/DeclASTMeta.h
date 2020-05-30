@@ -26,6 +26,7 @@ namespace clang { namespace levitation {
 
   enum struct SourceFragmentAction {
     Skip = 0,
+    SkipInHeaderOnly,
     ReplaceWithSemicolon,
     PutExtern,
     StartUnit,

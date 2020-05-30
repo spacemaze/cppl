@@ -40,3 +40,9 @@
 // IMPORT-CHECK-NOT: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"
 
 #import Inputs::B
+
+int a;
+
+global {
+  int a;
+}

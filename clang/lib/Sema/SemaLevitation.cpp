@@ -32,6 +32,10 @@ using namespace sema;
 // Helpers
 //
 
+#if 0
+#define DUMP_SOURCE_FRAGMENTS
+#endif
+
 std::pair<unsigned, unsigned> levitationGetDeclaratorID(const Declarator &D) {
   const auto &SR = D.getSourceRange();
   return {
@@ -134,7 +138,7 @@ void Sema::levitationAddSkippedSourceFragment(
       Last.End = EndSLoc.second;
       Last.Action = Action;
 
-      #if 0
+      #ifdef DUMP_SOURCE_FRAGMENTS
         llvm::errs() << "Extended skipped fragment "
                      << (ReplaceWithSemicolon ? "BURN:\n" : ":\n");
 
@@ -160,7 +164,7 @@ void Sema::levitationAddSkippedSourceFragment(
     Action
   });
 
-#if 0
+#ifdef DUMP_SOURCE_FRAGMENTS
   llvm::errs() << "Added skipped fragment "
                << (ReplaceWithSemicolon ? "BURN:\n" : ":\n");
 
@@ -179,6 +183,8 @@ StringRef sourceFragmentActionToStr(levitation::SourceFragmentAction Action) {
   switch (Action) {
     case levitation::SourceFragmentAction::Skip:
       return "Skip";
+    case levitation::SourceFragmentAction::SkipInHeaderOnly:
+      return "SkipInHeaderOnly";
     case levitation::SourceFragmentAction::ReplaceWithSemicolon:
       return "ReplaceWithSemicolon";
     case levitation::SourceFragmentAction::PutExtern:
@@ -246,9 +252,9 @@ void Sema::levitationAddSourceFragmentAction(
     Action
   });
 
-#if 0
+#ifdef DUMP_SOURCE_FRAGMENTS
   llvm::errs() << "Added source fragment: "
-               << sourceFragmentActionToStr(Action) : ":\n";
+               << sourceFragmentActionToStr(Action) << ":\n";
 
   llvm::errs() << "Bytes: 0x";
   llvm::errs().write_hex(StartSLoc.second) << " : 0x";
@@ -281,31 +287,32 @@ void Sema::levitationReplaceLastSkippedSourceFragments(
   );
 
   assert(
-      LevitationSkippedFragments.size() &&
+      !LevitationSkippedFragments.empty() &&
       "Fragments merging applied for non empty "
       "LevitationSkippedFragments collection only"
   );
 
+  // Assuming that StartOffset is somewhere in middle of
+  // whole LevitationSkippedFragments set.
   // Lookup for first fragment to be replaced
-  size_t FirstRemain = LevitationSkippedFragments.size();
-  while (FirstRemain)
+  size_t i = LevitationSkippedFragments.size();
+  while (i)
   {
-    --FirstRemain;
-    if (StartOffset > LevitationSkippedFragments[FirstRemain].End)
+    size_t prev = i-1;
+    if (StartOffset > LevitationSkippedFragments[prev].End)
       break;
+    i = prev;
   }
 
-  size_t RemainSize = FirstRemain + 1;
-
-  LevitationSkippedFragments.resize(RemainSize);
+  LevitationSkippedFragments.resize(i);
 
   LevitationSkippedFragments.push_back({
     StartOffset, EndOffset, levitation::SourceFragmentAction::Skip
   });
 
-#if 0
+#ifdef DUMP_SOURCE_FRAGMENTS
   llvm::errs() << "Merged skipped fragment\n"
-               << "  replaced fragments from idx = " << RemainSize
+               << "  replaced fragments from idx = " << i
                << "\n";
 
   llvm::errs() << "New bytes: 0x";
@@ -361,7 +368,7 @@ void Sema::levitationInsertExternForHeader(
       }
   );
 
-#if 0
+#ifdef DUMP_SOURCE_FRAGMENTS
   llvm::errs() << "Inserted extern keyword\n";
 
   llvm::errs() << "New bytes: 0x";

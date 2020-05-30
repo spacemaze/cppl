@@ -39,6 +39,12 @@ static SourceLocation getNextLoc(const Sema &Actions) {
   return SM.getLocForStartOfFile(MainFileID).getLocWithOffset((int)(LastFragment.End));
 }
 
+static SourceLocation getLastLoc(const Sema &Actions) {
+  auto &SM = Actions.getSourceManager();
+  auto MainFileID = SM.getMainFileID();
+  return SM.getLocForEndOfFile(MainFileID);
+}
+
 /// By default whenever we parse C++ Levitation files,
 /// we're in unit's namespace.
 void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
@@ -105,7 +111,7 @@ bool Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
 
   if (Start.isInvalid()) {
     AtTUBounds = true;
-    Start = getNextLoc(Actions);
+    Start = getLastLoc(Actions);
   }
 
   if (End.isInvalid())
@@ -161,9 +167,14 @@ bool Parser::ParseLevitationGlobal() {
     return false;
   }
 
-  if (!LevitationUnitScopes.empty())
+  if (!LevitationUnitScopes.empty()) {
     if (!LevitationLeaveUnit(GlobalLoc, LBraceEnd))
       return false;
+  } else
+    Actions.levitationAddSourceFragmentAction(
+        GlobalLoc, LBraceEnd,
+        levitation::SourceFragmentAction::SkipInHeaderOnly
+    );
 
   auto &Consumer = Actions.getASTConsumer();
   Parser::DeclGroupPtrTy ADecl;
@@ -183,11 +194,17 @@ bool Parser::ParseLevitationGlobal() {
   T.consumeClose();
 
   if (Tok.isNot(tok::eof)) {
-    if (Tok.isNot(tok::kw___levitation_global))
+    if (Tok.isNot(tok::kw___levitation_global)) {
       LevitationEnterUnit(RBraceStart, RBraceEnd);
-    else
-      Diag(Tok, diag::warn_levitation_two_sibling_globals);
+      return true;
+    }
+    // else
+    Diag(Tok, diag::warn_levitation_two_sibling_globals);
   }
+
+  Actions.levitationAddSourceFragmentAction(
+    RBraceStart, RBraceEnd, levitation::SourceFragmentAction::SkipInHeaderOnly
+  );
 
   return true;
 }
