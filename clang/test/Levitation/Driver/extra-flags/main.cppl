@@ -27,13 +27,18 @@
 
 #import Inputs::A
 
+global {
+
 int main() {
-  with (
-    auto TestScope = levitation::Test::context()
-        .expect("Inputs::A::f()")
-    .open()
+  with(
+      auto
+  TestScope = levitation::Test::context()
+      .expect("Inputs::A::A::f()")
+      .open()
   ) {
-    Inputs::A::f();
+    Inputs::A::A::f();
   }
   return levitation::Test::result();
+}
+
 }

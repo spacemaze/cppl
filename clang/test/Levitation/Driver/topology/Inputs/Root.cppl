@@ -1,8 +1,6 @@
-namespace Inputs {
-  class Root {
-  public:
-    static void f() {
-      levitation::Test::context() << "Inputs::Root::f()";
-    }
-  };
-}
+class RootClass {
+public:
+  static void f() {
+    levitation::Test::context() << "Inputs::Root::RootClass::f()";
+  }
+};

@@ -4,4 +4,8 @@
 #import Inputs::A
 #import Inputs::B
 
+global {
+
 int main() { return 0; }
+
+}

@@ -4,39 +4,43 @@
 // RUN: %T/a.out
 
 // CHECK-DAG: BUILD DECL {{.*}}Root.cppl, deps: <empty> -> decl-ast: {{.*}}Root.decl-ast
-// CHECK-DAG: BUILD DECL {{.*}}MyClass.cppl, deps: ({{.*}}Root.decl-ast) -> decl-ast: {{.*}}MyClass.decl-ast
-// CHECK-DAG: BUILD DECL {{.*}}BodyDepClass.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast) -> decl-ast: {{.*}}BodyDepClass.decl-ast
-// CHECK-DAG: BUILD OBJ {{.*}}test.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast, {{.*}}BodyDepClass.decl-ast) -> object: {{.*}}test.o
-// CHECK-DAG: BUILD OBJ {{.*}}BodyDepClass.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}MyClass.decl-ast) -> object: {{.*}}BodyDepClass.o
-// CHECK-DAG: BUILD OBJ {{.*}}MyClass.cppl, deps: ({{.*}}Root.decl-ast) -> object: {{.*}}MyClass.o
+// CHECK-DAG: BUILD DECL {{.*}}My.cppl, deps: ({{.*}}Root.decl-ast) -> decl-ast: {{.*}}My.decl-ast
+// CHECK-DAG: BUILD DECL {{.*}}BodyDep.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}My.decl-ast) -> decl-ast: {{.*}}BodyDep.decl-ast
+// CHECK-DAG: BUILD OBJ {{.*}}test.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}My.decl-ast, {{.*}}BodyDep.decl-ast) -> object: {{.*}}test.o
+// CHECK-DAG: BUILD OBJ {{.*}}BodyDep.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}My.decl-ast) -> object: {{.*}}BodyDep.o
+// CHECK-DAG: BUILD OBJ {{.*}}My.cppl, deps: ({{.*}}Root.decl-ast) -> object: {{.*}}My.o
 // CHECK-DAG: BUILD OBJ {{.*}}Root.cppl, deps: <empty> -> object: {{.*}}Root.o
-// CHECK-DAG: LINK objects: ({{.*}}Root.o, {{.*}}MyClass.o, {{.*}}test.o, {{.*}}BodyDepClass.o) -> {{.*}}
+// CHECK-DAG: LINK objects: ({{.*}}Root.o, {{.*}}BodyDep.o, {{.*}}test.o, {{.*}}My.o) -> {{.*}}
 
-#import Inputs::MyClass
-#import [bodydep] Inputs::BodyDepClass
+#import Inputs::My
+#import [bodydep] Inputs::BodyDep
 #import Inputs::Root
+
+global {
 
 int main() {
 
   with (
     auto TestScope = levitation::Test::context()
         // call Inputs::MyClass::f()
-        .expect("Inputs::Root::f()")
-        .expect("Inputs::MyClass::f()")
+        .expect("Inputs::Root::RootClass::f()")
+        .expect("Inputs::My::MyClass::f()")
 
         // call Inputs::MyClass::m()
-        .expect("Inputs::Root::f()")
-        .expect("Inputs::MyClass::m()")
+        .expect("Inputs::Root::RootClass::f()")
+        .expect("Inputs::My::MyClass::m()")
 
         // call Inputs::BodyDepClass::f()
-        .expect("Inputs::Root::f()")
-        .expect("Inputs::MyClass::f()")
-        .expect("Inputs::BodyDepClass::f()")
+        .expect("Inputs::Root::RootClass::f()")
+        .expect("Inputs::My::MyClass::f()")
+        .expect("Inputs::BodyDep::BodyDepClass::f()")
     .open()
   ) {
-    Inputs::MyClass::f();
-    Inputs::MyClass::m();
-    Inputs::BodyDepClass::f();
+    Inputs::My::MyClass::f();
+    Inputs::My::MyClass::m();
+    Inputs::BodyDep::BodyDepClass::f();
   }
   return levitation::Test::result();
+}
+
 }

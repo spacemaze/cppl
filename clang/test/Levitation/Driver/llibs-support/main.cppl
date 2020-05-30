@@ -4,7 +4,7 @@
 #import test_lib::A
 #import test_lib::B
 
-test_lib::A a;
-test_lib::B b;
+test_lib::A::A a;
+test_lib::B::B b;
 
 int main() { return 0; }

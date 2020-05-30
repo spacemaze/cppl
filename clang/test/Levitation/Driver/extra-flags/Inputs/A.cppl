@@ -1,7 +1,5 @@
-namespace Inputs {
-  struct A {
-    static void f() {
-      levitation::Test::context() << "Inputs::A::f()";
-    }
-  };
-}
+struct A {
+  static void f() {
+    levitation::Test::context() << "Inputs::A::A::f()";
+  }
+};
