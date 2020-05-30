@@ -105,6 +105,9 @@ NamedDecl *Parser::ParseCXXInlineMethodDef(
 
   if (Actions.getLangOpts().LevitationMode) {
     if (auto F = dyn_cast<FunctionDecl>(FnD))
+      // Note, that in C++ Levitation mode
+      // F->isInlined is formed in a bit different way,
+      // see SemaDecl.cpp, LevitationCancelInline boolean variable.
       LevitationInlineFunction = F->isInlined();
     else if (isa<FunctionTemplateDecl>(FnD))
       LevitationInlineFunction = true;
