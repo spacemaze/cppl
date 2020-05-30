@@ -185,8 +185,12 @@ StringRef sourceFragmentActionToStr(levitation::SourceFragmentAction Action) {
       return "PutExtern";
     case levitation::SourceFragmentAction::StartUnit:
       return "StartUnit";
+    case levitation::SourceFragmentAction::StartUnitFirstDecl:
+      return "StartUnitFirstDecl";
     case levitation::SourceFragmentAction::EndUnit:
       return "EndUnit";
+    case levitation::SourceFragmentAction::EndUnitEOF:
+      return "EndUnitEOF";
   }
 }
 

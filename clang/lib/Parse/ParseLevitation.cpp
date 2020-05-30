@@ -27,6 +27,7 @@ namespace clang {
 using namespace llvm;
 using namespace clang;
 
+
 /// By default whenever we parse C++ Levitation files,
 /// we're in unit's namespace.
 void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
@@ -85,7 +86,7 @@ void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
   Actions.levitationActOnEnterUnit(Start, End, AtTUBounds);
 }
 
-void Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
+bool Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
 
   bool AtTUBounds = false;
 
@@ -117,26 +118,26 @@ void Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
 
   Actions.levitationActOnLeaveUnit(Start, End, AtTUBounds);
 
-  Actions.getASTConsumer().HandleTopLevelDecl(
-      Actions.ConvertDeclToDeclGroup(OuterNS).get()
-  );
+  return Actions.getASTConsumer().HandleTopLevelDecl(DeclGroupRef(OuterNS));
 }
 
 void Parser::LevitationOnParseStart() {
+  Actions.ActOnStartOfTranslationUnit();
   if (!Tok.is(tok::kw___levitation_global))
     LevitationEnterUnit();
 }
 
-void Parser::LevitationOnParseEnd() {
+bool Parser::LevitationOnParseEnd() {
+  Actions.ActOnEndOfTranslationUnit();
   if (!LevitationUnitScopes.empty())
-    LevitationLeaveUnit();
+    return LevitationLeaveUnit();
+  return true;
 }
 
 bool Parser::ParseLevitationGlobal() {
 
   SourceLocation GlobalLoc = ConsumeToken();
 
-  SourceLocation LBraceStart = Tok.getLocation();
   SourceLocation LBraceEnd = Tok.getEndLoc();
 
   BalancedDelimiterTracker T(*this, tok::l_brace);
@@ -146,11 +147,14 @@ bool Parser::ParseLevitationGlobal() {
   }
 
   if (!LevitationUnitScopes.empty())
-    LevitationLeaveUnit(GlobalLoc, LBraceEnd);
+    if (!LevitationLeaveUnit(GlobalLoc, LBraceEnd))
+      return false;
 
   auto &Consumer = Actions.getASTConsumer();
   Parser::DeclGroupPtrTy ADecl;
 
+  // This part is similar to ParseAST top-level loop.
+  // As long as we're in global, we should parse top-level declarations.
   while (Tok.isNot(tok::r_brace) && Tok.isNot(tok::eof)) {
     ParseTopLevelDecl(ADecl);
     if (ADecl && !Consumer.HandleTopLevelDecl(ADecl.get()))
@@ -171,4 +175,49 @@ bool Parser::ParseLevitationGlobal() {
   }
 
   return true;
+}
+
+bool Parser::ParseLevitationTranslationUnit() {
+
+  assert(Actions.isLevitationMode(
+      LangOptions::LBSK_BuildDeclAST,
+      LangOptions::LBSK_BuildObjectFile
+  ));
+
+  LevitationOnParseStart();
+
+  // Parse until EOF token or error encountered.
+  while (true) {
+    switch (Tok.getKind()) {
+      case tok::annot_pragma_unused:
+        HandlePragmaUnused();
+        break;
+
+      case tok::eof:
+        // Check whether -fmax-tokens= was reached.
+        if (PP.getMaxTokens() != 0 && PP.getTokenCount() > PP.getMaxTokens()) {
+          PP.Diag(Tok.getLocation(), diag::warn_max_tokens_total)
+              << PP.getTokenCount() << PP.getMaxTokens();
+          SourceLocation OverrideLoc = PP.getMaxTokensOverrideLoc();
+          if (OverrideLoc.isValid()) {
+            PP.Diag(OverrideLoc, diag::note_max_tokens_total_override);
+          }
+        }
+        return LevitationOnParseEnd();
+
+      case tok::kw___levitation_global: {
+          bool Success = ParseLevitationGlobal();
+          if (!Success)
+            return false;
+        }
+        break;
+
+      default: {
+          ParsedAttributesWithRange attrs(AttrFactory);
+          MaybeParseCXX11Attributes(attrs);
+          ParseExternalDeclaration(attrs);
+        }
+        break;
+    }
+  }
 }

@@ -549,17 +549,6 @@ void Parser::DestroyTemplateIds() {
 bool Parser::ParseFirstTopLevelDecl(DeclGroupPtrTy &Result) {
   Actions.ActOnStartOfTranslationUnit();
 
-  // C++ Levitation
-  if (Actions.getLangOpts().isLevitationMode(LangOptions::LBSK_ParseManualDeps))
-    llvm_unreachable("it is preprocessor only action");
-
-  // FIXME Levitation
-  llvm_unreachable(
-      "FIXME: we should move this part into upcoming "
-      "ParseLevitationUnit method."
-  );
-
-  // end of C++ Levitation
 
   // C11 6.9p1 says translation units must have at least one top-level
   // declaration. C++ doesn't have this restriction. We also don't want to
@@ -672,10 +661,6 @@ bool Parser::ParseTopLevelDecl(DeclGroupPtrTy &Result, bool IsFirstDecl) {
       Actions.ActOnEndOfTranslationUnit();
     //else don't tell Sema that we ended parsing: more input might come.
     return true;
-
-  case tok::kw___levitation_global:
-    ParseLevitationGlobal();
-    return Tok.is(tok::eof);
 
   case tok::identifier:
     // C++2a [basic.link]p3:

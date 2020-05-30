@@ -3315,17 +3315,25 @@ private:
       SourceLocation End = SourceLocation()
   );
 
-  void LevitationLeaveUnit(
+  bool LevitationLeaveUnit(
       SourceLocation Start = SourceLocation(),
       SourceLocation End = SourceLocation()
   );
 
   bool ParseLevitationGlobal();
 
-public:
 
   void LevitationOnParseStart();
-  void LevitationOnParseEnd();
+  bool LevitationOnParseEnd();
+
+public:
+
+  /**
+   * C++ Levitation parser main entry
+   * @return true is TU parsed successfully
+   *         false if unexpected termination requested
+   */
+  bool ParseLevitationTranslationUnit();
 
   // end of C++ Levitation
   // ===========================================================================
