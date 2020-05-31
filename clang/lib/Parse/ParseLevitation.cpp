@@ -215,13 +215,9 @@ bool Parser::ParseLevitationGlobal() {
   SourceLocation RBraceEnd = Tok.getEndLoc();
   T.consumeClose();
 
-  if (Tok.isNot(tok::eof)) {
-    if (!isAtLevitationGlobal(this)) {
+  if (Tok.isNot(tok::eof) && !isAtLevitationGlobal(this)) {
       LevitationEnterUnit(RBraceStart, RBraceEnd);
       return true;
-    }
-    // else
-    Diag(Tok, diag::warn_levitation_two_sibling_globals);
   }
 
   Actions.levitationAddSourceFragmentAction(
