@@ -12466,12 +12466,13 @@ public:
   // C++ Levitation Unit
 
 private:
-  int LevitationNumUnitEnters = false;
+  const NamespaceDecl *LevitationUnitScope = nullptr;
 
 public:
   void levitationActOnEnterUnit(
       const SourceLocation &StartLoc,
       const SourceLocation &EndLoc,
+      const NamespaceDecl *UnitScope,
       bool AtTUBounds
   );
 
@@ -12481,7 +12482,7 @@ public:
       bool AtTUBounds
   );
 
-  bool levitationEnteredUnitAtLeastOnce() const;
+  bool levitationUnitScopeNotEmpty() const;
 
   //
   // end of C++ Levitation Mode

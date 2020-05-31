@@ -102,7 +102,11 @@ void Parser::LevitationEnterUnit(SourceLocation Start, SourceLocation End) {
     );
   }
 
-  Actions.levitationActOnEnterUnit(Start, End, AtTUBounds);
+  Actions.levitationActOnEnterUnit(
+      Start, End,
+      LevitationUnitScopes.back().Namespace,
+      AtTUBounds
+  );
 }
 
 bool Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {

@@ -32,7 +32,7 @@ using namespace sema;
 // Helpers
 //
 
-#if 1
+#if 0
 #define DUMP_SOURCE_FRAGMENTS
 #endif
 
@@ -412,9 +412,10 @@ Sema::levitationGetSourceFragments() const {
 void Sema::levitationActOnEnterUnit(
     const SourceLocation &StartLoc,
     const SourceLocation &EndLoc,
+    const NamespaceDecl *UnitScope,
     bool AtTUBounds
 ) {
-  ++LevitationNumUnitEnters;
+  LevitationUnitScope = UnitScope;
   levitationAddSourceFragmentAction(
       StartLoc, EndLoc,
       AtTUBounds ?
@@ -436,6 +437,6 @@ void Sema::levitationActOnLeaveUnit(
   );
 }
 
-bool Sema::levitationEnteredUnitAtLeastOnce() const {
-  return LevitationNumUnitEnters > 0;
+bool Sema::levitationUnitScopeNotEmpty() const {
+  return LevitationUnitScope && !LevitationUnitScope->decls_empty();
 }

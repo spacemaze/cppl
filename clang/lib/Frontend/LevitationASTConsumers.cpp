@@ -133,6 +133,7 @@ namespace levitation {
   class LevitationUnitNamespaceVerifier : public SemaConsumer {
   private:
     Sema *SemaObj;
+    bool HasMainFunction = false;
   public:
     LevitationUnitNamespaceVerifier(CompilerInstance &CI) {};
 
@@ -148,9 +149,19 @@ namespace levitation {
 
     void HandleTranslationUnit(ASTContext &Ctx) override {
       ASTConsumer::HandleTranslationUnit(Ctx);
-      if (!SemaObj->levitationEnteredUnitAtLeastOnce()) {
+      if (
+        !HasMainFunction &&
+        !SemaObj->levitationUnitScopeNotEmpty()
+      )
         Ctx.getDiagnostics().Report(diag::warn_levitation_unit_decls);
+    }
+
+    bool HandleTopLevelDecl(DeclGroupRef D) override {
+      if (const auto *FD = dyn_cast<FunctionDecl>(D.getSingleDecl())) {
+        if (FD->isMain())
+          HasMainFunction = true;
       }
+      return ASTConsumer::HandleTopLevelDecl(D);
     }
   };
 
