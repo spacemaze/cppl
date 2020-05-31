@@ -574,6 +574,7 @@ protected:
 
         auto &TM = tasks::TasksManager::get();
 
+        TM.waitForTasks(NodeTasks);
         Successful = TM.allSuccessfull(NodeTasks);
       }
     }
