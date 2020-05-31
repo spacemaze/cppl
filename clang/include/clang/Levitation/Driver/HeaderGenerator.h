@@ -107,10 +107,23 @@ public:
         StringRef NewLine("\n");
         for (const auto &skippedRange : SkippedBytes) {
 
-          if (
-            skippedRange.Action == SourceFragmentAction::SkipInHeaderOnly &&
-            CreateDecl
-          )
+          bool IgnoreAction = false;
+
+          if (CreateDecl) {
+            switch (skippedRange.Action) {
+              case SourceFragmentAction::SkipInHeaderOnly:
+              case SourceFragmentAction::StartUnit:
+              case SourceFragmentAction::StartUnitFirstDecl:
+              case SourceFragmentAction::EndUnit:
+              case SourceFragmentAction::EndUnitEOF:
+                IgnoreAction = true;
+                break;
+              default:
+                break;
+            }
+          }
+
+          if (IgnoreAction)
             continue;
 
           // possible skip cases:
@@ -155,7 +168,7 @@ public:
           //   * `ReplaceWith` text
           //   * etc.
 
-          bool StripNewLineBefore;
+          bool StripNewLineBefore = true;
           switch (skippedRange.Action) {
             case SourceFragmentAction::StartUnit:
             case SourceFragmentAction::StartUnitFirstDecl:
@@ -164,7 +177,6 @@ public:
               StripNewLineBefore = false;
               break;
             default:
-              StripNewLineBefore = true;
               break;
           };
 
@@ -183,19 +195,15 @@ public:
               break;
             case SourceFragmentAction::StartUnit:
             case SourceFragmentAction::StartUnitFirstDecl:
-              if (!CreateDecl) {
-                out << "namespace " << UnitID << " {";
-                if (skippedRange.Action == SourceFragmentAction::StartUnitFirstDecl)
-                  out << "\n";
-              }
+              out << "namespace " << UnitID << " {";
+              if (skippedRange.Action == SourceFragmentAction::StartUnitFirstDecl)
+                out << "\n";
               break;
             case SourceFragmentAction::EndUnit:
             case SourceFragmentAction::EndUnitEOF:
-              if (!CreateDecl) {
-                if (skippedRange.Action == SourceFragmentAction::EndUnitEOF)
-                  out << "\n";
-                out << "}";
-              }
+              if (skippedRange.Action == SourceFragmentAction::EndUnitEOF)
+                out << "\n";
+              out << "}";
               break;
             default:
               break;
