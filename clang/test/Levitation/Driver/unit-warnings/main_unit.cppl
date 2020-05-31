@@ -1,0 +1,30 @@
+// RUN: rm -Rf %T/*
+// RUN: cppl -FP "-DNO_UNIT_DECL_IN_A" \
+// RUN: -root=%S -buildRoot=%T -lit --verbose 2>&1 | FileCheck %s
+
+// RUN: rm -Rf %T/*
+// RUN: cppl -FP "-DNO_UNIT_DECL_IN_MAIN" \
+// RUN:   -root=%S -buildRoot=%T -lit --verbose 2>&1 |\
+// RUN:   FileCheck %s --check-prefix=MAIN-CHECK
+
+
+// When compiling Inputs/A.cppl, we pass two compilation phases: decl and object
+// Per those two stages only one warning "No unit-related declarations found"
+// should be emitted.
+
+// CHECK-COUNT-1: {{^\s*[^/]*}}No unit-related declarations found
+
+// When compiling main, this warning should be suppressed.
+// Additionally, the should be no such warnings for main function
+
+// MAIN-CHECK-NOT: {{^\s*[^/]*}}No unit-related declarations found
+
+#body
+
+#ifndef NO_UNIT_DECL_IN_MAIN
+int someMainVar;
+#endif
+
+namespace :: {
+  int main() { return 0; }
+}

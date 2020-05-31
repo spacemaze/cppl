@@ -1613,6 +1613,18 @@ bool LevitationDriverImpl::processDeclaration(
 
   StringRef UnitID = *Strings.getItem(N.PackageInfo->PackagePath);
 
+  // Check whether we also will compile a definition,
+  // in this case both phases may produce same warnings,
+  // so suppress warnings for declaration.
+  //
+  // NOTE: this is only actual unless we change parsing workflow.
+  // In future I hope to parse definition with preincluded
+  // parsed declaratino AST, in this case we should change this behaviour.
+  bool SuppressLevitationWarnings = N.PackageInfo->Definition != nullptr;
+  auto ExtraArgs = Context.Driver.ExtraParseArgs;
+  if (SuppressLevitationWarnings)
+    ExtraArgs.emplace_back("-Wno-everything");
+
   bool buildDeclSuccessfull = Commands::buildDecl(
       Context.Driver.BinDir,
       Context.Driver.PreambleOutput,
@@ -1622,7 +1634,7 @@ bool LevitationDriverImpl::processDeclaration(
       UnitID,
       fullDependencies,
       Context.Driver.StdLib,
-      Context.Driver.ExtraParseArgs,
+      ExtraArgs,
       Context.Driver.isVerbose(),
       Context.Driver.DryRun
   );
