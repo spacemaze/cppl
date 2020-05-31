@@ -24,4 +24,6 @@
 #import Inputs::A
 #import Inputs::B
 
-int main() { return 0; }
+namespace :: {
+  int main() { return 0; }
+}

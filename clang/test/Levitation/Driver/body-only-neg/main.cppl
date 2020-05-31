@@ -12,10 +12,14 @@
 
 // DAG-DAG: LINK objects
 
-int a = 5;
+namespace :: {
+  int a = 5;
+}
 
 #body
 
 #import Inputs::A
 
-int main() { return 0; }
+namespace :: {
+  int main() { return 0; }
+}
