@@ -1,0 +1,9 @@
+#import Inputs::My
+
+class BodyDepClass {
+public:
+  static void f() {
+    My::MyClass::f();
+    levitation::Test::context() << "Inputs::BodyDep::BodyDepClass::f()";
+  }
+};

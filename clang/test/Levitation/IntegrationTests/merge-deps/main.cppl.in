@@ -1,6 +1,8 @@
 #import Inputs::B
 #import Inputs::C
 
+namespace :: {
+
 int main() {
   with (
     auto TestScope = levitation::Test::context()
@@ -9,8 +11,10 @@ int main() {
     .open()
   ) {
     levitation::Test::context()
-        << Inputs::B::foo()
-        << Inputs::C::foo();
+        << Inputs::B::B::foo()
+        << Inputs::C::C::foo();
   }
   return levitation::Test::result();
+}
+
 }

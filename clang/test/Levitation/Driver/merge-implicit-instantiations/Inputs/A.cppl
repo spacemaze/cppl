@@ -1,4 +1,6 @@
+namespace :: {
 #include "template"
+}
 
 int fa() {
   return Templ<int>::get();

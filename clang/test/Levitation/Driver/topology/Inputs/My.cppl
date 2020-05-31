@@ -1,0 +1,15 @@
+#import Inputs::Root
+
+class MyClass {
+public:
+  static void f() {
+    Root::RootClass::f();
+    levitation::Test::context() << "Inputs::My::MyClass::f()";
+  }
+  static void m();
+};
+
+void MyClass::m() {
+  Root::RootClass::f();
+  levitation::Test::context() << "Inputs::My::MyClass::m()";
+}

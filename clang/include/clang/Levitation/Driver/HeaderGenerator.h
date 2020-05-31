@@ -28,6 +28,8 @@
 namespace clang { namespace levitation { namespace tools {
 
 class HeaderGenerator {
+  llvm::StringRef UnitID;
+
   llvm::StringRef OutputFile;
   llvm::StringRef SourceFile;
   llvm::StringRef Preamble;
@@ -44,6 +46,7 @@ class HeaderGenerator {
 
 public:
   HeaderGenerator(
+      llvm::StringRef UnitID,
       llvm::StringRef OutputFile,
       const llvm::StringRef &SourceFile,
       StringRef Preamble,
@@ -53,7 +56,8 @@ public:
       bool DryRun,
       bool CreateDecl = false
   )
-  : OutputFile(OutputFile),
+  : UnitID(UnitID),
+    OutputFile(OutputFile),
     SourceFile(SourceFile),
     Preamble(Preamble),
     Includes(Includes),
@@ -102,6 +106,26 @@ public:
         size_t Start = 0;
         StringRef NewLine("\n");
         for (const auto &skippedRange : SkippedBytes) {
+
+          bool IgnoreAction = false;
+
+          if (CreateDecl) {
+            switch (skippedRange.Action) {
+              case SourceFragmentAction::SkipInHeaderOnly:
+              case SourceFragmentAction::StartUnit:
+              case SourceFragmentAction::StartUnitFirstDecl:
+              case SourceFragmentAction::EndUnit:
+              case SourceFragmentAction::EndUnitEOF:
+                IgnoreAction = true;
+                break;
+              default:
+                break;
+            }
+          }
+
+          if (IgnoreAction)
+            continue;
+
           // possible skip cases:
           //
           // Case 1:
@@ -137,7 +161,26 @@ public:
 
           StringRef Keep(KeepPtr, KeepWriteCountStripped);
 
-          if (Keep.endswith(NewLine)) {
+          // TODO Levitation: create action description class,
+          //   it should include flags we check for particular actions
+          //   subset below, like
+          //   * `StripNewLineBefore`
+          //   * `ReplaceWith` text
+          //   * etc.
+
+          bool StripNewLineBefore = true;
+          switch (skippedRange.Action) {
+            case SourceFragmentAction::StartUnit:
+            case SourceFragmentAction::StartUnitFirstDecl:
+            case SourceFragmentAction::EndUnit:
+            case SourceFragmentAction ::EndUnitEOF:
+              StripNewLineBefore = false;
+              break;
+            default:
+              break;
+          };
+
+          if (StripNewLineBefore && Keep.endswith(NewLine)) {
             KeepWriteCountStripped -= NewLine.size();
             AfterKeepNewLine = true;
           }
@@ -146,8 +189,25 @@ public:
 
           out.write(KeepPtr, KeepWriteCount);
 
-          if (skippedRange.ReplaceWithSemicolon)
-            out << ";";
+          switch (skippedRange.Action) {
+            case SourceFragmentAction::ReplaceWithSemicolon:
+              out << ";";
+              break;
+            case SourceFragmentAction::StartUnit:
+            case SourceFragmentAction::StartUnitFirstDecl:
+              out << "namespace " << UnitID << " {";
+              if (skippedRange.Action == SourceFragmentAction::StartUnitFirstDecl)
+                out << "\n";
+              break;
+            case SourceFragmentAction::EndUnit:
+            case SourceFragmentAction::EndUnitEOF:
+              if (skippedRange.Action == SourceFragmentAction::EndUnitEOF)
+                out << "\n";
+              out << "}";
+              break;
+            default:
+              break;
+          }
 
           Start = skippedRange.End;
 
@@ -193,7 +253,7 @@ public:
             out.indent((unsigned)AfterKeepSpaces);
           }
 
-          if (skippedRange.PrefixWithExtern)
+          if (skippedRange.Action == SourceFragmentAction::PutExtern)
             out << "extern ";
         }
 

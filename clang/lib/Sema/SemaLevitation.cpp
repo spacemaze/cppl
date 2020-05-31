@@ -32,6 +32,10 @@ using namespace sema;
 // Helpers
 //
 
+#if 0
+#define DUMP_SOURCE_FRAGMENTS
+#endif
+
 std::pair<unsigned, unsigned> levitationGetDeclaratorID(const Declarator &D) {
   const auto &SR = D.getSourceRange();
   return {
@@ -115,6 +119,10 @@ void Sema::levitationAddSkippedSourceFragment(
     bool ReplaceWithSemicolon
 ) {
 
+  levitation::SourceFragmentAction Action = ReplaceWithSemicolon ?
+      levitation::SourceFragmentAction::ReplaceWithSemicolon :
+      levitation::SourceFragmentAction::Skip;
+
   auto StartSLoc = getSourceManager().getDecomposedLoc(Start);
   auto EndSLoc = getSourceManager().getDecomposedLoc(End);
 
@@ -128,9 +136,9 @@ void Sema::levitationAddSkippedSourceFragment(
     auto &Last = LevitationSkippedFragments.back();
     if (Last.End >= StartSLoc.second) {
       Last.End = EndSLoc.second;
-      Last.ReplaceWithSemicolon = ReplaceWithSemicolon;
+      Last.Action = Action;
 
-      #if 0
+      #ifdef DUMP_SOURCE_FRAGMENTS
         llvm::errs() << "Extended skipped fragment "
                      << (ReplaceWithSemicolon ? "BURN:\n" : ":\n");
 
@@ -153,13 +161,100 @@ void Sema::levitationAddSkippedSourceFragment(
   LevitationSkippedFragments.push_back({
     StartSLoc.second,
     EndSLoc.second,
-    ReplaceWithSemicolon,
-    /* prefix with extern */ false
+    Action
   });
 
-#if 0
+#ifdef DUMP_SOURCE_FRAGMENTS
   llvm::errs() << "Added skipped fragment "
                << (ReplaceWithSemicolon ? "BURN:\n" : ":\n");
+
+  llvm::errs() << "Bytes: 0x";
+  llvm::errs().write_hex(StartSLoc.second) << " : 0x";
+  llvm::errs().write_hex(EndSLoc.second) << "\n";
+
+  Start.dump(getSourceManager());
+  End.dump(getSourceManager());
+
+  llvm::errs() << "\n";
+#endif
+}
+
+StringRef sourceFragmentActionToStr(levitation::SourceFragmentAction Action) {
+  switch (Action) {
+    case levitation::SourceFragmentAction::Skip:
+      return "Skip";
+    case levitation::SourceFragmentAction::SkipInHeaderOnly:
+      return "SkipInHeaderOnly";
+    case levitation::SourceFragmentAction::ReplaceWithSemicolon:
+      return "ReplaceWithSemicolon";
+    case levitation::SourceFragmentAction::PutExtern:
+      return "PutExtern";
+    case levitation::SourceFragmentAction::StartUnit:
+      return "StartUnit";
+    case levitation::SourceFragmentAction::StartUnitFirstDecl:
+      return "StartUnitFirstDecl";
+    case levitation::SourceFragmentAction::EndUnit:
+      return "EndUnit";
+    case levitation::SourceFragmentAction::EndUnitEOF:
+      return "EndUnitEOF";
+  }
+}
+
+static bool areAntonymActions(
+    levitation::SourceFragmentAction Target,
+    levitation::SourceFragmentAction New
+) {
+  switch (Target) {
+    case levitation::SourceFragmentAction::EndUnit:
+      return New == levitation::SourceFragmentAction::StartUnit;
+
+    case levitation::SourceFragmentAction::StartUnit:
+    case levitation::SourceFragmentAction::StartUnitFirstDecl:
+      return
+        New == levitation::SourceFragmentAction::EndUnit ||
+        New == levitation::SourceFragmentAction::EndUnitEOF;
+    default:
+      return false;
+  }
+}
+
+void Sema::levitationAddSourceFragmentAction(
+    const clang::SourceLocation &Start,
+    const clang::SourceLocation &End,
+    levitation::SourceFragmentAction Action
+) {
+
+  auto StartSLoc = getSourceManager().getDecomposedLoc(Start);
+  auto EndSLoc = getSourceManager().getDecomposedLoc(End);
+
+  if(
+    !getSourceManager().isWrittenInMainFile(Start) ||
+    !getSourceManager().isWrittenInMainFile(End)
+  )
+    llvm_unreachable("Source fragment should be in main file");
+
+  if (!LevitationSkippedFragments.empty()) {
+    const auto &LastFragment = LevitationSkippedFragments.back();
+    if (
+        LastFragment.End == StartSLoc.second &&
+        areAntonymActions(LastFragment.Action, Action)
+    ) {
+      LevitationSkippedFragments.pop_back();
+      return;
+    }
+    if (LastFragment.End > StartSLoc.second)
+      llvm_unreachable("Can't handle overlapping actions");
+  }
+
+  LevitationSkippedFragments.push_back({
+    StartSLoc.second,
+    EndSLoc.second,
+    Action
+  });
+
+#ifdef DUMP_SOURCE_FRAGMENTS
+  llvm::errs() << "Added source fragment: "
+               << sourceFragmentActionToStr(Action) << ":\n";
 
   llvm::errs() << "Bytes: 0x";
   llvm::errs().write_hex(StartSLoc.second) << " : 0x";
@@ -192,29 +287,32 @@ void Sema::levitationReplaceLastSkippedSourceFragments(
   );
 
   assert(
-      LevitationSkippedFragments.size() &&
+      !LevitationSkippedFragments.empty() &&
       "Fragments merging applied for non empty "
       "LevitationSkippedFragments collection only"
   );
 
+  // Assuming that StartOffset is somewhere in middle of
+  // whole LevitationSkippedFragments set.
   // Lookup for first fragment to be replaced
-  size_t FirstRemain = LevitationSkippedFragments.size();
-  while (FirstRemain)
+  size_t i = LevitationSkippedFragments.size();
+  while (i)
   {
-    --FirstRemain;
-    if (StartOffset > LevitationSkippedFragments[FirstRemain].End)
+    size_t prev = i-1;
+    if (StartOffset > LevitationSkippedFragments[prev].End)
       break;
+    i = prev;
   }
 
-  size_t RemainSize = FirstRemain + 1;
+  LevitationSkippedFragments.resize(i);
 
-  LevitationSkippedFragments.resize(RemainSize);
+  LevitationSkippedFragments.push_back({
+    StartOffset, EndOffset, levitation::SourceFragmentAction::Skip
+  });
 
-  LevitationSkippedFragments.push_back({StartOffset, EndOffset, false, false});
-
-#if 0
+#ifdef DUMP_SOURCE_FRAGMENTS
   llvm::errs() << "Merged skipped fragment\n"
-               << "  replaced fragments from idx = " << RemainSize
+               << "  replaced fragments from idx = " << i
                << "\n";
 
   llvm::errs() << "New bytes: 0x";
@@ -264,13 +362,11 @@ void Sema::levitationInsertExternForHeader(
   LevitationSkippedFragments.insert(
       LevitationSkippedFragments.begin() + InsertPos,
       {
-        StartOffset, StartOffset,
-        /* burn with ; */ false,
-        /* prefix with extern keyword */ true
+        StartOffset, StartOffset, levitation::SourceFragmentAction::PutExtern
       }
   );
 
-#if 0
+#ifdef DUMP_SOURCE_FRAGMENTS
   llvm::errs() << "Inserted extern keyword\n";
 
   llvm::errs() << "New bytes: 0x";
@@ -296,5 +392,49 @@ Sema::levitationGetSourceFragments() const {
       LevitationSkippedFragments.end()
   );
 
+  // Make sure, that fragments are sorted.
+  if (!Fragments.empty()) {
+    for (size_t i = 1, e = Fragments.size(); i != e; ++i) {
+      const auto &LHS = Fragments[i - 1];
+      const auto &RHS = Fragments[i];
+      if (LHS.End > RHS.Start)
+        llvm_unreachable("Fragments are not sorted.");
+    }
+  }
+
   return Fragments;
+}
+
+// C++ Levitation Unit
+
+void Sema::levitationActOnEnterUnit(
+    const SourceLocation &StartLoc,
+    const SourceLocation &EndLoc,
+    const NamespaceDecl *UnitScope,
+    bool AtTUBounds
+) {
+  LevitationUnitScope = UnitScope;
+  levitationAddSourceFragmentAction(
+      StartLoc, EndLoc,
+      AtTUBounds ?
+        levitation::SourceFragmentAction::StartUnitFirstDecl :
+        levitation::SourceFragmentAction::StartUnit
+  );
+}
+
+void Sema::levitationActOnLeaveUnit(
+    const SourceLocation &StartLoc,
+    const SourceLocation &EndLoc,
+    bool AtTUBounds
+) {
+  levitationAddSourceFragmentAction(
+      StartLoc, EndLoc,
+      AtTUBounds ?
+        levitation::SourceFragmentAction::EndUnitEOF :
+        levitation::SourceFragmentAction::EndUnit
+  );
+}
+
+bool Sema::levitationUnitScopeNotEmpty() const {
+  return LevitationUnitScope && !LevitationUnitScope->decls_empty();
 }

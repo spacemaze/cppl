@@ -40,3 +40,14 @@
 // IMPORT-CHECK-NOT: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"
 
 #import Inputs::B
+
+int a;
+
+// check end of unit-scope '}'
+// CHECK: {{^\s*[^/]*}}}
+// IMPORT-CHECK: {{^\s*[^/]*}}namespace :: {
+namespace :: {
+  int a;
+// CHECK-NOT: {{^\s*[^/]*}}}
+// IMPORT-CHECK: {{^\s*[^/]*}}}
+}

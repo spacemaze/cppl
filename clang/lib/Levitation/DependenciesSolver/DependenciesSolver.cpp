@@ -310,14 +310,14 @@ public:
       } else {
         for (const auto &Dep : kv.second->DeclarationDependencies) {
           FoundMissedDependencies |= !checkSource(
-              Dep.FilePathID,
+              Dep.UnitIdentifier,
               "  -- checking decl dep",
               "declaration dependency"
           );
         }
         for (const auto &Dep : kv.second->DefinitionDependencies) {
           FoundMissedDependencies |= !checkSource(
-              Dep.FilePathID,
+              Dep.UnitIdentifier,
               "  -- checking def dep",
               "definition dependency"
           );
@@ -428,7 +428,7 @@ public:
     out.indent(Indent) << Title << "\n";
     for (auto &Dep : Deps) {
         out.indent(Indent + 4)
-        << *Strings.getItem(Dep.FilePathID) << "\n";
+        << *Strings.getItem(Dep.UnitIdentifier) << "\n";
     }
   }
 

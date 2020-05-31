@@ -679,6 +679,9 @@ HelpText<"Include C++ Levitation Declaration AST Meta file">;
 def cppl_preamble : Flag<["-"], "cppl-preamble">,
   HelpText<"Runs Levitation Preamble stage for input file">;
 
+def cppl_unit_id_EQ : Joined<["-"], "cppl-unit-id=">, Flags<[DriverOption, HelpHidden]>,
+HelpText<"Set Levitation Unit ID">;
+
 // end of C++ Levitation
 
 def emit_llvm : Flag<["-"], "emit-llvm">, Flags<[CC1Option]>, Group<Action_Group>,

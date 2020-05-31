@@ -1,7 +1,11 @@
 #import Inputs::A
 
+namespace :: {
+
 #include "Inputs/Header.h"
 
 int main() {
   return 0;
+}
+
 }

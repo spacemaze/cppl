@@ -28,6 +28,7 @@
 #include "clang/Levitation/Driver/HeaderGenerator.h"
 #include "clang/Levitation/FileExtensions.h"
 #include "clang/Levitation/TasksManager/TasksManager.h"
+#include "clang/Levitation/UnitID.h"
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Program.h"
@@ -800,6 +801,7 @@ public:
       StringRef OutDeclASTFile,
       StringRef OutDeflASTMetaFile,
       StringRef InputFile,
+      StringRef UnitID,
       const Paths &Deps,
       StringRef StdLib,
       const LevitationDriver::Args &ExtraParserArgs,
@@ -820,6 +822,7 @@ public:
     .addKVArgsEq("-cppl-include-dependency", Deps)
     .addArgs(ExtraParserArgs)
     .addArg(InputFile)
+    .addKVArgEq("-cppl-unit-id", UnitID)
     // TODO Levitation: don't emit .decl-ast files
     //  in some cases. See task #48
     //    .condition(OutDeclASTFile.size())
@@ -840,6 +843,7 @@ public:
       StringRef OutObjFile,
       StringRef OutMetaFile,
       StringRef InputObject,
+      StringRef UnitID,
       const Paths &Deps,
       StringRef StdLib,
       const LevitationDriver::Args &ExtraParserArgs,
@@ -862,6 +866,7 @@ public:
     .addArgs(ExtraParserArgs)
     .addArgs(ExtraCodeGenArgs)
     .addArg(InputObject)
+    .addKVArgEq("-cppl-unit-id", UnitID)
     .addKVArgSpace("-o", OutObjFile)
     .addKVArgEq("-cppl-meta", OutMetaFile)
     .execute();
@@ -1288,24 +1293,31 @@ void LevitationDriverImpl::collectProjectSources() {
       /*ignore dirs*/ { Context.Driver.getBuildRoot() }
   );
 
+  DenseMap<StringID, SinglePath> RelPaths;
+
   // Normalize all paths to project .cppl files and register them.
   for (const auto &Src : ProjectPackages) {
     auto Rel = levitation::Path::makeRelative<SinglePath>(
         Src, Context.Driver.SourcesRoot
     );
 
-    auto PackageID = Strings.addItem(Rel);
-    Context.ProjectPackages.insert(PackageID);
-    Context.AllPackages.insert(PackageID);
+    auto UnitIdentifier = UnitIDUtils::fromRelPath(Rel);
+    auto UnitID = Strings.addItem(StringRef(UnitIdentifier));
+    RelPaths.try_emplace(UnitID, Rel);
+
+    Context.ProjectPackages.insert(UnitID);
+    Context.AllPackages.insert(UnitID);
   }
 
-  for (auto PackageID : Context.ProjectPackages) {
+  for (auto UnitID : Context.ProjectPackages) {
 
-    const auto& PackagePath = *Strings.getItem(PackageID);
+    //const auto& PackagePath = *Strings.getItem(UnitID);
+    const auto& PackagePath = RelPaths[UnitID];
 
     Log.log_trace("  Generating paths for '", PackagePath, "'...");
 
-    auto &Files = Context.Files.create(PackageID);
+
+    auto &Files = Context.Files.create(UnitID);
 
     // In current implementation package path is equal to relative source path.
 
@@ -1373,17 +1385,18 @@ void LevitationDriverImpl::collectLibrariesSources() {
     for (const auto &CollectedPath : ExternalPackages) {
       auto PackagePath = Path::makeAbsolute<SinglePath>(CollectedPath);
       auto Package = Path::makeRelative<SinglePath>(PackagePath, ExtLibAbsPath);
+      auto UnitIdentifier = UnitIDUtils::fromRelPath(Package);
 
-      auto PackageID = Strings.addItem(Package);
+      auto UnitID = Strings.addItem(StringRef(UnitIdentifier));
 
-      Context.ExternalPackages.insert(PackageID);
-      Context.AllPackages.insert(PackageID);
+      Context.ExternalPackages.insert(UnitID);
+      Context.AllPackages.insert(UnitID);
 
       Log.log_trace(
-          "Checking lib package '", Package, "' -> '", PackagePath, "'..."
+          "Checking lib package '", UnitIdentifier, "' -> '", PackagePath, "'..."
       );
 
-      auto &Files = Context.Files.create(PackageID);
+      auto &Files = Context.Files.create(UnitID);
 
       // For libraries sources keep absolute source paths
 
@@ -1560,12 +1573,15 @@ bool LevitationDriverImpl::processDefinition(
 
   setObjectsUpdated();
 
+  StringRef UnitID = *Strings.getItem(N.PackageInfo->PackagePath);
+
   return Commands::buildObject(
     Context.Driver.BinDir,
     Context.Driver.PreambleOutput,
     Files.Object,
     Files.ObjMetaFile,
     Files.Source,
+    UnitID,
     fullDependencies,
     Context.Driver.StdLib,
     Context.Driver.ExtraParseArgs,
@@ -1595,15 +1611,30 @@ bool LevitationDriverImpl::processDeclaration(
     // NeedDeclAST = false;
   }
 
+  StringRef UnitID = *Strings.getItem(N.PackageInfo->PackagePath);
+
+  // Check whether we also will compile a definition,
+  // in this case both phases may produce same warnings,
+  // so suppress warnings for declaration.
+  //
+  // NOTE: this is only actual unless we change parsing workflow.
+  // In future I hope to parse definition with preincluded
+  // parsed declaratino AST, in this case we should change this behaviour.
+  bool SuppressLevitationWarnings = N.PackageInfo->Definition != nullptr;
+  auto ExtraArgs = Context.Driver.ExtraParseArgs;
+  if (SuppressLevitationWarnings)
+    ExtraArgs.emplace_back("-Wno-everything");
+
   bool buildDeclSuccessfull = Commands::buildDecl(
       Context.Driver.BinDir,
       Context.Driver.PreambleOutput,
       (NeedDeclAST ? Files.DeclAST.str() : StringRef()),
       (NeedDeclAST ? Files.DeclASTMetaFile.str() : StringRef()),
       Files.Source,
+      UnitID,
       fullDependencies,
       Context.Driver.StdLib,
-      Context.Driver.ExtraParseArgs,
+      ExtraArgs,
       Context.Driver.isVerbose(),
       Context.Driver.DryRun
   );
@@ -1634,6 +1665,7 @@ bool LevitationDriverImpl::processDeclaration(
 
     auto IncludeSources = getIncludeSources(N, Graph);
     Success = HeaderGenerator(
+        *Strings.getItem(N.PackageInfo->PackagePath),
         Files.Header,
         Files.Source,
         N.Dependencies.empty() ? Context.Driver.PreambleSource : "",
@@ -1652,6 +1684,7 @@ bool LevitationDriverImpl::processDeclaration(
     auto DeclSources = getImportSources(N, Graph);
 
     Success = HeaderGenerator(
+        *Strings.getItem(N.PackageInfo->PackagePath),
         Files.Decl,
         Files.Source,
         N.Dependencies.empty() ? Context.Driver.PreambleSource : "",

@@ -1,4 +1,3 @@
-namespace Inputs {
   template <typename T>
   class A {
   public:
@@ -19,4 +18,3 @@ namespace Inputs {
   int A<T>::staticField = 440;
 
   int AA::staticField = 4;
-}

@@ -1,6 +1,4 @@
-namespace Inputs {
   class A {
   public:
     static int foo() { return 787; }
   };
-}

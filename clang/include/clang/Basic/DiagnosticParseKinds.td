@@ -1423,4 +1423,12 @@ def warn_max_tokens_total : Warning<
 
 def note_max_tokens_total_override : Note<"total token limit set here">;
 
+// C++ Levitation
+
+def warn_levitation_two_sibling_globals :
+    Warning<"Two sibling 'global' scopes can be merged">,
+    InGroup<LevitationGlobal>;
+
+// end of C++ Levitation
+
 } // end of Parser diagnostics

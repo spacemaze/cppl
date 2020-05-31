@@ -1,0 +1,9 @@
+// Nothing, it should emit warning, that there are no unit-level decls
+
+#ifndef NO_UNIT_DECL_IN_A
+int a;
+#endif
+
+namespace :: {
+  int x;
+}

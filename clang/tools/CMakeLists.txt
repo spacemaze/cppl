@@ -17,7 +17,6 @@ add_clang_subdirectory(clang-rename)
 add_clang_subdirectory(clang-refactor)
 
 add_clang_subdirectory(levitation-cppl)
-add_clang_subdirectory(levitation-deps)
 
 if(UNIX)
   add_clang_subdirectory(clang-shlib)

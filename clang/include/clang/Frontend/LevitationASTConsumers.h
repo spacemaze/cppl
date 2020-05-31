@@ -40,8 +40,11 @@ namespace levitation {
     void HandlePreprocessor(Preprocessor &PP) override;
   };
 
-
 std::unique_ptr<LevitationPreprocessorConsumer> CreateDependenciesASTProcessor(
+    CompilerInstance &CI
+);
+
+std::unique_ptr<ASTConsumer> CreateUnitNamespaceVerifier(
     CompilerInstance &CI
 );
 

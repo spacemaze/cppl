@@ -581,6 +581,7 @@ LevitationBuildObjectAction::createASTConsumerInternal(
 
   return MultiplexConsumerBuilder()
     .addRequired(std::move(AdoptedConsumer))
+    .addRequired(levitation::CreateUnitNamespaceVerifier(CI))
     .addOptional(std::move(AstPrinter))
   .done();
 }

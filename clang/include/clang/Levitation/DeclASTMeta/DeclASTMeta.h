@@ -23,15 +23,29 @@
 #include <utility>
 
 namespace clang { namespace levitation {
+
+  enum struct SourceFragmentAction {
+    Skip = 0,
+    SkipInHeaderOnly,
+    ReplaceWithSemicolon,
+    PutExtern,
+    StartUnit,
+    StartUnitFirstDecl,
+    EndUnit,
+    EndUnitEOF
+  };
+
+
   class DeclASTMeta {
   public:
 
+
     struct FragmentTy {
       size_t Start, End;
-      bool ReplaceWithSemicolon;
-      bool PrefixWithExtern;
+      SourceFragmentAction Action;
       size_t size() const { return End - Start; }
     };
+
     typedef SmallVector<FragmentTy, 64> FragmentsVectorTy;
 
   private:

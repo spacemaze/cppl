@@ -12392,11 +12392,6 @@ private:
   using DeclaratorID = std::pair<unsigned, unsigned>;
   llvm::DenseMap<DeclaratorID, LevitationVarSkipAction> LevitationVarSkipActions;
 
-  /// For decl-ast creation mode,
-  /// holds bytes skipped during parsing (skipped function bodies and
-  /// variable definitions).
-  levitation::DeclASTMeta::FragmentsVectorTy LevitationSkippedFragments;
-
 public:
 
   /// Check whether levitation mode is on.
@@ -12437,6 +12432,22 @@ public:
 
   LevitationVarSkipAction levitationGetSkipActionFor(const Declarator &D);
 
+  // C++ Levitation Source Fragments
+private:
+
+  /// For decl-ast creation mode,
+  /// holds bytes skipped during parsing (skipped function bodies and
+  /// variable definitions).
+  levitation::DeclASTMeta::FragmentsVectorTy LevitationSkippedFragments;
+public:
+
+  void levitationAddSourceFragmentAction(
+      const SourceLocation &Start,
+      const SourceLocation &End,
+      levitation::SourceFragmentAction Action
+  );
+
+  // FIXME Levitation: unify with levitationAddSourceFragmentAction
   void levitationAddSkippedSourceFragment(
       const SourceLocation &Start,
       const SourceLocation &End,
@@ -12451,6 +12462,27 @@ public:
   void levitationInsertExternForHeader(const SourceLocation Start);
 
   levitation::DeclASTMeta::FragmentsVectorTy levitationGetSourceFragments() const;
+
+  // C++ Levitation Unit
+
+private:
+  const NamespaceDecl *LevitationUnitScope = nullptr;
+
+public:
+  void levitationActOnEnterUnit(
+      const SourceLocation &StartLoc,
+      const SourceLocation &EndLoc,
+      const NamespaceDecl *UnitScope,
+      bool AtTUBounds
+  );
+
+  void levitationActOnLeaveUnit(
+      const SourceLocation &LeaveLoc,
+      const SourceLocation &EndLoc,
+      bool AtTUBounds
+  );
+
+  bool levitationUnitScopeNotEmpty() const;
 
   //
   // end of C++ Levitation Mode

@@ -8,3 +8,21 @@
 // IMPORT-CHECK-NOT: {{^\s*[^/]*}}#include "{{.*}}Inputs/preamble.hpp"
 
 #import Inputs::C
+
+// CHECK-NOT: {{^\s*[^/]*}}namespace :: {
+// IMPORT-CHECK: {{^\s*[^/]*}}namespace :: {
+namespace :: {
+  // IMPORT-CHECK: {{^\s*[^/]*}}extern int b
+  // CHECK: int b
+  int b;
+// CHECK: namespace Inputs::C {
+// IMPORT-CHECK: }
+}
+
+// CHECK: {{^\s*[^/]*}}extern int b
+// IMPORT-CHECK: {{^\s*[^/]*}}extern int b
+int b;
+
+// Check end of unit scope '}'
+// CHECK: {{^\s*[^/]*}}}
+// IMPORT-CHECK-NOT: {{^\s*[^/]*}}}

@@ -594,7 +594,7 @@ protected:
     for (auto &Dep : Dependencies) {
       Node &DeclDependencyNode = getOrCreateNode(
           NodeKind::Declaration,
-          Dep.FilePathID
+          Dep.UnitIdentifier
       );
 
       DependentNode.Dependencies.insert(DeclDependencyNode.ID);

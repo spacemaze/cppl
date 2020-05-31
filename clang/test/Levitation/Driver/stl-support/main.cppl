@@ -2,6 +2,8 @@
 // UNSUPPORTEDUN: cppl -root=%S -buildRoot=%T -stdlib=libstdc++ --verbose -o %T/a.out
 // UNSUPPORTEDUN: %T/a.out | FileCheck %s
 
+namespace :: {
+
 #include <iostream>
 #include <algorithm>
 #include <vector>
@@ -25,4 +27,6 @@ int main() {
     std::cout << v << ":" << vv << "\n";
 
   return 0;
+}
+
 }

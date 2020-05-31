@@ -1203,3 +1203,68 @@ These limits can be helpful in limiting code growth through included files.
 Setting a token limit of zero means no limit.
 }];
 }
+
+// C++ Levitation
+
+def LevitationGlobal : DiagGroup<"levitation-global"> {
+  code Documentation = [{
+
+The warning is issued if parser meets two sibling ``global`` scopes
+without any (unit) declarations between:
+
+.. code-block: c++
+
+  global {
+    #include <iostream>
+  }
+  global {
+    #include <vector>
+  }
+
+Such declarations can be merged into single one:
+
+.. code-block: c++
+
+  global {
+    #include <iostream>
+    #include <vector>
+  }
+
+}];
+}
+
+def LevitationUnitDecls : DiagGroup<"levitation-unit-decls"> {
+  code Documentation = [{
+
+The warning is issued if there are no declarations in unit namespace.
+Such declarations should be declared out of 'global' scopes.
+
+.. code-block: c++
+  // dir1/example.cppl
+
+  int a; // unit-declaration, belongs to 'dir1::example' namespace
+  namespace ns {
+    void f() {} // unit-declaration, belongs to 'dir1::example::ns' namespace
+  }
+
+  global {
+    int a; // non-unit declaration, belongs to global namespace
+
+    namespace ns {
+      int a; // non-unit declaration, belongs to 'ns' namespace
+    }
+
+    namespace dir1::example {
+      int b; // non-unit declaration, belongs to 'dir1::example' namespace,
+             // which is identical to unit's namespace.
+    }
+  }
+}];
+}
+
+
+def Levitation : DiagGroup<"levitation", [
+    LevitationGlobal, LevitationUnitDecls
+  ]>;
+
+// end of C++ Levitation
