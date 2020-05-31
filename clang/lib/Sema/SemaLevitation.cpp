@@ -239,6 +239,11 @@ void Sema::levitationAddSourceFragmentAction(
         LastFragment.End == StartSLoc.second &&
         areAntonymActions(LastFragment.Action, Action)
     ) {
+#ifdef DUMP_SOURCE_FRAGMENTS
+      llvm::errs() << "Annihilated source fragment Idx="
+                   << LevitationSkippedFragments.size()
+                   << ":\n";
+#endif
       LevitationSkippedFragments.pop_back();
       return;
     }
@@ -366,8 +371,13 @@ void Sema::levitationInsertExternForHeader(
       }
   );
 
+
+  levitation::DeclASTMeta::FragmentTy *Prev = nullptr;
+  if (InsertPos)
+    Prev = &LevitationSkippedFragments[InsertPos-1];
+
 #ifdef DUMP_SOURCE_FRAGMENTS
-  llvm::errs() << "Inserted extern keyword\n";
+  llvm::errs() << "Inserted extern keyword at Idx=" << InsertPos << "\n";
 
   llvm::errs() << "New bytes: 0x";
   llvm::errs().write_hex(StartSLoc.second);
@@ -379,19 +389,7 @@ void Sema::levitationInsertExternForHeader(
 #endif
 }
 
-levitation::DeclASTMeta::FragmentsVectorTy
-Sema::levitationGetSourceFragments() const {
-
-  levitation::DeclASTMeta::FragmentsVectorTy Fragments(
-      getPreprocessor().getLevitationSkippedFragments()
-  );
-
-  Fragments.insert(
-      Fragments.end(),
-      LevitationSkippedFragments.begin(),
-      LevitationSkippedFragments.end()
-  );
-
+void checkSortedNotOverlapped(const levitation::DeclASTMeta::FragmentsVectorTy& Fragments) {
   // Make sure, that fragments are sorted.
   if (!Fragments.empty()) {
     for (size_t i = 1, e = Fragments.size(); i != e; ++i) {
@@ -401,6 +399,33 @@ Sema::levitationGetSourceFragments() const {
         llvm_unreachable("Fragments are not sorted.");
     }
   }
+}
+
+levitation::DeclASTMeta::FragmentsVectorTy
+Sema::levitationGetSourceFragments() const {
+
+  checkSortedNotOverlapped(getPreprocessor().getLevitationSkippedFragments());
+  checkSortedNotOverlapped(LevitationSkippedFragments);
+
+  levitation::DeclASTMeta::FragmentsVectorTy Fragments(
+      getPreprocessor().getLevitationSkippedFragments()
+  );
+
+  Fragments.append(
+      LevitationSkippedFragments.begin(),
+      LevitationSkippedFragments.end()
+  );
+
+  std::sort(Fragments.begin(), Fragments.end(),
+      [] (
+          const levitation::DeclASTMeta::FragmentTy& LHS,
+          const levitation::DeclASTMeta::FragmentTy& RHS
+      ){
+        return LHS.Start < RHS.Start;
+      }
+  );
+
+  checkSortedNotOverlapped(Fragments);
 
   return Fragments;
 }
