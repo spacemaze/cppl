@@ -32,7 +32,7 @@ using namespace sema;
 // Helpers
 //
 
-#if 0
+#if 1
 #define DUMP_SOURCE_FRAGMENTS
 #endif
 

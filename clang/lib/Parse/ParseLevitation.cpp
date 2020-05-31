@@ -142,9 +142,15 @@ bool Parser::LevitationLeaveUnit(SourceLocation Start, SourceLocation End) {
   return Actions.getASTConsumer().HandleTopLevelDecl(DeclGroupRef(OuterNS));
 }
 
+bool isAtLevitationGlobal(Parser *_this) {
+  return
+    _this->getCurToken().is(tok::kw_namespace) &&
+    _this->NextToken().is(tok::coloncolon);
+}
+
 void Parser::LevitationOnParseStart() {
   Actions.ActOnStartOfTranslationUnit();
-  if (!Tok.is(tok::kw___levitation_global))
+  if (!isAtLevitationGlobal(this))
     LevitationEnterUnit();
 }
 
@@ -155,9 +161,21 @@ bool Parser::LevitationOnParseEnd() {
   return true;
 }
 
+/// ParseLevitationGlobal - we're about to parse global namespace declaration
+///
+///       global-scope-definition: [C++: namespace.def]
+///         as-namespace-definition
+///
+///       as-namespace-definition:
+///         'namespace' '::' '{' namespace-body '}'
+///
 bool Parser::ParseLevitationGlobal() {
 
+  // Consume 'namespace'
   SourceLocation GlobalLoc = ConsumeToken();
+
+  // Consume '::'
+  ConsumeToken();
 
   SourceLocation LBraceEnd = Tok.getEndLoc();
 
@@ -194,7 +212,7 @@ bool Parser::ParseLevitationGlobal() {
   T.consumeClose();
 
   if (Tok.isNot(tok::eof)) {
-    if (Tok.isNot(tok::kw___levitation_global)) {
+    if (!isAtLevitationGlobal(this)) {
       LevitationEnterUnit(RBraceStart, RBraceEnd);
       return true;
     }
@@ -237,14 +255,17 @@ bool Parser::ParseLevitationTranslationUnit() {
         }
         return LevitationOnParseEnd();
 
-      case tok::kw___levitation_global: {
-          bool Success = ParseLevitationGlobal();
-          if (!Success)
-            return false;
-        }
-        break;
+      default:
+        {
+          if (
+            Tok.is(tok::kw_namespace) &&
+            NextToken().is(tok::coloncolon)
+          ) {
+            if (!ParseLevitationGlobal())
+              return false;
+            break;
+          }
 
-      default: {
           ParsedAttributesWithRange attrs(AttrFactory);
           MaybeParseCXX11Attributes(attrs);
           ParseExternalDeclaration(attrs);

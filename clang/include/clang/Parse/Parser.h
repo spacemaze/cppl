@@ -3328,6 +3328,8 @@ private:
 
 public:
 
+  void LevitationInitializeExtensions();
+
   /**
    * C++ Levitation parser main entry
    * @return true is TU parsed successfully

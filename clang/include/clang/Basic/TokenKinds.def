@@ -286,8 +286,6 @@ KEYWORD(if                          , KEYALL)
 KEYWORD(inline                      , KEYC99|KEYCXX|KEYGNU)
 // C++ Levitation
 KEYWORD(bodydep                     , KEYLEVITATION)
-KEYWORD(__levitation_global         , KEYLEVITATION)
-ALIAS("global", __levitation_global , KEYLEVITATION)
 PPKEYWORD(public)
 PPKEYWORD(body)
 // end of C++ Levitation
