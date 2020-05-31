@@ -43,6 +43,11 @@
 
 int a;
 
-global {
+// check end of unit-scope '}'
+// CHECK: {{^\s*[^/]*}}}
+// IMPORT-CHECK: {{^\s*[^/]*}}namespace :: {
+namespace :: {
   int a;
+// CHECK-NOT: {{^\s*[^/]*}}}
+// IMPORT-CHECK: {{^\s*[^/]*}}}
 }

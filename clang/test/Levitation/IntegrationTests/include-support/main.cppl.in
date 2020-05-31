@@ -1,6 +1,6 @@
 #import Inputs::A
 
-global {
+namespace :: {
 
 #include "Inputs/Header.h"
 

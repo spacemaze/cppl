@@ -5,7 +5,7 @@
 #import Inputs::A
 #import Inputs::B
 
-global {
+namespace :: {
 
 int main() {}
 

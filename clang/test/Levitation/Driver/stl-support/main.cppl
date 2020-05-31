@@ -2,7 +2,7 @@
 // UNSUPPORTEDUN: cppl -root=%S -buildRoot=%T -stdlib=libstdc++ --verbose -o %T/a.out
 // UNSUPPORTEDUN: %T/a.out | FileCheck %s
 
-global {
+namespace :: {
 
 #include <iostream>
 #include <algorithm>

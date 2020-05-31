@@ -23,7 +23,7 @@
 #import Inputs::A
 #import Inputs::B
 
-global {
+namespace :: {
 int main() {
   with (
     auto TestScope = levitation::Test::context()

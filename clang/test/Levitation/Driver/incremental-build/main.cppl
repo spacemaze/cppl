@@ -199,7 +199,7 @@
 
 #import Inputs::A
 
-global {
+namespace :: {
 
 int main() {
   // TODO Levitation: do we need to check correctness of program?

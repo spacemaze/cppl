@@ -27,7 +27,7 @@
 
 #import Inputs::A
 
-global {
+namespace :: {
 
 int main() {
   with(

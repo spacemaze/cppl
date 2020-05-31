@@ -16,7 +16,7 @@
 #import [bodydep] Inputs::BodyDep
 #import Inputs::Root
 
-global {
+namespace :: {
 
 int main() {
 

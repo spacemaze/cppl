@@ -15,7 +15,7 @@
 // RUN:  %clangxx %T/main.o %T/Inputs_A.o -o %T/app.out
 // RUN:  %T/app.out
 #import Inputs::A
-global {
+namespace :: {
 
 int main() {
   with (

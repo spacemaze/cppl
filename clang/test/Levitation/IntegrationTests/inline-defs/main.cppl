@@ -20,7 +20,7 @@
 
 #import Inputs::A
 
-global {
+namespace :: {
 
 const int const_int = 9999;
 

@@ -29,7 +29,7 @@
 #import Inputs::B
 #import Inputs::C
 
-global {
+namespace :: {
 
 int main() {
   with(
