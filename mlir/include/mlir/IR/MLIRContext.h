@@ -60,6 +60,9 @@ public:
 
   /// Set the flag specifying if multi-threading is disabled by the context.
   void disableMultithreading(bool disable = true);
+  void enableMultithreading(bool enable = true) {
+    disableMultithreading(!enable);
+  }
 
   /// Return true if we should attach the operation to diagnostics emitted via
   /// Operation::emit.
@@ -81,6 +84,9 @@ public:
   /// efficient: typically you should ask the operations about their properties
   /// directly.
   std::vector<AbstractOperation *> getRegisteredOperations();
+
+  /// Return true if this operation name is registered in this context.
+  bool isOperationRegistered(StringRef name);
 
   // This is effectively private given that only MLIRContext.cpp can see the
   // MLIRContextImpl type.

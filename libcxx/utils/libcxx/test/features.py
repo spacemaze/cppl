@@ -9,6 +9,10 @@
 from libcxx.test.dsl import *
 import sys
 
+_isClang      = lambda cfg: '__clang__' in compilerMacros(cfg) and '__apple_build_version__' not in compilerMacros(cfg)
+_isAppleClang = lambda cfg: '__apple_build_version__' in compilerMacros(cfg)
+_isGCC        = lambda cfg: '__GNUC__' in compilerMacros(cfg) and '__clang__' not in compilerMacros(cfg)
+
 features = [
   Feature(name='fcoroutines-ts', compileFlag='-fcoroutines-ts',
           when=lambda cfg: hasCompileFlag(cfg, '-fcoroutines-ts') and
@@ -27,4 +31,56 @@ features = [
                                                                  sys.platform.lower().strip() == 'darwin'), # TODO: this doesn't handle cross-compiling to Apple platforms.
   Feature(name='objective-c++',                 when=lambda cfg: hasCompileFlag(cfg, '-xobjective-c++ -fobjc-arc')),
   Feature(name='diagnose-if-support',           when=lambda cfg: hasCompileFlag(cfg, '-Wuser-defined-warnings'), compileFlag='-Wuser-defined-warnings'),
+  Feature(name='modules-support',               when=lambda cfg: hasCompileFlag(cfg, '-fmodules')),
+
+  Feature(name='apple-clang',                                                                                                      when=_isAppleClang),
+  Feature(name=lambda cfg: 'apple-clang-{__clang_major__}'.format(**compilerMacros(cfg)),                                          when=_isAppleClang),
+  Feature(name=lambda cfg: 'apple-clang-{__clang_major__}.{__clang_minor__}'.format(**compilerMacros(cfg)),                        when=_isAppleClang),
+  Feature(name=lambda cfg: 'apple-clang-{__clang_major__}.{__clang_minor__}.{__clang_patchlevel__}'.format(**compilerMacros(cfg)), when=_isAppleClang),
+
+  Feature(name='clang',                                                                                                            when=_isClang),
+  Feature(name=lambda cfg: 'clang-{__clang_major__}'.format(**compilerMacros(cfg)),                                                when=_isClang),
+  Feature(name=lambda cfg: 'clang-{__clang_major__}.{__clang_minor__}'.format(**compilerMacros(cfg)),                              when=_isClang),
+  Feature(name=lambda cfg: 'clang-{__clang_major__}.{__clang_minor__}.{__clang_patchlevel__}'.format(**compilerMacros(cfg)),       when=_isClang),
+
+  Feature(name='gcc',                                                                                                              when=_isGCC),
+  Feature(name=lambda cfg: 'gcc-{__GNUC__}'.format(**compilerMacros(cfg)),                                                         when=_isGCC),
+  Feature(name=lambda cfg: 'gcc-{__GNUC__}.{__GNUC_MINOR__}'.format(**compilerMacros(cfg)),                                        when=_isGCC),
+  Feature(name=lambda cfg: 'gcc-{__GNUC__}.{__GNUC_MINOR__}.{__GNUC_PATCHLEVEL__}'.format(**compilerMacros(cfg)),                  when=_isGCC),
 ]
+
+# Deduce and add the test features that that are implied by the #defines in
+# the <__config_site> header.
+#
+# For each macro of the form `_LIBCPP_XXX_YYY_ZZZ` defined below that
+# is defined after including <__config_site>, add a Lit feature called
+# `libcpp-xxx-yyy-zzz`. When a macro is defined to a specific value
+# (e.g. `_LIBCPP_ABI_VERSION=2`), the feature is `libcpp-xxx-yyy-zzz=<value>`.
+macros = {
+  '_LIBCPP_HAS_NO_GLOBAL_FILESYSTEM_NAMESPACE': 'libcpp-has-no-global-filesystem-namespace',
+  '_LIBCPP_HAS_NO_MONOTONIC_CLOCK': 'libcpp-has-no-monotonic-clock',
+  '_LIBCPP_HAS_NO_STDIN': 'libcpp-has-no-stdin',
+  '_LIBCPP_HAS_NO_STDOUT': 'libcpp-has-no-stdout',
+  '_LIBCPP_HAS_NO_THREAD_UNSAFE_C_FUNCTIONS': 'libcpp-has-no-thread-unsafe-c-functions',
+  '_LIBCPP_HAS_NO_THREADS': 'libcpp-has-no-threads',
+  '_LIBCPP_HAS_THREAD_API_EXTERNAL': 'libcpp-has-thread-api-external',
+  '_LIBCPP_HAS_THREAD_API_PTHREAD': 'libcpp-has-thread-api-pthread',
+  '_LIBCPP_NO_VCRUNTIME': 'libcpp-no-vcruntime',
+  '_LIBCPP_ABI_VERSION': 'libcpp-abi-version',
+  '_LIBCPP_ABI_UNSTABLE': 'libcpp-abi-unstable'
+}
+for macro, feature in macros.items():
+  features += [
+    Feature(name=lambda cfg, m=macro, f=feature: f + (
+              '={}'.format(compilerMacros(cfg)[m]) if compilerMacros(cfg)[m] else ''
+            ),
+            when=lambda cfg, m=macro: m in compilerMacros(cfg),
+
+            # FIXME: This is a hack that should be fixed using module maps.
+            # If modules are enabled then we have to lift all of the definitions
+            # in <__config_site> onto the command line.
+            compileFlag=lambda cfg, m=macro: '-Wno-macro-redefined -D{}'.format(m) + (
+              '={}'.format(compilerMacros(cfg)[m]) if compilerMacros(cfg)[m] else ''
+            )
+    )
+  ]

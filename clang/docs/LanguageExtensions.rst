@@ -478,7 +478,7 @@ bitwise operators &,|,^,~        yes     yes       yes         --
 !, &&, ||                        yes     --        yes [#]_    --
 ==, !=, >, <, >=, <=             yes     yes       yes         --
 =                                yes     yes       yes         yes
-:? [#]_                          yes     --        yes         --
+?: [#]_                          yes     --        yes         --
 sizeof                           yes     yes       yes         yes
 C-style cast                     yes     yes       yes         no
 reinterpret_cast                 yes     no        yes         no
@@ -489,9 +489,11 @@ const_cast                       no      no        no          no
 See also :ref:`langext-__builtin_shufflevector`, :ref:`langext-__builtin_convertvector`.
 
 .. [#] unary operator ! is not implemented, however && and || are.
-.. [#] While OpenCL and GCC vectors both implement the comparison operator(?:) as a
-  'select', they operate somewhat differently. OpenCL selects based on signedness of
-  the condition operands, but GCC vectors use normal bool conversions (that is, != 0).
+.. [#] ternary operator(?:) has different behaviors depending on condition
+  operand's vector type. If the condition is a GNU vector (i.e. __vector_size__),
+  it's only available in C++ and uses normal bool conversions (that is, != 0).
+  If it's an extension (OpenCL) vector, it's only available in C and OpenCL C.
+  And it selects base on signedness of the condition operands (OpenCL v1.1 s6.3.9).
 
 Matrix Types
 ============
@@ -3173,16 +3175,36 @@ at the start of a compound statement (excluding comments). When using within a
 compound statement, the pragma is active within the scope of the compound
 statement.
 
-Currently, only FP contraction can be controlled with the pragma. ``#pragma
-clang fp contract`` specifies whether the compiler should contract a multiply
-and an addition (or subtraction) into a fused FMA operation when supported by
-the target.
+Currently, the following settings can be controlled with this pragma:
+
+``#pragma clang fp reassociate`` allows control over the reassociation
+of floating point expressions. When enabled, this pragma allows the expression
+``x + (y + z)`` to be reassociated as ``(x + y) + z``.
+Reassociation can also occur across multiple statements.
+This pragma can be used to disable reassociation when it is otherwise
+enabled for the translation unit with the ``-fassociative-math`` flag.
+The pragma can take two values: ``on`` and ``off``.
+
+.. code-block:: c++
+
+  float f(float x, float y, float z)
+  {
+    // Enable floating point reassociation across statements
+    #pragma fp reassociate(on)
+    float t = x + y;
+    float v = t + z;
+  }
+
+
+``#pragma clang fp contract`` specifies whether the compiler should
+contract a multiply and an addition (or subtraction) into a fused FMA
+operation when supported by the target.
 
 The pragma can take three values: ``on``, ``fast`` and ``off``.  The ``on``
 option is identical to using ``#pragma STDC FP_CONTRACT(ON)`` and it allows
-fusion as specified the language standard.  The ``fast`` option allows fusiong
+fusion as specified the language standard.  The ``fast`` option allows fusion
 in cases when the language standard does not make this possible (e.g. across
-statements in C)
+statements in C).
 
 .. code-block:: c++
 

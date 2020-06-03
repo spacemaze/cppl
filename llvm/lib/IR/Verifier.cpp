@@ -397,6 +397,9 @@ public:
   }
 
 private:
+  /// Whether a metadata node is allowed to be, or contain, a DILocation.
+  enum class AreDebugLocsAllowed { No, Yes };
+
   // Verification methods...
   void visitGlobalValue(const GlobalValue &GV);
   void visitGlobalVariable(const GlobalVariable &GV);
@@ -405,7 +408,7 @@ private:
   void visitAliaseeSubExpr(SmallPtrSetImpl<const GlobalAlias *> &Visited,
                            const GlobalAlias &A, const Constant &C);
   void visitNamedMDNode(const NamedMDNode &NMD);
-  void visitMDNode(const MDNode &MD);
+  void visitMDNode(const MDNode &MD, AreDebugLocsAllowed AllowLocs);
   void visitMetadataAsValue(const MetadataAsValue &MD, Function *F);
   void visitValueAsMetadata(const ValueAsMetadata &MD, Function *F);
   void visitComdat(const Comdat &C);
@@ -780,11 +783,11 @@ void Verifier::visitNamedMDNode(const NamedMDNode &NMD) {
     if (!MD)
       continue;
 
-    visitMDNode(*MD);
+    visitMDNode(*MD, AreDebugLocsAllowed::Yes);
   }
 }
 
-void Verifier::visitMDNode(const MDNode &MD) {
+void Verifier::visitMDNode(const MDNode &MD, AreDebugLocsAllowed AllowLocs) {
   // Only visit each node once.  Metadata can be mutually recursive, so this
   // avoids infinite recursion here, as well as being an optimization.
   if (!MDNodes.insert(&MD).second)
@@ -807,8 +810,10 @@ void Verifier::visitMDNode(const MDNode &MD) {
       continue;
     Assert(!isa<LocalAsMetadata>(Op), "Invalid operand for global metadata!",
            &MD, Op);
+    AssertDI(!isa<DILocation>(Op) || AllowLocs == AreDebugLocsAllowed::Yes,
+             "DILocation not allowed within this metadata node", &MD, Op);
     if (auto *N = dyn_cast<MDNode>(Op)) {
-      visitMDNode(*N);
+      visitMDNode(*N, AllowLocs);
       continue;
     }
     if (auto *V = dyn_cast<ValueAsMetadata>(Op)) {
@@ -851,7 +856,7 @@ void Verifier::visitValueAsMetadata(const ValueAsMetadata &MD, Function *F) {
 void Verifier::visitMetadataAsValue(const MetadataAsValue &MDV, Function *F) {
   Metadata *MD = MDV.getMetadata();
   if (auto *N = dyn_cast<MDNode>(MD)) {
-    visitMDNode(*N);
+    visitMDNode(*N, AreDebugLocsAllowed::No);
     return;
   }
 
@@ -888,12 +893,30 @@ void Verifier::visitDIScope(const DIScope &N) {
 
 void Verifier::visitDISubrange(const DISubrange &N) {
   AssertDI(N.getTag() == dwarf::DW_TAG_subrange_type, "invalid tag", &N);
+  AssertDI(N.getRawCountNode() || N.getRawUpperBound(),
+           "Subrange must contain count or upperBound", &N);
+  AssertDI(!N.getRawCountNode() || !N.getRawUpperBound(),
+           "Subrange can have any one of count or upperBound", &N);
+  AssertDI(!N.getRawCountNode() || N.getCount(),
+           "Count must either be a signed constant or a DIVariable", &N);
   auto Count = N.getCount();
-  AssertDI(Count, "Count must either be a signed constant or a DIVariable",
-           &N);
-  AssertDI(!Count.is<ConstantInt*>() ||
-               Count.get<ConstantInt*>()->getSExtValue() >= -1,
+  AssertDI(!Count || !Count.is<ConstantInt *>() ||
+               Count.get<ConstantInt *>()->getSExtValue() >= -1,
            "invalid subrange count", &N);
+  auto *LBound = N.getRawLowerBound();
+  AssertDI(!LBound || isa<ConstantAsMetadata>(LBound) ||
+               isa<DIVariable>(LBound) || isa<DIExpression>(LBound),
+           "LowerBound must be signed constant or DIVariable or DIExpression",
+           &N);
+  auto *UBound = N.getRawUpperBound();
+  AssertDI(!UBound || isa<ConstantAsMetadata>(UBound) ||
+               isa<DIVariable>(UBound) || isa<DIExpression>(UBound),
+           "UpperBound must be signed constant or DIVariable or DIExpression",
+           &N);
+  auto *Stride = N.getRawStride();
+  AssertDI(!Stride || isa<ConstantAsMetadata>(Stride) ||
+               isa<DIVariable>(Stride) || isa<DIExpression>(Stride),
+           "Stride must be signed constant or DIVariable or DIExpression", &N);
 }
 
 void Verifier::visitDIEnumerator(const DIEnumerator &N) {
@@ -1005,6 +1028,11 @@ void Verifier::visitDICompositeType(const DICompositeType &N) {
   if (auto *D = N.getRawDiscriminator()) {
     AssertDI(isa<DIDerivedType>(D) && N.getTag() == dwarf::DW_TAG_variant_part,
              "discriminator can only appear on variant part");
+  }
+
+  if (N.getRawDataLocation()) {
+    AssertDI(N.getTag() == dwarf::DW_TAG_array_type,
+             "dataLocation can only appear in array type");
   }
 }
 
@@ -1509,6 +1537,7 @@ void Verifier::visitModuleFlagCGProfileEntry(const MDOperand &MDO) {
 /// Return true if this attribute kind only applies to functions.
 static bool isFuncOnlyAttr(Attribute::AttrKind Kind) {
   switch (Kind) {
+  case Attribute::NoMerge:
   case Attribute::NoReturn:
   case Attribute::NoSync:
   case Attribute::WillReturn:
@@ -1552,6 +1581,7 @@ static bool isFuncOnlyAttr(Attribute::AttrKind Kind) {
   case Attribute::SpeculativeLoadHardening:
   case Attribute::Speculatable:
   case Attribute::StrictFP:
+  case Attribute::NullPointerIsValid:
     return true;
   default:
     break;
@@ -2073,6 +2103,13 @@ void Verifier::verifyStatepoint(const CallBase &Call) {
          "gc.statepoint number of transition arguments must be positive", Call);
   const int EndTransitionArgsInx = EndCallArgsInx + 1 + NumTransitionArgs;
 
+  // We're migrating away from inline operands to operand bundles, enforce
+  // the either/or property during transition.
+  if (Call.getOperandBundle(LLVMContext::OB_gc_transition)) {
+    Assert(NumTransitionArgs == 0,
+           "can't use both deopt operands and deopt bundle on a statepoint");
+  }
+
   const Value *NumDeoptArgsV = Call.getArgOperand(EndTransitionArgsInx + 1);
   Assert(isa<ConstantInt>(NumDeoptArgsV),
          "gc.statepoint number of deoptimization arguments "
@@ -2083,6 +2120,13 @@ void Verifier::verifyStatepoint(const CallBase &Call) {
          "gc.statepoint number of deoptimization arguments "
          "must be positive",
          Call);
+
+  // We're migrating away from inline operands to operand bundles, enforce
+  // the either/or property during transition.
+  if (Call.getOperandBundle(LLVMContext::OB_deopt)) {
+    Assert(NumDeoptArgs == 0,
+           "can't use both deopt operands and deopt bundle on a statepoint");
+  }
 
   const int ExpectedNumArgs =
       7 + NumCallArgs + NumTransitionArgs + NumDeoptArgs;
@@ -2313,7 +2357,7 @@ void Verifier::visitFunction(const Function &F) {
              "function declaration may not have a !prof attachment", &F);
 
       // Verify the metadata itself.
-      visitMDNode(*I.second);
+      visitMDNode(*I.second, AreDebugLocsAllowed::Yes);
     }
     Assert(!F.hasPersonalityFn(),
            "Function declaration shouldn't have a personality routine", &F);
@@ -2337,6 +2381,7 @@ void Verifier::visitFunction(const Function &F) {
     // Visit metadata attachments.
     for (const auto &I : MDs) {
       // Verify that the attachment is legal.
+      auto AllowLocs = AreDebugLocsAllowed::No;
       switch (I.first) {
       default:
         break;
@@ -2351,6 +2396,7 @@ void Verifier::visitFunction(const Function &F) {
         AssertDI(!AttachedTo || AttachedTo == &F,
                  "DISubprogram attached to more than one function", SP, &F);
         AttachedTo = &F;
+        AllowLocs = AreDebugLocsAllowed::Yes;
         break;
       }
       case LLVMContext::MD_prof:
@@ -2361,7 +2407,7 @@ void Verifier::visitFunction(const Function &F) {
       }
 
       // Verify the metadata itself.
-      visitMDNode(*I.second);
+      visitMDNode(*I.second, AllowLocs);
     }
   }
 
@@ -2974,9 +3020,13 @@ void Verifier::visitCallBase(CallBase &Call) {
 
     if (Call.paramHasAttr(i, Attribute::Preallocated)) {
       Value *ArgVal = Call.getArgOperand(i);
-      Assert(Call.countOperandBundlesOfType(LLVMContext::OB_preallocated) != 0,
-             "preallocated operand requires a preallocated bundle", ArgVal,
-             Call);
+      bool hasOB =
+          Call.countOperandBundlesOfType(LLVMContext::OB_preallocated) != 0;
+      bool isMustTail = Call.isMustTailCall();
+      Assert(hasOB != isMustTail,
+             "preallocated operand either requires a preallocated bundle or "
+             "the call to be musttail (but not both)",
+             ArgVal, Call);
     }
   }
 
@@ -3379,16 +3429,16 @@ void Verifier::visitGetElementPtrInst(GetElementPtrInst &GEP) {
 
   if (auto *GEPVTy = dyn_cast<VectorType>(GEP.getType())) {
     // Additional checks for vector GEPs.
-    unsigned GEPWidth = GEPVTy->getNumElements();
+    ElementCount GEPWidth = GEPVTy->getElementCount();
     if (GEP.getPointerOperandType()->isVectorTy())
       Assert(
           GEPWidth ==
-              cast<VectorType>(GEP.getPointerOperandType())->getNumElements(),
+              cast<VectorType>(GEP.getPointerOperandType())->getElementCount(),
           "Vector GEP result width doesn't match operand's", &GEP);
     for (Value *Idx : Idxs) {
       Type *IndexTy = Idx->getType();
       if (auto *IndexVTy = dyn_cast<VectorType>(IndexTy)) {
-        unsigned IndexWidth = IndexVTy->getNumElements();
+        ElementCount IndexWidth = IndexVTy->getElementCount();
         Assert(IndexWidth == GEPWidth, "Invalid GEP index vector width", &GEP);
       }
       Assert(IndexTy->isIntOrIntVectorTy(),
@@ -4307,12 +4357,23 @@ void Verifier::visitInstruction(Instruction &I) {
 
   if (MDNode *N = I.getDebugLoc().getAsMDNode()) {
     AssertDI(isa<DILocation>(N), "invalid !dbg metadata attachment", &I, N);
-    visitMDNode(*N);
+    visitMDNode(*N, AreDebugLocsAllowed::Yes);
   }
 
   if (auto *DII = dyn_cast<DbgVariableIntrinsic>(&I)) {
     verifyFragmentExpression(*DII);
     verifyNotEntryValue(*DII);
+  }
+
+  SmallVector<std::pair<unsigned, MDNode *>, 4> MDs;
+  I.getAllMetadata(MDs);
+  for (auto Attachment : MDs) {
+    unsigned Kind = Attachment.first;
+    auto AllowLocs =
+        (Kind == LLVMContext::MD_dbg || Kind == LLVMContext::MD_loop)
+            ? AreDebugLocsAllowed::Yes
+            : AreDebugLocsAllowed::No;
+    visitMDNode(*Attachment.second, AllowLocs);
   }
 
   InstsInThisBlock.insert(&I);
@@ -4505,6 +4566,9 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
             ++NumPreallocatedArgs;
           }
         }
+        Assert(NumPreallocatedArgs != 0,
+               "cannot use preallocated intrinsics on a call without "
+               "preallocated arguments");
         Assert(NumArgs->equalsInt(NumPreallocatedArgs),
                "llvm.call.preallocated.setup arg size must be equal to number "
                "of preallocated arguments "
@@ -4656,20 +4720,20 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
              LandingPad->getParent());
       Assert(InvokeBB->getTerminator(), "safepoint block should be well formed",
              InvokeBB);
-      Assert(isStatepoint(InvokeBB->getTerminator()),
+      Assert(isa<GCStatepointInst>(InvokeBB->getTerminator()),
              "gc relocate should be linked to a statepoint", InvokeBB);
     } else {
       // In all other cases relocate should be tied to the statepoint directly.
       // This covers relocates on a normal return path of invoke statepoint and
       // relocates of a call statepoint.
       auto Token = Call.getArgOperand(0);
-      Assert(isa<Instruction>(Token) && isStatepoint(cast<Instruction>(Token)),
+      Assert(isa<GCStatepointInst>(Token),
              "gc relocate is incorrectly tied to the statepoint", Call, Token);
     }
 
     // Verify rest of the relocate arguments.
     const CallBase &StatepointCall =
-        *cast<CallBase>(cast<GCRelocateInst>(Call).getStatepoint());
+      *cast<GCRelocateInst>(Call).getStatepoint();
 
     // Both the base and derived must be piped through the safepoint.
     Value *Base = Call.getArgOperand(1);
@@ -4746,6 +4810,14 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
   case Intrinsic::eh_exceptionpointer: {
     Assert(isa<CatchPadInst>(Call.getArgOperand(0)),
            "eh.exceptionpointer argument must be a catchpad", Call);
+    break;
+  }
+  case Intrinsic::get_active_lane_mask: {
+    Assert(Call.getType()->isVectorTy(), "get_active_lane_mask: must return a "
+           "vector", Call);
+    auto *ElemTy = Call.getType()->getScalarType();
+    Assert(ElemTy->isIntegerTy(1), "get_active_lane_mask: element type is not "
+           "i1", Call);
     break;
   }
   case Intrinsic::masked_load: {

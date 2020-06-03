@@ -24,8 +24,14 @@ class OutputSegment;
 // linker with the same segment / section name.
 class OutputSection {
 public:
-  OutputSection(StringRef name) : name(name) {}
+  enum Kind {
+    MergedKind,
+    SyntheticKind,
+  };
+
+  OutputSection(Kind kind, StringRef name) : name(name), sectionKind(kind) {}
   virtual ~OutputSection() = default;
+  Kind kind() const { return sectionKind; }
 
   // These accessors will only be valid after finalizing the section.
   uint64_t getSegmentOffset() const;
@@ -36,8 +42,8 @@ public:
   // as-is so their file size is the same as their address space size.
   virtual uint64_t getFileSize() const { return getSize(); }
 
-  // Hidden sections omit header content, but body content is still present.
-  virtual bool isHidden() const { return !this->isNeeded(); }
+  // Hidden sections omit header content, but body content may still be present.
+  virtual bool isHidden() const { return false; }
   // Unneeded sections are omitted entirely (header and body).
   virtual bool isNeeded() const { return true; }
 
@@ -60,6 +66,9 @@ public:
   uint64_t fileOff = 0;
   uint32_t align = 1;
   uint32_t flags = 0;
+
+private:
+  Kind sectionKind;
 };
 
 class OutputSectionComparator {

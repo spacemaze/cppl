@@ -328,6 +328,7 @@ public:
   BoolAttr falseAttr, trueAttr;
   UnitAttr unitAttr;
   UnknownLoc unknownLocAttr;
+  DictionaryAttr emptyDictionaryAttr;
 
 public:
   MLIRContextImpl() : identifiers(identifierAllocator) {}
@@ -388,6 +389,9 @@ MLIRContext::MLIRContext() : impl(new MLIRContextImpl()) {
   /// Unknown Location Attribute.
   impl->unknownLocAttr = AttributeUniquer::get<UnknownLoc>(
       this, StandardAttributes::UnknownLocation);
+  /// The empty dictionary attribute.
+  impl->emptyDictionaryAttr = AttributeUniquer::get<DictionaryAttr>(
+      this, StandardAttributes::Dictionary, ArrayRef<NamedAttribute>());
 }
 
 MLIRContext::~MLIRContext() {}
@@ -539,6 +543,13 @@ std::vector<AbstractOperation *> MLIRContext::getRegisteredOperations() {
   return result;
 }
 
+bool MLIRContext::isOperationRegistered(StringRef name) {
+  // Lock access to the context registry.
+  ScopedReaderLock registryLock(impl->contextMutex, impl->threadingIsEnabled);
+
+  return impl->registeredOperations.count(name);
+}
+
 void Dialect::addOperation(AbstractOperation opInfo) {
   assert((getNamespace().empty() ||
           opInfo.name.split('.').first == getNamespace()) &&
@@ -617,8 +628,9 @@ Identifier Identifier::get(StringRef str, MLIRContext *context) {
 static Dialect &lookupDialectForSymbol(MLIRContext *ctx, TypeID typeID) {
   auto &impl = ctx->getImpl();
   auto it = impl.registeredDialectSymbols.find(typeID);
-  assert(it != impl.registeredDialectSymbols.end() &&
-         "symbol is not registered.");
+  if (it == impl.registeredDialectSymbols.end())
+    llvm::report_fatal_error(
+        "Trying to create a type that was not registered in this MLIRContext.");
   return *it->second;
 }
 
@@ -740,6 +752,11 @@ UnitAttr UnitAttr::get(MLIRContext *context) {
 
 Location UnknownLoc::get(MLIRContext *context) {
   return context->getImpl().unknownLocAttr;
+}
+
+/// Return empty dictionary.
+DictionaryAttr DictionaryAttr::getEmpty(MLIRContext *context) {
+  return context->getImpl().emptyDictionaryAttr;
 }
 
 //===----------------------------------------------------------------------===//

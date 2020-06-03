@@ -40,7 +40,7 @@ size_t OutputSegment::numNonHiddenSections() const {
   size_t count = 0;
   for (const OutputSegment::SectionMapEntry &i : sections) {
     OutputSection *os = i.second;
-    count += (os->isHidden() ? 0 : 1);
+    count += (!os->isHidden() ? 1 : 0);
   }
   return count;
 }
@@ -68,6 +68,12 @@ OutputSection *OutputSegment::getOrCreateOutputSection(StringRef name) {
 
 void OutputSegment::sortOutputSections(OutputSegmentComparator *comparator) {
   llvm::stable_sort(sections, *comparator->sectionComparator(this));
+}
+
+void OutputSegment::removeUnneededSections() {
+  sections.remove_if([](const std::pair<StringRef, OutputSection *> &p) {
+    return !p.second->isNeeded();
+  });
 }
 
 OutputSegmentComparator::OutputSegmentComparator() {
@@ -122,25 +128,4 @@ OutputSegment *macho::getOrCreateOutputSegment(StringRef name) {
 
   outputSegments.push_back(segRef);
   return segRef;
-}
-
-void macho::sortOutputSegmentsAndSections() {
-  // Sorting only can happen once all outputs have been collected.
-  // Since output sections are grouped by segment, sorting happens
-  // first over all segments, then over sections per segment.
-  auto comparator = OutputSegmentComparator();
-  llvm::stable_sort(outputSegments, comparator);
-
-  // Now that the output sections are sorted, assign the final
-  // output section indices.
-  uint32_t sectionIndex = 0;
-  for (OutputSegment *seg : outputSegments) {
-    seg->sortOutputSections(&comparator);
-    for (auto &p : seg->getSections()) {
-      OutputSection *section = p.second;
-      if (!section->isHidden()) {
-        section->index = ++sectionIndex;
-      }
-    }
-  }
 }
