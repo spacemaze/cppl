@@ -118,7 +118,8 @@ namespace clang { namespace levitation {
 
       void setIndex(IdTy NewIndex, const ItemTy &Item) {
         auto Res = Index.insert({ NewIndex, ItemRefTy(Item) });
-        assert(Res.second && "Index should be new");
+        if (!Res.second)
+          llvm_unreachable("Index should be new");
 
         if (LastIndex <= NewIndex)
           LastIndex = NewIndex + 1;

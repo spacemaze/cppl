@@ -14,6 +14,7 @@
 #ifndef LLVM_CLANG_LEVITATION_CREATABLESINGLETON_H
 #define LLVM_CLANG_LEVITATION_CREATABLESINGLETON_H
 
+#include <assert.h>
 #include <memory>
 #include <utility>
 

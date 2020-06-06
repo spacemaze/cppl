@@ -49,10 +49,8 @@ public:
     }
 
     auto InsertionRes = Map.insert({PackageID, std::move(LevitationPackage)});
-
-    assert(
-        InsertionRes.second && "Loaded dependencies has been already added"
-    );
+    if (!InsertionRes.second)
+      llvm_unreachable("Loaded dependencies has been already added");
   }
 
   DependenciesMap::const_iterator begin() const { return Map.begin(); }

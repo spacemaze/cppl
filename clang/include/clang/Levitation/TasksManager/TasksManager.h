@@ -192,7 +192,8 @@ public:
     auto __ = lockTasks();
 
     auto Found = Tasks.find(TID);
-    assert(Found != Tasks.end());
+    if (Found == Tasks.end())
+      llvm_unreachable("Expected to provide with valid TID");
 
     return Tasks[TID]->Status;
   }

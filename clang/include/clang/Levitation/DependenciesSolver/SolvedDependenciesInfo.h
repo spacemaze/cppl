@@ -27,6 +27,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
+#include <assert.h>
 #include <memory>
 #include <map>
 #include <utility>

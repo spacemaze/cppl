@@ -980,6 +980,11 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
         CommonPtr->Specializations.InsertNode(FTInfo, InsertPos);
       else {
         // C++ Levitation extension
+#if 0   // Legacy code
+        assert(Reader.getContext().getLangOpts().Modules &&
+               "already deserialized this template specialization");
+        mergeRedeclarable(FD, ExistingInfo->getFunction(), Redecl);
+#else   // altered version
         const auto &LangOpts = Reader.getContext().getLangOpts();
 
         bool MergingEnabled =
@@ -988,9 +993,10 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
                 LangOptions::LBSK_BuildObjectFile,
                 LangOptions::LBSK_BuildDeclAST
             );
+        if (!MergingEnabled)
+          llvm_unreachable("already deserialized this template specialization");
+#endif  // end of C++ Levitation
 
-        assert(MergingEnabled &&
-               "already deserialized this template specialization");
         mergeRedeclarable(FD, ExistingInfo->getFunction(), Redecl);
       }
     }

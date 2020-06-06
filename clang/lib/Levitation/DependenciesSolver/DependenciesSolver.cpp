@@ -36,6 +36,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
+#include <assert.h>
 
 using namespace llvm;
 
@@ -491,10 +492,9 @@ public:
   ) {
     DependenciesPaths Paths;
     for (auto NID : Dependencies) {
-      auto Kind = DependenciesGraph::NodeID::getKind(NID);
-
       assert(
-          Kind == DependenciesGraph::NodeKind::Declaration &&
+          DependenciesGraph::NodeID::getKind(NID) ==
+          DependenciesGraph::NodeKind::Declaration &&
           "Only declaration nodes are allowed to be dependencies"
       );
 
@@ -534,8 +534,8 @@ public:
     File F(DependenciesFile);
 
     if (F.hasErrors()) {
-      StringRef Error = "failed to write file '" + DependenciesFile + "'";
-      Solver.setFailure(Error);
+      Solver.setFailure()
+      << "failed to write file '" << DependenciesFile << "'";
       return false;
     }
 
@@ -547,8 +547,8 @@ public:
     }
 
     if (F.hasErrors()) {
-      StringRef Error = "failed to complete file '" + DependenciesFile + "'";
-      Solver.setFailure(Error);
+      Solver.setFailure()
+      << "failed to complete file '" << DependenciesFile << "'";
       return false;
     }
 
