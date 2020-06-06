@@ -3879,7 +3879,6 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
           DashX,
           Res.getTargetOpts(),
           Res.getPreprocessorOpts(),
-          Res.getCodeGenOpts(),
           Diags
       );
     }

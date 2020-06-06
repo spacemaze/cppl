@@ -878,9 +878,10 @@ void DeclPrinter::VisitVarDecl(VarDecl *D) {
   // with lines below:
   // Declaration type printing has been fixed.
   if (Context.getLangOpts().LevitationMode) {
-    StringRef Name = D->isOutOfLine() ?
-                     StringRef(D->getQualifiedNameAsString()) : D->getName();
-    printDeclType(T, Name);
+    if (D->isOutOfLine())
+      printDeclType(T, D->getQualifiedNameAsString());
+    else
+      printDeclType(T, D->getName());
   } else {
     // Legacy code
     printDeclType(T, D->getName());

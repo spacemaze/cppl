@@ -63,7 +63,8 @@ namespace clang { namespace levitation { namespace command_line_tool {
 
     void registerParameter(Parameter *P) {
       auto Res = Parameters.insert({P->Name, P});
-      assert(Res.second && "Parameter should be identified by its name.");
+      if (!Res.second)
+        llvm_unreachable("Parameter should be identified by its name.");
     }
 
     void parse(Context &Ctx) {

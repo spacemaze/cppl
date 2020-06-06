@@ -2647,11 +2647,12 @@ void Preprocessor::levitationAddSkippedSourceFragment(
   auto EndSLoc = getSourceManager().getDecomposedLoc(End);
 
   auto MainFileID = getSourceManager().getMainFileID();
-  assert(
-      StartSLoc.first == MainFileID &&
-      EndSLoc.first == MainFileID &&
-      "Skipped fragment can only be a part of main file."
-  );
+
+  if(
+      StartSLoc.first != MainFileID ||
+      EndSLoc.first != MainFileID
+  )
+    llvm_unreachable("Skipped fragment can only be a part of main file.");
 
   PPLevitationSkippedFragments.push_back({
     StartSLoc.second,

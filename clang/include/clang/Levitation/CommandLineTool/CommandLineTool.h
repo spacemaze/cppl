@@ -113,10 +113,8 @@ public:
               P->Name, std::move(P)
           });
 
-          assert(
-              InsertRes.second &&
-              "Parameter should be unique and identified by its name"
-          );
+          if(!InsertRes.second)
+            llvm_unreachable("Parameter should be unique and identified by its name");
 
           return *this;
         }

@@ -285,11 +285,11 @@ void Sema::levitationReplaceLastSkippedSourceFragments(
 
   auto MainFileID = getSourceManager().getMainFileID();
 
-  assert(
-      StartSLoc.first == MainFileID &&
-      EndSLoc.first == MainFileID &&
-      "Skipped fragment can only be a part of main file."
-  );
+  if(
+      StartSLoc.first != MainFileID ||
+      EndSLoc.first != MainFileID
+  )
+    llvm_unreachable("Skipped fragment can only be a part of main file.");
 
   assert(
       !LevitationSkippedFragments.empty() &&
@@ -341,10 +341,8 @@ void Sema::levitationInsertExternForHeader(
 
   auto MainFileID = getSourceManager().getMainFileID();
 
-  assert(
-      StartSLoc.first == MainFileID &&
-      "Position to insert should belong to main file"
-  );
+  if (StartSLoc.first != MainFileID)
+    llvm_unreachable("Position to insert should belong to main file");
 
   // Lookup for first fragment to be replaced
   size_t NumSkippedFragments = LevitationSkippedFragments.size();

@@ -340,7 +340,8 @@ protected:
         TaskPtr = new Task(TID, std::move(action));
 
         auto Res = Tasks.emplace(TID, TaskPtr);
-        assert(Res.second);
+        if (!Res.second)
+          llvm_unreachable("Expected that task is not registered yet.");
 
         if (
           RegAction == RegisterAction::Push ||
