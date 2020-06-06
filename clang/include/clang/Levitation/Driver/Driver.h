@@ -62,7 +62,7 @@ namespace clang { namespace levitation { namespace tools {
 
     bool LinkPhaseEnabled = true;
 
-    bool DryRun;
+    bool DryRun = false;
 
     llvm::StringRef StdLib = DriverDefaults::STDLIB;
     bool CanUseLibStdCppForLinker = true;
