@@ -823,8 +823,10 @@ protected:
     }
 
     auto insRes = Visited.insert(ForNode);
-    if (!insRes.second)
+    if (!insRes.second && isPublic(ForNode)) {
+      Log.log_trace(std::string(depth, ' '), "- skip as visited and already public.");
       return;
+    }
 
     if (isPublic(ForNode))
       MarkPublic = true;
