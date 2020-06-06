@@ -386,6 +386,7 @@ public:
     llvm::SmallVector<SmallString<256>, 8> OwnArgs;
     SinglePath ExecutablePath;
     Args CommandArgs;
+    log::Logger &Log;
 
     bool Condition = true;
     bool Verbose;
@@ -397,6 +398,7 @@ public:
         bool dryRun
     )
     : ExecutablePath(std::move(executablePath)),
+      Log(log::Logger::get()),
       Verbose(verbose),
       DryRun(dryRun)
     {
@@ -604,6 +606,9 @@ public:
 
         auto Args = ArgsUtils::toStringRefArgs(CommandArgs);
 
+        unsigned ExecJobID = getExecID();
+        Log.log_trace("Trying to execute exec job ID=", ExecJobID);
+
         int Res = llvm::sys::ExecuteAndWait(
             ExecutablePath,
             Args,
@@ -622,6 +627,8 @@ public:
         } else if (ErrorMessage.size()) {
           Status.setWarning() << ErrorMessage;
         }
+
+        Log.log_trace("Result for exec job ID=", ExecJobID, " is ", Res);
 
         return Status;
       }
@@ -691,9 +698,19 @@ public:
       .addArg("-stdlib=libstdc++");
     }
 
-    void dumpCommand() {
+    static unsigned getExecID() {
+      static std::mutex Locker;
+      static unsigned NextExecID = 0;
 
-      auto &Out = log::Logger::get().info();
+      {
+        MutexLock _(Locker);
+        return NextExecID++;
+      }
+    }
+
+    void dumpCommand() {
+      auto &Out = Log.info();
+      auto _ = Log.lock();
 
       for (unsigned i = 0, e = CommandArgs.size(); i != e; ++i) {
         if (i != 0)
