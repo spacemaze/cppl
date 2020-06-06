@@ -207,8 +207,10 @@ public:
         );
       }
 
-      if (PackageDependencies.IsPublic)
+      if (PackageDependencies.IsPublic) {
+        Log.log_trace("(declaration is loaded as public)");
         DGraphPtr->setPublic(Package.Declaration->ID);
+      }
 
       if (IsExternal)
         DGraphPtr->setExternal(Package.Declaration->ID);
@@ -807,7 +809,18 @@ protected:
     }
   }
 
-  void collectPublicNodes(NodesSet &Visited, NodeID::Type ForNode, bool MarkPublic) {
+  void collectPublicNodes(
+      NodesSet &Visited,
+      NodeID::Type ForNode,
+      bool MarkPublic,
+      unsigned depth
+  ) {
+    {
+      auto _ = Log.lock();
+      Log.trace().indent(depth) << "collectPublicNodes, recursive: ";
+      dumpNodeID(Log.trace(), ForNode);
+      Log.trace() << "\n";
+    }
 
     auto insRes = Visited.insert(ForNode);
     if (!insRes.second)
@@ -818,16 +831,12 @@ protected:
     else if (MarkPublic)
       PublicNodes.insert(ForNode);
 
-    if (MarkPublic) {
-      auto &trace = Log.trace();
-      trace << "Public node: '";
-      dumpNodeID(Log.trace(), ForNode);
-      trace << "'\n";
-    }
+    if (MarkPublic)
+      Log.log_trace(std::string(depth, ' '), "- propogate public");
 
     const auto &N = getNode(ForNode);
     for (auto DepN : N.Dependencies)
-      collectPublicNodes(Visited, DepN, MarkPublic);
+      collectPublicNodes(Visited, DepN, MarkPublic, depth + 2);
   }
 
   void collectPublicNodes() {
@@ -836,7 +845,7 @@ protected:
 
     NodesSet Visited;
     for (auto TerminalNID : Terminals)
-      collectPublicNodes(Visited, TerminalNID, false);
+      collectPublicNodes(Visited, TerminalNID, false, 0);
   }
 };
 
