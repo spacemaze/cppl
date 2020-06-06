@@ -23,6 +23,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 
+#include <condition_variable>
 #include <deque>
 #include <memory>
 #include <mutex>

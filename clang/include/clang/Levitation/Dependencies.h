@@ -58,13 +58,13 @@ namespace levitation {
      * Indicates, that current file is to be published
      * during C++ Levitation library creation.
      */
-    bool IsPublic;
+    bool IsPublic = false;
 
     /**
      * Indicates, that current file has no declaration part,
      * so no need to produce .decl-ast file, only .o file.
      */
-    bool IsBodyOnly;
+    bool IsBodyOnly = false;
 
     /**
      * Unifies access to PathsPool
