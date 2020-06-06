@@ -1,0 +1,39 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ levitation-master ]
+  pull_request:
+    branches: [ levitation-master ]
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        config:
+          # - { name: "Windows MSVC", os: windows-latest, cc: "cl", cxx: "cl" }
+          - { name: "Ubuntu gcc", os: ubuntu-latest, cc: "gcc", cxx: "g++", release_name: "cppl-linux-x86_64" }
+          # - { name: "MacOS clang", os: macos-latest, cc: "clang", cxx: "clang++" }
+            
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup Ninja
+      uses: ashutoshvarma/setup-ninja@master
+      with:
+        # ninja version to download. Default: 1.10.0
+        version: 1.10.0
+    - name: CMake
+      run: cmake -DCMAKE_BUILD_TYPE=Release \
+                 -CMAKE_INSTALL_PREFIX=${{ matrix.config.release_name }} \
+                 -DLLVM_ENABLE_PROJECTS="clang;cppl" \
+                 -G "Ninja" 
+    - name: Make
+      run: make clang cppl
+    - name: make check-clang
+      run: make check-clang
+    - name: Install
+      run: make install-clang install-cppl
+    - name: Archive
+      run: tar pczf ${{ matrix.config.release_name }}.tgz ${{ matrix.config.release_name }}
