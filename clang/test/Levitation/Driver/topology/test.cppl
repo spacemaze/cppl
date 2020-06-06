@@ -1,6 +1,12 @@
 // RUN: rm -Rf %T/*
 // RUN: cppl -root=%S -buildRoot=%T -preamble=%S/preamble.hpp -lit -o %T/a.out \
-// RUN:    --verbose | FileCheck %s
+// RUN:    --verbose > %t
+// RUN: FileCheck -input-file=%t %s
+
+// RUN: FileCheck -input-file=%t --check-prefix=CHECK-A %s
+// RUN: FileCheck -input-file=%t --check-prefix=CHECK-B %s
+// RUN: FileCheck -input-file=%t --check-prefix=CHECK-C %s
+// RUN: FileCheck -input-file=%t --check-prefix=CHECK-D %s
 // RUN: %T/a.out
 
 // CHECK-DAG: BUILD DECL {{.*}}Root.cppl, deps: <empty> -> decl-ast: {{.*}}Root.decl-ast
@@ -10,7 +16,10 @@
 // CHECK-DAG: BUILD OBJ {{.*}}BodyDep.cppl, deps: ({{.*}}Root.decl-ast, {{.*}}My.decl-ast) -> object: {{.*}}BodyDep.o
 // CHECK-DAG: BUILD OBJ {{.*}}My.cppl, deps: ({{.*}}Root.decl-ast) -> object: {{.*}}My.o
 // CHECK-DAG: BUILD OBJ {{.*}}Root.cppl, deps: <empty> -> object: {{.*}}Root.o
-// CHECK-DAG: LINK objects: ({{.*}}Root.o, {{.*}}BodyDep.o, {{.*}}test.o, {{.*}}My.o) -> {{.*}}
+// CHECK-A: LINK objects: {{.*}}Root.o
+// CHECK-B: LINK objects: {{.*}}My.o
+// CHECK-C: LINK objects: {{.*}}BodyDep.o
+// CHECK-D: LINK objects: {{.*}}test.o
 
 #import Inputs::My
 #import [bodydep] Inputs::BodyDep
