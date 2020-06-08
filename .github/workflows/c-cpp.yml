@@ -28,12 +28,12 @@ jobs:
       run: cmake -DCMAKE_BUILD_TYPE=Release \
                  -CMAKE_INSTALL_PREFIX=${{ matrix.config.release_name }} \
                  -DLLVM_ENABLE_PROJECTS="clang;cppl" \
-                 -G "Ninja" 
-    - name: Make
-      run: make clang cppl
-    - name: make check-clang
-      run: make check-clang
+                 -G "Ninja" .
+    - name: Build
+      run: ninja clang cppl
+    - name: Check
+      run: ninja check-clang
     - name: Install
-      run: make install-clang install-cppl
+      run: ninja install-clang install-cppl
     - name: Archive
       run: tar pczf ${{ matrix.config.release_name }}.tgz ${{ matrix.config.release_name }}
