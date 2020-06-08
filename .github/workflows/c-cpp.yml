@@ -32,9 +32,9 @@ jobs:
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
     - name: Sources Archive 
       run: |
-        tar pczf -C ${{ runner.workspace }} \
+        tar pczf \
             ${{ runner.workspace }}/${{ matrix.config.release_name }}-src.tgz \
-            cppl
+            -C ${{ runner.workspace }} cppl
     - name: Upload Source Archive Artifact
       uses: actions/upload-artifact@v2
       with:
@@ -52,9 +52,9 @@ jobs:
       
     - name: Archive 
       run: |
-        tar pczf -C ${{ runner.workspace }} \
+        tar pczf \
             ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz \
-            ${{ matrix.config.release_name }}
+            -C ${{ runner.workspace }} ${{ matrix.config.release_name }}
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2
       with:
