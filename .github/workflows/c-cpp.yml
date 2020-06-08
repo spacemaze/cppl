@@ -25,10 +25,11 @@ jobs:
         # ninja version to download. Default: 1.10.0
         version: 1.10.0
     - name: CMake
-      run: cmake -DCMAKE_BUILD_TYPE=Release \
-                 -CMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
-                 -DLLVM_ENABLE_PROJECTS="clang;cppl" \
-                 -G "Ninja" ${{ runner.workspace }}
+      run: |
+        cmake -DCMAKE_BUILD_TYPE=Release \
+               -CMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
+               -DLLVM_ENABLE_PROJECTS="clang;cppl" \
+               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
     - name: Build
       run: ninja -j4 clang cppl
     - name: Check
