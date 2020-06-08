@@ -26,9 +26,9 @@ jobs:
         version: 1.10.0
     - name: CMake
       run: cmake -DCMAKE_BUILD_TYPE=Release \
-                 -CMAKE_INSTALL_PREFIX=${{ matrix.config.release_name }} \
+                 -CMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
                  -DLLVM_ENABLE_PROJECTS="clang;cppl" \
-                 -G "Ninja" .
+                 -G "Ninja" ${{ runner.workspace }}
     - name: Build
       run: ninja clang cppl
     - name: Check
@@ -36,4 +36,4 @@ jobs:
     - name: Install
       run: ninja install-clang install-cppl
     - name: Archive
-      run: tar pczf ${{ matrix.config.release_name }}.tgz ${{ matrix.config.release_name }}
+      run: tar pczf -C ${{ runner.workspace }} ${{ matrix.config.release_name }}.tgz ${{ matrix.config.release_name }}
