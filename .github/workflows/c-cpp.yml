@@ -27,7 +27,7 @@ jobs:
     - name: CMake
       run: |
         cmake -DCMAKE_BUILD_TYPE=Release \
-               -CMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
+               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
                -DLLVM_ENABLE_PROJECTS="clang;cppl" \
                -G "Ninja" ${{ runner.workspace }}/cppl/llvm
     - name: Build
@@ -36,5 +36,13 @@ jobs:
       run: ninja -j4 check-clang
     - name: Install
       run: ninja -j4 install-clang install-cppl
-    - name: Archive
-      run: tar pczf -C ${{ runner.workspace }} ${{ matrix.config.release_name }}.tgz ${{ matrix.config.release_name }}
+    - name: Archive 
+      run: tar pczf -C ${{ runner.workspace }} ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz ${{ matrix.config.release_name }}
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        # Artifact name
+        name: ${{ matrix.config.release_name }}
+        # A file, directory or wildcard pattern that describes what to upload
+        path: ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz
+      
