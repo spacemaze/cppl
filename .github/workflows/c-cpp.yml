@@ -31,11 +31,11 @@ jobs:
                -DLLVM_ENABLE_PROJECTS="clang;cppl" \
                -G "Ninja" ${{ runner.workspace }}/cppl/llvm
     - name: Build
-      run: ninja -j4 clang cppl
+      run: ninja -j4 clang
     - name: Check
       run: ninja -j4 check-clang
     - name: Install
-      run: ninja -j4 install-clang install-cppl
+      run: ninja -j4 install-clang
     - name: Archive 
       run: tar pczf -C ${{ runner.workspace }} ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz ${{ matrix.config.release_name }}
     - name: Upload a Build Artifact
