@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [ master ]
 
-env:
-  working_dir: ${{ github.workspace }}
-
 jobs: 
   build:
 
@@ -18,15 +15,12 @@ jobs:
         config:
           # - { name: "Windows MSVC", os: windows-latest, cc: "cl", cxx: "cl" }
           # - { name: "Ubuntu gcc", os: ubuntu-latest, cc: "gcc", cxx: "g++", release_name: "cppl-linux-x86_64" }
-          - {
+          - { 
             name: "MacOS clang",
-            os: macos-10.15, 
-            release_name: "cppl-darwin-x86_64",
-            final_projects: "cxx;cxxabi;clang",
-            final_platform_args: "-DLLVM_ENABLE_LIBCXX=ON -DLLVM_STATIC_LINK_CXX_STDLIB=ON",
-            final_build_targets: "cxx cxxabi clang",
-            final_check_targets: "check-cxx check-clang",
-            final_install_targets: "install-clang install-cxx install-cxxabi"                        
+            os: macos-10.15,
+            cc: "clang",
+            cxx: "clang++",
+            release_name: "cppl-darwin-x86_64"
           }
             
     steps:
@@ -40,39 +34,37 @@ jobs:
       run: |
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
-              -DLLVM_ENABLE_PROJECTS="${{ matrix.config.final_projects }}" \
-              -DLLVM_ENABLE_LIBCXX=ON -DLLVM_STATIC_LINK_CXX_STDLIB=ON \ 
-              -G "Ninja" ${{ env.working_dir }}/cppl/llvm
+              -DLLVM_ENABLE_PROJECTS="clang;cppl" \
+              -G "Ninja" ${{ runner.workspace }}/cppl/llvm
     - name: Sources Archive 
       run: |
         tar pczf \
-            ${{ env.working_dir }}/${{ matrix.config.release_name }}-src.tgz \
-            -C ${{ env.working_dir }} cppl
+            ${{ runner.workspace }}/${{ matrix.config.release_name }}-src.tgz \
+            -C ${{ runner.workspace }} cppl
     - name: Upload Source Archive Artifact
       uses: actions/upload-artifact@v2
       with:
         # Artifact name
         name: ${{ matrix.config.release_name }}-src
         # A file, directory or wildcard pattern that describes what to upload
-        path: ${{ env.working_dir }}/${{ matrix.config.release_name }}-src.tgz
+        path: ${{ runner.workspace }}/${{ matrix.config.release_name }}-src.tgz
             
     - name: Build
-      run: ninja -j4 ${{ matrix.config.final_build_targets }}
+      run: ninja -j4 clang
     - name: Check
-      run: ninja -j4 ${{ matrix.config.final_check_targets }}
+      run: ninja -j4 check-clang
     - name: Install
-      run: ninja -j4 ${{ matrix.config.final_install_targets }}
+      run: ninja -j4 install-clang
       
     - name: Archive 
       run: |
         tar pczf \
-            ${{ env.working_dir }}/${{ matrix.config.release_name }}.tgz \
-            -C ${{ env.working_dir }} ${{ matrix.config.release_name }}
+            ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz \
+            -C ${{ runner.workspace }} ${{ matrix.config.release_name }}
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2
       with:
         # Artifact name
         name: ${{ matrix.config.release_name }}
         # A file, directory or wildcard pattern that describes what to upload
-        path: ${{ env.working_dir }}/${{ matrix.config.release_name }}.tgz
-      
+        path: ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz
