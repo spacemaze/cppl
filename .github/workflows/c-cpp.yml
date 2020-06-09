@@ -19,7 +19,8 @@ jobs:
             name: "MacOS clang",
             os: macos-10.15, 
             release_name: "cppl-darwin-x86_64",
-            final_platform_args: "-DLLVM_ENABLE_LIBCXX -DLLVM_STATIC_LINK_CXX_STDLIB",
+            final_projects: "cxx;cxxabi;clang"
+            final_platform_args: "-DLLVM_ENABLE_LIBCXX=ON -DLLVM_STATIC_LINK_CXX_STDLIB=ON",
             final_build_targets: "cxx cxxabi clang",
             final_check_targets: "check-cxx check-clang",
             final_install_targets: "install-clang install-cxx install-cxxabi"                        
@@ -36,7 +37,7 @@ jobs:
       run: |
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
-              -DLLVM_ENABLE_PROJECTS="clang;cppl" \
+              -DLLVM_ENABLE_PROJECTS="{{ matrix.config.final_projects }}" \
               ${{ matrix.config.final_platform_args }} \ 
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
     - name: Sources Archive 
