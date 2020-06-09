@@ -12,10 +12,18 @@ jobs:
     runs-on: ${{ matrix.config.os }}
     strategy:
       matrix:
-        config:
+        config: |
           # - { name: "Windows MSVC", os: windows-latest, cc: "cl", cxx: "cl" }
           # - { name: "Ubuntu gcc", os: ubuntu-latest, cc: "gcc", cxx: "g++", release_name: "cppl-linux-x86_64" }
-          - { name: "MacOS clang", os: macos-10.15, cc: "clang", cxx: "clang++", release_name: "cppl-darwin-x86_64" }
+          - {
+              name: "MacOS clang",
+              os: macos-10.15, 
+              release_name: "cppl-darwin-x86_64",
+              final_platform_args: "-DLLVM_ENABLE_LIBCXX -DLLVM_STATIC_LINK_CXX_STDLIB"
+              final_build_targets: "cxx cxxabi clang"
+              final_check_targets: "check-cxx check-clang"
+              final_install_targets: "install-clang install-cxx install-cxxabi"                        
+          }
             
     steps:
     - uses: actions/checkout@v2
@@ -29,6 +37,7 @@ jobs:
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
               -DLLVM_ENABLE_PROJECTS="clang;cppl" \
+              {{ matrix.config.final_platform_args }} \ 
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
     - name: Sources Archive 
       run: |
@@ -44,11 +53,11 @@ jobs:
         path: ${{ runner.workspace }}/${{ matrix.config.release_name }}-src.tgz
             
     - name: Build
-      run: ninja -j4 clang
+      run: ninja -j4 {{ matrix.config.final_build_targets }}
     - name: Check
-      run: ninja -j4 check-clang
+      run: ninja -j4 {{ matrix.config.final_check_targets }}
     - name: Install
-      run: ninja -j4 install-clang
+      run: ninja -j4 {{ matrix.config.final_install_targets }}
       
     - name: Archive 
       run: |
