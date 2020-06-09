@@ -19,9 +19,9 @@ jobs:
             name: "MacOS clang",
             os: macos-10.15, 
             release_name: "cppl-darwin-x86_64",
-            final_platform_args: "-DLLVM_ENABLE_LIBCXX -DLLVM_STATIC_LINK_CXX_STDLIB"
-            final_build_targets: "cxx cxxabi clang"
-            final_check_targets: "check-cxx check-clang"
+            final_platform_args: "-DLLVM_ENABLE_LIBCXX -DLLVM_STATIC_LINK_CXX_STDLIB",
+            final_build_targets: "cxx cxxabi clang",
+            final_check_targets: "check-cxx check-clang",
             final_install_targets: "install-clang install-cxx install-cxxabi"                        
           }
             
