@@ -41,7 +41,7 @@ jobs:
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
               -DLLVM_ENABLE_PROJECTS="${{ matrix.config.final_projects }}" \
-              ${{ matrix.config.final_platform_args }} \ 
+              -DLLVM_ENABLE_LIBCXX=ON -DLLVM_STATIC_LINK_CXX_STDLIB=ON \ 
               -G "Ninja" ${{ env.working_dir }}/cppl/llvm
     - name: Sources Archive 
       run: |
