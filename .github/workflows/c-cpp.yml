@@ -45,7 +45,7 @@ jobs:
         path: ${{ runner.workspace }}/${{ matrix.config.release_name }}-src.tgz
             
     - name: Build
-      run: ninja -j4 cxx cxxabi clang
+      run: ninja -j4
     - name: Check
       run: ninja -j4 check-cxx check-clang
     - name: Install
