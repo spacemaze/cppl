@@ -28,7 +28,8 @@ jobs:
       run: |
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
-              -DLLVM_ENABLE_PROJECTS="clang;cppl" \
+              -DLLVM_ENABLE_LIBCXX=ON -DLLVM_STATIC_LINK_CXX_STDLIB=ON -DLLVM_ENABLE_LLD=ON \
+              -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang" \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
     - name: Sources Archive 
       run: |
@@ -44,11 +45,11 @@ jobs:
         path: ${{ runner.workspace }}/${{ matrix.config.release_name }}-src.tgz
             
     - name: Build
-      run: ninja -j4 clang
+      run: ninja -j4 cxx cxxabi clang
     - name: Check
-      run: ninja -j4 check-clang
+      run: ninja -j4 check-cxx check-clang
     - name: Install
-      run: ninja -j4 install-clang
+      run: ninja -j4 install-cxx install-cxxabi install-clang
       
     - name: Archive 
       run: |
