@@ -14,21 +14,34 @@ jobs:
       matrix:
         config:
           # - { name: "Windows MSVC", os: windows-latest, cc: "cl", cxx: "cl" }
-          # - { name: "Ubuntu gcc", os: ubuntu-latest, cc: "gcc", cxx: "g++", release_name: "cppl-linux-x86_64" }
+          # - { name: "Ubuntu gcc", os: ubuntu-18.04, cc: "gcc", cxx: "g++", release_name: "cppl-linux-x86_64" }
           - { name: "MacOS", os: macos-10.15, cc: "clang", cxx: "clang++", release_name: "cppl-darwin-x86_64" }
 
     steps:
-    - name: Setup Ninja
-      uses: ashutoshvarma/setup-ninja@master
-      with:
-        # ninja version to download. Default: 1.10.0
-        version: 1.10.0
-        dest: ${{ runner.workspace }}/ninja 
-    - name: Path Ninja (workaround)
-      run:
-        export PATH="${{ runner.workspace }}/ninja:$PATH"
-        [[ "$(which ninja)" != "" ]]
+    - name: macos.install-ninja
+      if: matrix.config.os == 'macos-10.15'
+      run: |
+        brew install ninja
+    - name: linux.install-ninja
+      if: matrix.config.os == 'ubuntu-18.04'
+      run: sudo apt-get install -y ninja
+    - name: posix.check-ninja
+      if: matrix.config.os == 'windows-latest'
+      shell: bash
+      run: |
+        if [[ "$(which ninja)" == "" ]]; then
+          echo "Ninja not found"
+          exit 1
+        else
+          echo "Ninja: $(which ninja)"    
+        fi  
       
+      # uses: ashutoshvarma/setup-ninja@master
+      #with:
+      #  # ninja version to download. Default: 1.10.0
+      #  version: 1.10.0
+      #  dest: ${{ runner.workspace }}/ninja 
+              
     - uses: actions/checkout@v2
         
     - name: Setup Environment
