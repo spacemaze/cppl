@@ -24,24 +24,49 @@ jobs:
       with:
         # ninja version to download. Default: 1.10.0
         version: 1.10.0
-    - name: CMake
+
+    - name: macos.phase-1.cmake
+      if: matrix.os == "macos-10.15"
+      run: |
+        cmake -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/phase1 \
+              -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
+              -G "Ninja" ${{ runner.workspace }}/cppl/llvm
+
+    - name: macos.phase-1.build
+      if: matrix.os == "macos-10.15"
+      run: ninja -j4
+
+    - name: macos.phase-1.install
+      if: matrix.os == "macos-10.15"      
+      run: ninja -j4 install
+
+    - name: macos.phase-final.cmake
+      if: matrix.os == "macos-10.15"
       run: |
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
-              -DLLVM_ENABLE_LIBCXX=ON -DLLVM_STATIC_LINK_CXX_STDLIB=ON -DLLVM_INCLUDE_GO_TESTS=OFF \
-              -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang" \
+              -DCMAKE_C_COMPILER=${{ runner.workspace }}/phase1/bin/clang \
+              -DCMAKE_CXX_COMPILER=${{ runner.workspace }}/phase1/bin/clang++ \
+              -DLLVM_ENABLE_LLD=ON \ 
+              -DLLVM_INCLUDE_GO_TESTS=OFF \
+              -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
-            
-    - name: Build
+
+    - name: macos.phase-final.build
+      if: matrix.os == "macos-10.15"
       run: ninja -j4
-    - name: Install
+
+    - name: macos.phase-final.install
+      if: matrix.os == "macos-10.15"      
       run: ninja -j4 install
-      
+
     - name: Archive 
       run: |
         tar pczf \
             ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz \
             -C ${{ runner.workspace }} ${{ matrix.config.release_name }}
+
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2
       with:
