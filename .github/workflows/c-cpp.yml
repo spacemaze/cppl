@@ -24,6 +24,12 @@ jobs:
       with:
         # ninja version to download. Default: 1.10.0
         version: 1.10.0
+        
+    - name: Print Environment
+      if: matrix.config.os != 'windows-latest'
+      run: |
+        echo "Building with following environment:"
+        env
 
     - name: macos.phase-1.cmake
       if: matrix.config.os == 'macos-10.15'
