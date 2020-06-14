@@ -26,8 +26,8 @@ jobs:
         version: 1.10.0
 
     - name: macos.phase-1.cmake
-      run: |
       if: matrix.config.os == 'macos-10.15'
+      run: |
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/phase1 \
               -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
