@@ -62,12 +62,14 @@ jobs:
       run: ninja -j4 install
 
     - name: Archive 
+      if: matrix.os == 'macos-10.15'
       run: |
         tar pczf \
             ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz \
             -C ${{ runner.workspace }} ${{ matrix.config.release_name }}
 
     - name: Upload a Build Artifact
+      if: matrix.os == 'macos-10.15'
       uses: actions/upload-artifact@v2
       with:
         # Artifact name
@@ -76,4 +78,5 @@ jobs:
         path: ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz
         
     - name: Check
+      if: matrix.os == 'macos-10.15'
       run: ninja -j4 check-all
