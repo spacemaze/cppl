@@ -26,7 +26,7 @@ jobs:
         version: 1.10.0
 
     - name: macos.phase-1.cmake
-      if: matrix.os == "macos-10.15"
+      if: matrix.os == 'macos-10.15'
       run: |
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/phase1 \
@@ -34,15 +34,15 @@ jobs:
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
 
     - name: macos.phase-1.build
-      if: matrix.os == "macos-10.15"
+      if: matrix.os == 'macos-10.15'
       run: ninja -j4
 
     - name: macos.phase-1.install
-      if: matrix.os == "macos-10.15"      
+      if: matrix.os == 'macos-10.15'      
       run: ninja -j4 install
 
     - name: macos.phase-final.cmake
-      if: matrix.os == "macos-10.15"
+      if: matrix.os == 'macos-10.15'
       run: |
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
@@ -54,11 +54,11 @@ jobs:
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
 
     - name: macos.phase-final.build
-      if: matrix.os == "macos-10.15"
+      if: matrix.os == 'macos-10.15'
       run: ninja -j4
 
     - name: macos.phase-final.install
-      if: matrix.os == "macos-10.15"      
+      if: matrix.os == 'macos-10.15'
       run: ninja -j4 install
 
     - name: Archive 
