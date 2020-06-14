@@ -26,11 +26,14 @@ jobs:
         version: 1.10.0
     - name: macos.phase-1.cmake
       run: |
-        echo ${{ matrix.os }}
-        cmake -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/phase1 \
-              -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
-              -G "Ninja" ${{ runner.workspace }}/cppl/llvm
+        echo "matrix.os: " "${{ matrix.os }}"
+        echo "matrix.config.os: " "${{ matrix.config.os }}"
+        echo "matrix.name: " "${{ matrix.name }}"
+        echo "matrix.config.name: " "${{ matrix.config.name }}"
+#        cmake -DCMAKE_BUILD_TYPE=Release \
+#              -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/phase1 \
+#              -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
+#              -G "Ninja" ${{ runner.workspace }}/cppl/llvm
     - name: macos.phase-1.build
       if: matrix.os == 'macos-10.15'
       run: ninja -j4
