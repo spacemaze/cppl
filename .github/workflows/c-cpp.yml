@@ -25,8 +25,8 @@ jobs:
         # ninja version to download. Default: 1.10.0
         version: 1.10.0
     - name: macos.phase-1.cmake
-      if: matrix.os == 'macos-10.15'
       run: |
+        echo ${{ matrix.os }}
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/phase1 \
               -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
