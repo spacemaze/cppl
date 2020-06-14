@@ -24,25 +24,21 @@ jobs:
       with:
         # ninja version to download. Default: 1.10.0
         version: 1.10.0
-
     - name: macos.phase-1.cmake
-      if: matrix.name == 'MacOS'
+      if: matrix.os == 'macos-10.15'
       run: |
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/phase1 \
               -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
-
     - name: macos.phase-1.build
-      if: matrix.name == 'MacOS'
+      if: matrix.os == 'macos-10.15'
       run: ninja -j4
-
     - name: macos.phase-1.install
-      if: matrix.name == 'MacOS'
+      if: matrix.os == 'macos-10.15'
       run: ninja -j4 install
-
     - name: macos.phase-final.cmake
-      if: matrix.name == 'MacOS'
+      if: matrix.os == 'macos-10.15'
       run: |
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
@@ -52,31 +48,26 @@ jobs:
               -DLLVM_INCLUDE_GO_TESTS=OFF \
               -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
-
     - name: macos.phase-final.build
-      if: matrix.name == 'MacOS'
+      if: matrix.os == 'macos-10.15'
       run: ninja -j4
-
     - name: macos.phase-final.install
-      if: matrix.name == 'MacOS'
+      if: matrix.os == 'macos-10.15'
       run: ninja -j4 install
-
     - name: Archive 
-      if: matrix.name == 'MacOS'
+      if: matrix.os == 'macos-10.15'
       run: |
         tar pczf \
             ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz \
             -C ${{ runner.workspace }} ${{ matrix.config.release_name }}
-
     - name: Upload a Build Artifact
-      if: matrix.name == 'MacOS'
+      if: matrix.os == 'macos-10.15'
       uses: actions/upload-artifact@v2
       with:
         # Artifact name
         name: ${{ matrix.config.release_name }}
         # A file, directory or wildcard pattern that describes what to upload
         path: ${{ runner.workspace }}/${{ matrix.config.release_name }}.tgz
-        
     - name: Check
-      if: matrix.name == 'MacOS'
+      if: matrix.os == 'macos-10.15'
       run: ninja -j4 check-all
