@@ -18,19 +18,26 @@ jobs:
           - { name: "MacOS", os: macos-10.15, cc: "clang", cxx: "clang++", release_name: "cppl-darwin-x86_64" }
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Homebrew
+      uses: artemnovichkov/action-homebrew@master
     - name: Setup Ninja
       uses: ashutoshvarma/setup-ninja@master
       with:
         # ninja version to download. Default: 1.10.0
         version: 1.10.0
+    - name: Path Ninja (workaround)
+      run: export PATH="$PWD/ninja_bin:$PATH"
+      
+    - uses: actions/checkout@v2
         
     - name: Setup Environment
       if: matrix.config.os != 'windows-latest'
       run: |
         export PATH="$PWD/ninja_bin:$PATH"
+        echo "Which brew: $(which brew)"
         echo "Building with following environment:"
         env
+        
 
     - name: macos.phase-1.cmake
       if: matrix.config.os == 'macos-10.15'
