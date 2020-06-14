@@ -28,7 +28,7 @@ jobs:
     - name: Setup Environment
       if: matrix.config.os != 'windows-latest'
       run: |
-        export PATH="$(which ninja_bin):$PATH"
+        export PATH="$PWD/ninja_bin:$PATH"
         echo "Building with following environment:"
         env
 
