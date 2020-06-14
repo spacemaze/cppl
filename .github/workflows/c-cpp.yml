@@ -23,8 +23,11 @@ jobs:
       with:
         # ninja version to download. Default: 1.10.0
         version: 1.10.0
+        dest: ${{ runner.workspace }}/ninja 
     - name: Path Ninja (workaround)
-      run: export PATH="$PWD/ninja_bin:$PATH"
+      run:
+        export PATH="${{ runner.workspace }}/ninja:$PATH"
+        [[ "$(which ninja)" != "" ]]
       
     - uses: actions/checkout@v2
         
