@@ -41,10 +41,6 @@ jobs:
       #  # ninja version to download. Default: 1.10.0
       #  version: 1.10.0
       #  dest: ${{ runner.workspace }}/ninja 
-              
-    - name: Checkout sources
-      uses: actions/checkout@v2
-        
     - name: Setup Environment
       if: matrix.config.os != 'windows-latest'
       run: |
@@ -52,14 +48,17 @@ jobs:
         echo "Which brew: $(which brew)"
         echo "Building with following environment:"
         env
-        
+
     - name: macos.download-clang
       if: matrix.config.os == 'macos-10.15' && !matrix.config.bootstrap
       run: |
-        wget https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-apple-darwin.tar.xz
+        wget https://github.com/llvm/llvm-project/releases/download/llvmorg-9.0.1/clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz
         tar xvf clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz
         mv clang+llvm-9.0.1-x86_64-apple-darwin phase1
       
+    - name: Checkout sources
+      uses: actions/checkout@v2
+        
     ####################################
     # Bootstrap
     ####################################     
