@@ -73,6 +73,7 @@ jobs:
               -DCMAKE_C_COMPILER=${{ runner.workspace }}/phase1/bin/clang \
               -DCMAKE_CXX_COMPILER=${{ runner.workspace }}/phase1/bin/clang++ \   
               -DLLVM_INCLUDE_GO_TESTS=OFF \
+              -DLLVM_ENABLE_LLD=ON \ 
               -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
 
