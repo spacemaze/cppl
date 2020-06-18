@@ -70,6 +70,8 @@ jobs:
         cd ${{ runner.workspace }}/build-phase1
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/phase1 \
+              -DCMAKE_C_COMPILER=${{ runner.workspace }}/phase1/bin/clang \
+              -DCMAKE_CXX_COMPILER=${{ runner.workspace }}/phase1/bin/clang++ \               
               -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
 
