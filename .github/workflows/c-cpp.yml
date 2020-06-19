@@ -47,7 +47,6 @@ jobs:
         export PATH="$PWD/ninja_bin:$PATH"
         echo "Which brew: $(which brew)"
         echo "Building with following environment:"
-        export MACOSX_DEPLOYMENT_TARGET=10.13 
         env
 
     - name: macos.download-clang
@@ -75,7 +74,7 @@ jobs:
               -DCMAKE_CXX_COMPILER=${{ runner.workspace }}/phase1/bin/clang++ \   
               -DLLVM_INCLUDE_GO_TESTS=OFF \
               -DLLVM_ENABLE_LLD=ON \ 
-              -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang;lld" \
+              -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi;clang;lld" \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
 
     - name: macos.phase-1.build-clang
@@ -114,20 +113,21 @@ jobs:
         cd ${{ runner.workspace }}/build-final
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
-              -DLLVM_ENABLE_PROJECTS="cxx;cxxabi;clang" \
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
+              -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi;clang" \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
+
+    - name: macos.phase-final.build-cxx
+      if: matrix.config.os == 'macos-10.15'
+      run: |
+        cd ${{ runner.workspace }}/build-final
+        ninja -j4 cxxabi cxx
 
     - name: macos.phase-final.build-clang
       if: matrix.config.os == 'macos-10.15'
       run: |
         cd ${{ runner.workspace }}/build-final
         ninja -j4 clang
-
-    - name: macos.phase-final.build-rest
-      if: matrix.config.os == 'macos-10.15'
-      run: |
-        cd ${{ runner.workspace }}/build-final
-        ninja -j4
 
     - name: macos.phase-final.install
       if: matrix.config.os == 'macos-10.15'
@@ -154,4 +154,4 @@ jobs:
       if: matrix.config.os == 'macos-10.15'
       run: |
         cd ${{ runner.workspace }}/build-final
-        ninja -j4 check-clang
+        ninja -j4 check-cxx check-cxxabi check-clang
