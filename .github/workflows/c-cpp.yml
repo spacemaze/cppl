@@ -53,9 +53,10 @@ jobs:
       if: matrix.config.os == 'macos-10.15' && !matrix.config.bootstrap
       run: |
         wget https://github.com/llvm/llvm-project/releases/download/llvmorg-9.0.1/clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz
-        tar xvf clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz
-        mv clang+llvm-9.0.1-x86_64-apple-darwin phase1
-      
+        tar xvf clang+llvm-9.0.1-x86_64-apple-darwin.tar.xz      
+    - name: macos.rename-clang
+      if: matrix.config.os == 'macos-10.15' && !matrix.config.bootstrap
+        mv clang+llvm-9.0.1-x86_64-apple-darwin ${{ runner.workspace }}/phase1
     - name: Checkout sources
       uses: actions/checkout@v2
         
