@@ -70,8 +70,6 @@ jobs:
         cd ${{ runner.workspace }}/build-phase1
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/phase1 \
-              -DCMAKE_C_COMPILER=${{ runner.workspace }}/phase1/bin/clang \
-              -DCMAKE_CXX_COMPILER=${{ runner.workspace }}/phase1/bin/clang++ \   
               -DLLVM_INCLUDE_GO_TESTS=OFF \
               -DLLVM_ENABLE_LLD=ON \ 
               -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi;clang;lld" \
@@ -113,6 +111,8 @@ jobs:
         cd ${{ runner.workspace }}/build-final
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=${{ runner.workspace }}/${{ matrix.config.release_name }} \
+              -DCMAKE_C_COMPILER=${{ runner.workspace }}/phase1/bin/clang \
+              -DCMAKE_CXX_COMPILER=${{ runner.workspace }}/phase1/bin/clang++ \  
               -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
               -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi;clang" \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
