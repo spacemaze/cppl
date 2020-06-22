@@ -58,7 +58,7 @@ jobs:
       if: matrix.config.os == 'macos-10.15' && !matrix.config.bootstrap
       run: |
         mv clang+llvm-9.0.1-x86_64-apple-darwin ${{ runner.workspace }}/phase1
-    - name: check-clang:
+    - name: check-clang
       run: |
         echo "#include <iostream>" >> test.cpp
         echo 'int main() { std::cout << "Hello world!\n"; return 0; }' >> test.cpp
