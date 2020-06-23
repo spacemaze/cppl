@@ -61,6 +61,10 @@ jobs:
       if: matrix.config.os == 'macos-10.15'
       run: |
         sudo xcode-select -s /Library/Developer/CommandLineTools
+        echo "Selected Command Line Tools"
+        echo "Available SDKs:"
+        ls /Library/Developer/CommandLineTools/SDKs
+        echo "Following compiler will be used:"
         clang --version
     - name: Checkout sources
       uses: actions/checkout@v2
@@ -120,8 +124,6 @@ jobs:
               -DCMAKE_CXX_COMPILER=${{ runner.workspace }}/phase1/bin/clang++ \
               -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
               -DLLVM_ENABLE_PROJECTS="clang;lld" \
-              -DLLVM_INCLUDE_GO_TESTS=OFF \
-              -DCLANG_DEFAULT_LINKER=lld \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
 
 #     - name: macos.phase-final.build-cxx
