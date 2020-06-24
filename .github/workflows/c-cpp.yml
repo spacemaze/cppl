@@ -26,7 +26,7 @@ jobs:
         brew install ninja
     - name: linux.install-ninja
       if: matrix.config.os == 'ubuntu-18.04'
-      run: sudo apt-get install -y ninja
+      run: sudo apt-get install -y ninja-build
 
     - name: posix.check-ninja
       if: matrix.config.os != 'windows-latest'
