@@ -176,8 +176,7 @@ jobs:
       if: matrix.config.os == 'macos-10.15' || matrix.config.os == 'ubuntu-18.04'
       run: |
         cd ${{ runner.workspace }}/build-final
-        ninja -j4 install-clang
-
+        ninja -j4 install
     # Final phase, create artifact 
 
     - name: Archive installation
