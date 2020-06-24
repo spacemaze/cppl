@@ -122,7 +122,6 @@ jobs:
               -DCMAKE_C_COMPILER=${{ runner.workspace }}/phase1/bin/clang \
               -DCMAKE_CXX_COMPILER=${{ runner.workspace }}/phase1/bin/clang++ \
               -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
-              -DC_INCLUDE_DIRS="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk" \
               -DLLVM_ENABLE_PROJECTS="clang" \
               -G "Ninja" ${{ runner.workspace }}/cppl/llvm
 
